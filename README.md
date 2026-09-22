@@ -120,6 +120,8 @@ Publique `index.html`, `app.js`, `styles.css` e os arquivos estáticos junto com
 
 Para uma implantação pública, recomenda-se usar HTTPS e manter as variáveis de ambiente fora do controle de versão.
 
+O endpoint `POST /api/address/search` combina ViaCEP (quando há CEP) e OpenStreetMap/Nominatim para devolver latitude/longitude. A aplicação mantém cache em memória e respeita o limite operacional de uma consulta por segundo da instância pública do Nominatim.
+
 
 ## Novidades 3.0 — Energia & Solar
 
@@ -131,6 +133,9 @@ Para uma implantação pública, recomenda-se usar HTTPS e manter as variáveis 
 - API de CEP via ViaCEP e geocodificação via OpenStreetMap/Nominatim.
 
 ### Fontes técnicas usadas
+
+A etapa visual de módulos agora é integrada ao dimensionamento. O usuário pode carregar uma imagem superior do imóvel, marcar polígonos de planos de telhado, informar azimute/inclinação/altura, marcar obstáculos e calibrar uma distância real. O Resolvei então testa a disposição de módulos em portrait/landscape, respeita afastamento das bordas, considera uma zona conservadora de sombra pelos obstáculos e informa quantos módulos encontraram posição. A escala pode ser calibrada na própria imagem; sem calibração, a área útil informada produz apenas uma escala aproximada.
+
 A calculadora usa PVGIS quando a consulta externa está disponível; o PVGIS é um serviço do Joint Research Centre da Comissão Europeia para estimar radiação solar e produção fotovoltaica por localização. Como referência brasileira, o CRESESB/SunData fornece dados de irradiação e sugestões de inclinação e orientação. Para custos e payback, os preços padrão são apenas parâmetros editáveis e não representam cotação garantida.
 
 A parte regulatória da geração distribuída deve ser conferida na ANEEL e na legislação aplicável à unidade consumidora. O Resolvei não substitui projeto de profissional habilitado, memorial de cálculo, análise estrutural, ART/RRT ou procedimento de conexão da distribuidora.

@@ -9,6 +9,8 @@ import subprocess
 import re
 import base64
 import hashlib
+import time
+import threading
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
@@ -38,6 +40,14 @@ FIREBASE_PROJECT_ID = os.getenv("FIREBASE_PROJECT_ID", "").strip()
 FIREBASE_CLIENT_EMAIL = os.getenv("FIREBASE_CLIENT_EMAIL", "").strip()
 FIREBASE_PRIVATE_KEY = os.getenv("FIREBASE_PRIVATE_KEY", "").replace("\\n", "\n").strip()
 RESOLVEI_CREDENTIAL_ENCRYPTION_KEY = os.getenv("RESOLVEI_CREDENTIAL_ENCRYPTION_KEY", "").strip()
+
+# Geocodificação: consultas são disparadas somente por ação explícita do usuário.
+# O cache é apenas em memória para evitar chamadas repetidas ao provedor público.
+_GEOCODE_CACHE: dict[str, dict[str, Any]] = {}
+_CEP_CACHE: dict[str, dict[str, Any]] = {}
+_NOMINATIM_LOCK = threading.Lock()
+_NOMINATIM_LAST_CALL = 0.0
+
 
 _firebase_admin = None
 if FIREBASE_PROJECT_ID and FIREBASE_CLIENT_EMAIL and FIREBASE_PRIVATE_KEY:
@@ -492,23 +502,112 @@ def search_price(item: str, city: str, state: str) -> list[dict[str, Any]]:
 
 SOLAR_MONTHS = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"]
 
+def _lookup_cep(cep: str) -> dict[str, Any]:
+    digits = re.sub(r"\D", "", cep or "")
+    if len(digits) != 8:
+        raise HTTPException(status_code=400, detail="CEP deve conter 8 dígitos.")
+    if digits in _CEP_CACHE:
+        return _CEP_CACHE[digits]
+    try:
+        r = requests.get(
+            f"https://viacep.com.br/ws/{digits}/json/",
+            headers={"User-Agent": "Resolvei/3.2 (address lookup)"},
+            timeout=10,
+        )
+        r.raise_for_status()
+        data = r.json()
+    except requests.RequestException as exc:
+        raise HTTPException(status_code=502, detail=f"Falha ao consultar CEP: {exc}") from exc
+    if data.get("erro"):
+        raise HTTPException(status_code=404, detail="CEP não encontrado.")
+    _CEP_CACHE[digits] = data
+    return data
+
+
+def _nominatim_search(query: str) -> dict[str, Any]:
+    global _NOMINATIM_LAST_CALL
+    key = re.sub(r"\s+", " ", query.strip().lower())
+    if key in _GEOCODE_CACHE:
+        return _GEOCODE_CACHE[key]
+
+    # A instância pública do Nominatim pede no máximo 1 requisição/s por aplicação.
+    with _NOMINATIM_LOCK:
+        wait = 1.0 - (time.monotonic() - _NOMINATIM_LAST_CALL)
+        if wait > 0:
+            time.sleep(wait)
+        try:
+            r = requests.get(
+                "https://nominatim.openstreetmap.org/search",
+                params={
+                    "q": query,
+                    "format": "json",
+                    "limit": 1,
+                    "countrycodes": "br",
+                    "addressdetails": 1,
+                },
+                headers={
+                    "User-Agent": "Resolvei/3.2 (solar-study; https://resolvei.com.br/)",
+                    "Accept-Language": "pt-BR,pt;q=0.9",
+                },
+                timeout=15,
+            )
+            _NOMINATIM_LAST_CALL = time.monotonic()
+            r.raise_for_status()
+            data = r.json()
+        except requests.RequestException as exc:
+            _NOMINATIM_LAST_CALL = time.monotonic()
+            raise HTTPException(status_code=502, detail=f"Falha no serviço de localização: {exc}") from exc
+    if not data:
+        raise HTTPException(
+            status_code=404,
+            detail="Não encontrei coordenadas para esse endereço. Tente informar rua, número, cidade e UF ou use o CEP.",
+        )
+    x = data[0]
+    result = {
+        "lat": float(x["lat"]),
+        "lon": float(x["lon"]),
+        "displayName": x.get("display_name", query),
+        "addressDetails": x.get("address", {}),
+        "geocoder": "OpenStreetMap/Nominatim",
+    }
+    if len(_GEOCODE_CACHE) >= 256:
+        _GEOCODE_CACHE.pop(next(iter(_GEOCODE_CACHE)))
+    _GEOCODE_CACHE[key] = result
+    return result
+
+
 def geocode_solar(req: SolarResourceRequest) -> dict[str, Any]:
-    pieces = [x.strip() for x in [req.street, req.neighborhood, req.city, req.state, req.cep, "Brasil"] if x and x.strip()]
+    cep_data: dict[str, Any] | None = None
+    if req.cep:
+        cep_digits = re.sub(r"\D", "", req.cep)
+        if len(cep_digits) != 8:
+            raise HTTPException(status_code=400, detail="CEP deve conter 8 dígitos.")
+        cep_data = _lookup_cep(cep_digits)
+
+    street = (req.street or "").strip() or ((cep_data or {}).get("logradouro") or "").strip()
+    neighborhood = (req.neighborhood or "").strip() or ((cep_data or {}).get("bairro") or "").strip()
+    city = (req.city or "").strip() or ((cep_data or {}).get("localidade") or "").strip()
+    state = (req.state or "").strip() or ((cep_data or {}).get("uf") or "").strip()
+    address = (req.address or "").strip() or street
+
+    pieces = [x for x in [address, neighborhood, city, state, "Brasil"] if x]
+    # O CEP ajuda bastante quando o endereço é pouco específico, mas não é enviado
+    # como único termo porque o Nominatim pode ter cobertura postal irregular.
+    if req.cep:
+        pieces.insert(-1, f"CEP {re.sub(r'\D', '', req.cep)}")
     query = ", ".join(pieces)
     if not query:
-        raise HTTPException(status_code=400, detail="Informe pelo menos cidade/UF ou CEP para localizar o ponto.")
-    try:
-        r = requests.get("https://nominatim.openstreetmap.org/search", params={"q": query, "format": "json", "limit": 1, "countrycodes": "br", "addressdetails": 1}, headers={"User-Agent":"Resolvei/3.0 (solar-study)"}, timeout=12)
-        r.raise_for_status(); data = r.json()
-        if not data:
-            raise HTTPException(status_code=404, detail="Não encontrei coordenadas para o endereço informado.")
-        x=data[0]
-        return {"lat":float(x["lat"]),"lon":float(x["lon"]),"displayName":x.get("display_name",query)}
-    except HTTPException:
-        raise
-    except requests.RequestException as exc:
-        raise HTTPException(status_code=502, detail=f"Falha no serviço de geocodificação: {exc}") from exc
-
+        raise HTTPException(status_code=400, detail="Informe um endereço ou CEP para localizar o ponto.")
+    result = _nominatim_search(query)
+    result["input"] = {
+        "address": address,
+        "street": street,
+        "neighborhood": neighborhood,
+        "city": city,
+        "state": state,
+        "cep": req.cep or "",
+    }
+    return result
 
 def fallback_solar(lat: float, roof_azimuth: float = 0, roof_tilt: float = 15) -> dict[str, Any]:
     lat_abs = abs(lat)
@@ -606,16 +705,19 @@ def fallback_party(req: PartyRequest) -> dict[str, Any]:
 
 @app.get("/api/address/cep/{cep}")
 def address_by_cep(cep: str) -> dict[str, Any]:
-    digits=re.sub(r"\D", "", cep)
-    if len(digits)!=8:
-        raise HTTPException(status_code=400, detail="CEP deve conter 8 dígitos.")
-    try:
-        r=requests.get(f"https://viacep.com.br/ws/{digits}/json/",timeout=10); r.raise_for_status(); data=r.json()
-    except requests.RequestException as exc:
-        raise HTTPException(status_code=502, detail=f"Falha ao consultar CEP: {exc}") from exc
-    if data.get("erro"):
-        raise HTTPException(status_code=404, detail="CEP não encontrado.")
-    return data
+    return _lookup_cep(cep)
+
+
+@app.post("/api/address/search")
+def address_search(req: SolarResourceRequest) -> dict[str, Any]:
+    loc = geocode_solar(req)
+    return {
+        "lat": loc["lat"],
+        "lon": loc["lon"],
+        "displayName": loc.get("displayName", ""),
+        "geocoder": loc.get("geocoder", "OpenStreetMap/Nominatim"),
+        "address": loc.get("input", {}),
+    }
 
 
 @app.post("/api/solar/resource")

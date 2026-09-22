@@ -52,7 +52,7 @@ const tools = [
   {id:'piscina',cat:'casa',icon:'🏊',title:'Volume da piscina',desc:'Calcule litros e volume de uma piscina retangular.',tags:'piscina agua volume litros'},
   {id:'cobertura',cat:'casa',icon:'📐',title:'Inclinação de cobertura',desc:'Calcule altura pela porcentagem de inclinação.',tags:'telhado inclinação cobertura altura'},
   {id:'placas-solares',cat:'energia',icon:'☀️',title:'Dimensionamento de placas solares',desc:'Estime módulos, potência, inversor, materiais, custo e payback.',tags:'solar fotovoltaica painel placa inversor energia conta luz kwh economia payback financiamento'},
-  {id:'posicao-solar',cat:'energia',icon:'🧭',title:'Estudo de posição solar',desc:'Estude insolação, orientação, trajetória solar e posição dos módulos sobre o telhado.',tags:'posição solar insolação telhado norte azimute orientação sombra placas fotovoltaicas mapa google maps terreno'},
+  {id:'posicao-solar',cat:'energia',icon:'🧭',title:'Posicionamento dos módulos — integrado ao solar',desc:'Use a etapa visual dentro do dimensionamento para marcar telhados, obstáculos, escala e posição dos módulos.',tags:'posição solar insolação telhado norte azimute orientação sombra placas fotovoltaicas imagem drone satelite módulo painel'},
   {id:'conversor-arquivos',cat:'medidas',icon:'🔄',title:'Conversor de arquivos',desc:'Converta vídeos, imagens e PDFs entre formatos comuns.',tags:'converter arquivo mp4 avi mov webm jpg png webp pdf imagem video'},
   {id:'jpg-png-webp',cat:'medidas',icon:'🖼️',title:'JPG ↔ PNG ↔ WEBP',desc:'Converta imagens entre formatos populares.',tags:'jpg jpeg png webp converter imagem formato'},
   {id:'heic-jpg',cat:'medidas',icon:'📱',title:'HEIC → JPG',desc:'Converta fotos do iPhone para JPG.',tags:'heic iphone celular foto jpg converter'},
@@ -494,27 +494,51 @@ function solarPrice(n, fallback){ return Number.isFinite(Number(n))&&Number(n)>0
 function solarPriceField(id,label,value,help='') { return input(id,label,{prefix:'R$',value,step:'0.01',help}); }
 function formatMonths(m){ const n=Math.max(0,Math.ceil(Number(m)||0)); const y=Math.floor(n/12),mo=n%12; return y?`${y} ano${y>1?'s':''}${mo?` e ${mo} mês${mo>1?'es':''}`:''}`:`${n} mês${n!==1?'es':''}`; }
 
+
 function solarCalculatorUI(){
-  return `<div class="tool-layout"><section class="card panel">
-    <h2>☀️ Dimensionamento fotovoltaico</h2>
-    <div class="notice"><strong>Como funciona:</strong> informe o consumo médio da conta de energia, a tarifa, a potência do módulo e os custos de referência. O Resolvei estima o sistema, sugere um inversor, lista materiais, calcula o custo e simula o parcelamento/payback. Os preços são parâmetros editáveis e podem ser atualizados por consulta online quando o provedor estiver configurado.</div>
+  return `<div class="tool-layout solar-tool-layout"><section class="card panel solar-main-panel">
+    <h2>☀️ Dimensionamento fotovoltaico + posicionamento</h2>
+    <div class="notice"><strong>Agora é uma única ferramenta.</strong> O Resolvei dimensiona a quantidade de módulos e, usando uma imagem superior do imóvel, permite desenhar os planos de telhado, obstáculos e uma escala para testar automaticamente a posição dos módulos. A etapa visual é preliminar e não substitui levantamento, projeto ou análise estrutural.</div>
+
+    <h3 class="subhead">⚡ 1. Consumo e sistema</h3>
     <div class="form-grid">
-      ${input('solarConsumption','Consumo médio mensal',{suffix:'kWh/mês',value:'500',help:'Use a média dos últimos 12 meses da conta, se disponível.'})}
-      ${input('solarTariff','Tarifa efetiva da energia',{prefix:'R$',value:'0.95',step:'0.01',help:'Informe o valor que você quer usar na simulação. Tarifas reais variam por distribuidora, classe e impostos.'})}
-      ${input('solarPSH','Horas de sol pico equivalentes',{suffix:'h/dia',value:'5',step:'0.1',help:'Pode ser substituído por dados do estudo de posição solar/PVGIS.'})}
-      ${input('solarPR','Performance global do sistema',{suffix:'%',value:'80',step:'1',help:'Inclui perdas de temperatura, cabos, sujeira, mismatch e inversor. Ajuste com projeto.'})}
-      ${input('solarPanelPower','Potência de cada módulo',{suffix:'Wp',value:'550',step:'5'})}
-      ${input('solarPanelArea','Área aproximada do módulo',{suffix:'m²',value:'2.6',step:'0.01',help:'Use a dimensão real do módulo escolhido para conferir o espaço disponível.'})}
-      ${input('solarRoofArea','Área útil disponível no telhado',{suffix:'m²',value:'30',step:'0.1',help:'Deixe maior que zero para conferir se a quantidade estimada cabe no telhado.'})}
+      ${input('solarConsumption','Consumo médio mensal',{suffix:'kWh/mês',value:'500',help:'Prefira a média dos últimos 12 meses.'})}
+      ${input('solarTariff','Tarifa efetiva',{prefix:'R$',value:'0.95',step:'0.01',help:'Valor usado somente na simulação financeira.'})}
+      ${input('solarPSH','Horas de sol pico',{suffix:'h/dia',value:'5',step:'0.1',help:'O botão de dados solares pode substituir este valor.'})}
+      ${input('solarPR','Performance global',{suffix:'%',value:'80',step:'1',help:'Perdas globais estimadas do sistema.'})}
+      ${input('solarPanelPower','Potência do módulo',{suffix:'Wp',value:'550',step:'5'})}
+      ${input('solarPanelArea','Área do módulo',{suffix:'m²',value:'2.6',step:'0.01'})}
+      ${input('solarPanelLength','Comprimento do módulo',{suffix:'m',value:'2.28',step:'0.01',help:'Use a medida real do fabricante.'})}
+      ${input('solarPanelWidth','Largura do módulo',{suffix:'m',value:'1.13',step:'0.01',help:'Use a medida real do fabricante.'})}
+      ${input('solarPanelGap','Espaço entre módulos',{suffix:'m',value:'0.02',step:'0.01'})}
+      ${input('solarEdgeClearance','Afastamento das bordas',{suffix:'m',value:'0.20',step:'0.05',help:'Margem geométrica preliminar. Verifique a estrutura e recomendações do fabricante.'})}
+      ${input('solarRoofArea','Área útil disponível',{suffix:'m²',value:'30',step:'0.1',help:'Use uma estimativa; a área desenhada na imagem pode refinar a análise.'})}
       ${select('solarPhase','Ligação elétrica',[['monofasico','Monofásica'],['bifasico','Bifásica'],['trifasico','Trifásica']],'bifasico')}
-      ${input('solarConsumptionCoverage','Cobertura alvo do consumo',{suffix:'%',value:'100',step:'1',help:'100% busca compensar a média mensal; um projeto real deve considerar consumo, tarifa e regras de compensação.'})}
-      ${input('solarEconomyFactor','Fator de economia usado no payback',{suffix:'%',value:'90',step:'1',help:'Fator de modelagem para não assumir que cada kWh gerado vira exatamente R$ 1 de economia. Não é uma alíquota regulatória.'})}
-      ${input('solarExtraCost','Outros custos do projeto',{prefix:'R$',value:'0',step:'0.01',help:'Frete, reforços, adequações de telhado ou outros itens.'})}
+      ${input('solarConsumptionCoverage','Cobertura alvo',{suffix:'%',value:'100',step:'1'})}
+      ${input('solarEconomyFactor','Fator de economia',{suffix:'%',value:'90',step:'1'})}
+      ${input('solarExtraCost','Outros custos',{prefix:'R$',value:'0',step:'0.01'})}
     </div>
+
+    <h3 class="subhead">📍 2. Endereço e dados solares</h3>
+    <div class="form-grid">
+      ${input('solarCep','CEP',{value:'',placeholder:'78000-000',help:'Digite o CEP para preencher rua, bairro, cidade e UF automaticamente.'})}
+      ${input('solarAddress','Rua / número',{value:'',placeholder:'Ex.: Rua das Flores, 100'})}
+      ${input('solarNeighborhood','Bairro',{value:''})}
+      ${input('solarCity','Cidade',{value:'Cuiabá'})}
+      ${input('solarState','UF',{value:'MT',maxlength:'2'})}
+    </div>
+    <div class="actions">
+      <button class="btn" id="solarCepBtn" type="button">📍 Preencher pelo CEP</button>
+      <button class="btn" id="solarAddressBtn" type="button">🧭 Localizar endereço</button>
+      <button class="btn" id="solarResourceBtn" type="button">☀️ Atualizar dados solares</button>
+      <button class="btn" id="solarPricesBtn" type="button">💰 Atualizar preços</button>
+    </div>
+    <div id="solarResourceStatus" class="notice">Informe o endereço e, quando necessário, use “Localizar endereço”.</div>
+
     <hr class="sep">
-    <h3 class="subhead">💰 Preços de referência — todos editáveis</h3>
+    <h3 class="subhead">💰 3. Preços de referência — editáveis</h3>
     <div class="form-grid solar-price-grid">
-      ${solarPriceField('pricePanel','Módulo fotovoltaico (un.)',SOLAR_DEFAULT_PRICES.panel,'Valor de referência. Confirme com fornecedor.')}
+      ${solarPriceField('pricePanel','Módulo fotovoltaico (un.)',SOLAR_DEFAULT_PRICES.panel,'Valor de referência.') }
       ${solarPriceField('priceInverter','Inversor (un.)',SOLAR_DEFAULT_PRICES.inverter)}
       ${solarPriceField('priceMounting','Estrutura por módulo',SOLAR_DEFAULT_PRICES.mounting)}
       ${solarPriceField('priceDcCable','Cabo solar por metro',SOLAR_DEFAULT_PRICES.dcCableM)}
@@ -529,64 +553,73 @@ function solarCalculatorUI(){
       ${solarPriceField('priceEngineering','Projeto + engenharia/homologação',SOLAR_DEFAULT_PRICES.engineering)}
       ${solarPriceField('priceLabor','Mão de obra',SOLAR_DEFAULT_PRICES.labor)}
     </div>
+
     <hr class="sep">
-    <h3 class="subhead">📍 Dados solares da localização</h3>
-    <div class="form-grid">
-      ${input('solarCep','CEP (opcional)',{value:'',placeholder:'78000-000',help:'Preencha a cidade manualmente ou use o botão para pesquisar dados solares.'})}
-      ${input('solarCity','Cidade',{value:'Cuiabá'})}
-      ${input('solarState','UF',{value:'MT'})}
-      ${input('solarAddress','Endereço (opcional)',{value:'',full:true,placeholder:'Rua, bairro, número'})}
+    <h3 class="subhead">🗺️ 4. Imagem superior do imóvel</h3>
+    <div class="notice">Use uma imagem realmente superior (satélite, drone, ortofoto ou implantação). Quanto mais perpendicular a imagem estiver ao terreno, melhor. Caso exista uma seta Norte, mantenha-a visível.</div>
+    <div class="field full"><label for="solarMapImage">Imagem do imóvel</label><input id="solarMapImage" type="file" accept="image/*"><small>O arquivo é carregado no navegador. A imagem só é enviada ao servidor quando você escolher a análise por IA.</small></div>
+
+    <div class="solar-mark-toolbar">
+      <button class="btn solar-mode active" id="solarRoofModeBtn" type="button">⌂ Marcar plano de telhado</button>
+      <button class="btn solar-mode" id="solarObstacleModeBtn" type="button">▴ Marcar obstáculo</button>
+      <button class="btn solar-mode" id="solarCalibrateBtn" type="button">📏 Calibrar escala</button>
+      <button class="btn" id="solarFinishMarkBtn" type="button">✓ Concluir marcação</button>
+      <button class="btn" id="solarUndoBtn" type="button">↶ Desfazer</button>
+      <button class="btn ghost" id="solarClearMarksBtn" type="button">Limpar marcações</button>
     </div>
-    <div class="actions"><button class="btn primary" id="calcBtn">Calcular sistema</button><button class="btn" id="solarResourceBtn" type="button">☀️ Atualizar dados solares</button><button class="btn" id="solarPricesBtn" type="button">💰 Consultar preços online</button><button class="btn ghost" id="resetBtn">Limpar</button></div>
-    <div id="solarResourceStatus" class="notice">Sem consulta externa. O cálculo funciona com as horas de sol pico informadas.</div>
-  </section><section id="result"></section></div>`;
+
+    <div class="form-grid solar-mark-fields">
+      ${input('solarMarkRoofAzimuth','Azimute do plano de telhado',{suffix:'°',value:'0',step:'1',help:'0° Norte · 90° Leste · 180° Sul · 270° Oeste.'})}
+      ${input('solarMarkRoofTilt','Inclinação do plano',{suffix:'°',value:'15',step:'1'})}
+      ${input('solarMarkRoofHeight','Altura do plano',{suffix:'m',value:'3',step:'0.1',help:'Altura aproximada do telhado em relação ao piso/terreno.'})}
+      ${input('solarObstacleHeight','Altura do obstáculo',{suffix:'m',value:'1',step:'0.1',help:'Use altura relativa acima do plano dos módulos quando possível.'})}
+      ${input('solarShadowAltitude','Ângulo solar mínimo usado na sombra',{suffix:'°',value:'20',step:'1',help:'Modelo conservador: quanto menor este ângulo, maior a zona excluída ao redor do obstáculo.'})}
+      ${input('solarKnownDistance','Distância conhecida para escala',{suffix:'m',value:'10',step:'0.1',help:'Informe uma distância real que você consiga identificar na imagem; depois clique em “Calibrar escala”.'})}
+    </div>
+
+    <div id="solarImageStatus" class="notice">1) Envie a imagem. 2) Marque os planos de telhado. 3) Marque obstáculos. 4) Calibre a escala. 5) Calcule o posicionamento.</div>
+    <div class="solar-canvas-wrap" id="solarCanvasWrap">
+      <img id="solarMapPreview" alt="Imagem superior do imóvel">
+      <canvas id="solarOverlay"></canvas>
+    </div>
+    <div class="solar-legend">
+      <span><i class="legend-swatch roof"></i> Plano de telhado</span>
+      <span><i class="legend-swatch obstacle"></i> Obstáculo / barreira</span>
+      <span><i class="legend-swatch panel"></i> Módulo proposto</span>
+      <span><i class="legend-swatch shadow"></i> Zona conservadora de sombra</span>
+    </div>
+    <div class="actions">
+      <button class="btn primary" id="solarAutoLayoutBtn" type="button">▦ Calcular posição dos módulos</button>
+      <button class="btn" id="solarAiImageBtn" type="button">✨ Sugerir áreas com IA</button>
+      <button class="btn" id="solarLayoutClearBtn" type="button">Limpar somente layout</button>
+    </div>
+    <div id="solarLayoutResult"></div>
+
+    <div class="notice"><strong>Como interpretar:</strong> o Resolvei procura caber a quantidade de módulos calculada nos planos marcados, respeitando orientação, inclinação, bordas, dimensão física do módulo e zonas de sombra aproximadas dos obstáculos. Em projeto real, ainda precisam ser verificados espaçamentos técnicos, acesso, carga de vento, fixação, estrutura, strings, tensão/corrente e requisitos da distribuidora.</div>
+
+    <div class="actions"><button class="btn primary" id="calcBtn">Calcular sistema completo</button><button class="btn ghost" id="resetBtn">Limpar</button></div>
+  </section><section id="result"></section></div>
+
+  <section class="card panel solar-path-section"><h2>☀️ Trajetória aparente do Sol</h2><canvas id="solarPathCanvas" width="900" height="340"></canvas><div class="note">Visualização aproximada da trajetória solar para a latitude localizada. A análise de sombra do imóvel usa os obstáculos que você marcou na imagem.</div></section>`;
 }
 
 function positionSolarUI(){
-  return `<div class="tool-layout"><section class="card panel">
-    <h2>🧭 Estudo de insolação e posição dos módulos</h2>
-    <div class="notice"><strong>Importante:</strong> o estudo combina geolocalização, trajetória solar, orientação do telhado e uma simulação visual sobre sua imagem. O print do mapa não substitui levantamento, medição, projeto elétrico, análise de sombreamento de obstáculos ou verificação estrutural.</div>
-    <h3 class="subhead">📍 Localização</h3>
-    <div class="form-grid">
-      ${input('sunCep','CEP',{value:'78000-000',placeholder:'78000-000'})}
-      ${input('sunStreet','Rua / avenida',{value:'',placeholder:'Ex.: Rua das Flores'})}
-      ${input('sunNeighborhood','Bairro',{value:''})}
-      ${input('sunCity','Cidade',{value:'Cuiabá'})}
-      ${input('sunState','UF',{value:'MT'})}
-    </div>
-    <div class="actions"><button class="btn" id="sunCepBtn" type="button">📍 Preencher pelo CEP</button><button class="btn primary" id="calcBtn">Gerar estudo solar</button><button class="btn ghost" id="resetBtn">Limpar</button></div>
-    <hr class="sep">
-    <h3 class="subhead">📐 Terreno e telhado</h3>
-    <div class="form-grid">
-      ${input('terrainW','Largura do terreno',{suffix:'m',value:'10',step:'0.1'})}
-      ${input('terrainD','Profundidade do terreno',{suffix:'m',value:'25',step:'0.1'})}
-      ${input('sunRoofArea','Área útil de telhado',{suffix:'m²',value:'30',step:'0.1',help:'Área onde os módulos podem realmente ser instalados, sem caminhos, afastamentos ou obstáculos.'})}
-      ${input('sunRoofAzimuth','Azimute do telhado',{suffix:'°',value:'0',step:'1',help:'0° = Norte, 90° = Leste, 180° = Sul, 270° = Oeste. Ajuste após conferir a orientação do print.'})}
-      ${input('sunRoofTilt','Inclinação do telhado',{suffix:'°',value:'15',step:'1',help:'Ângulo do plano do telhado em relação à horizontal.'})}
-      ${input('sunPanelCount','Quantidade de módulos a simular',{suffix:'un.',value:'10',step:'1',min:1})}
-      ${input('sunPanelPower','Potência do módulo',{suffix:'Wp',value:'550',step:'5'})}
-      ${input('sunArrayBearing','Orientação da matriz simulada',{suffix:'°',value:'0',step:'1',help:'A matriz pode ser girada independentemente do telhado para testar alternativas.'})}
-    </div>
-    <hr class="sep">
-    <h3 class="subhead">🗺️ Print do Google Maps / imagem do telhado</h3>
-    <div class="field full"><label for="sunMapImage">Imagem</label><input id="sunMapImage" type="file" accept="image/*"><small>Use uma captura com o Norte claramente identificável. A imagem fica no seu navegador até ser enviada para análise por IA.</small></div>
-    <div class="actions"><button class="btn" id="solarAiImageBtn" type="button">✨ Analisar imagem com IA</button><button class="btn" id="solarAutoArrayBtn" type="button">▣ Posicionar matriz</button></div>
-    <div id="solarImageStatus" class="notice">Nenhuma imagem carregada.</div>
-    <div id="solarImageStage" class="solar-image-stage"><img id="solarMapPreview" alt="Print do mapa/telhado"><canvas id="solarOverlay"></canvas></div>
-    <div class="notice"><strong>Interação:</strong> clique sobre a imagem para mover a matriz. Altere o azimute da matriz e a quantidade de módulos para testar alternativas visualmente.</div>
-  </section>
-  <section id="result"><div class="result-box"><div class="result-label">Estudo solar</div><div class="result-main">—</div><p>Informe a localização e clique em “Gerar estudo solar”.</p></div></section></div>
-  <section class="card panel solar-path-section"><h2>☀️ Trajetória aparente do Sol</h2><canvas id="solarPathCanvas" width="900" height="340"></canvas><div id="solarPathNote" class="note">O gráfico é uma visualização aproximada da trajetória solar. O estudo detalhado deve considerar horizonte, obstáculos e dados locais.</div></section>`;
+  return solarCalculatorUI();
 }
 
 function solarConfigFromDOM(){
+  const panelLength=Math.max(.2,val('solarPanelLength')||2.28);
+  const panelWidth=Math.max(.2,val('solarPanelWidth')||1.13);
   return {
     consumption:Math.max(0,val('solarConsumption')),
     tariff:Math.max(0,val('solarTariff')),
     psh:Math.max(1,val('solarPSH')),
     pr:Math.min(1,Math.max(.1,val('solarPR')/100)),
     panelW:Math.max(100,val('solarPanelPower')),
-    panelArea:Math.max(.1,val('solarPanelArea')),
+    panelLength,panelWidth,panelArea:panelLength*panelWidth,
+    panelGap:Math.max(0,val('solarPanelGap')),
+    edgeClearance:Math.max(0,val('solarEdgeClearance')),
+    shadowAltitude:Math.max(5,Math.min(80,val('solarShadowAltitude')||20)),
     roofArea:Math.max(0,val('solarRoofArea')),
     coverage:Math.min(2,Math.max(.1,val('solarConsumptionCoverage')/100)),
     economyFactor:Math.min(1,Math.max(.1,val('solarEconomyFactor')/100)),
@@ -594,6 +627,7 @@ function solarConfigFromDOM(){
     phase:document.getElementById('solarPhase')?.value||'bifasico',
   };
 }
+
 function calcSolarLocal(){
   const c=solarConfigFromDOM();
   const panelKW=c.panelW/1000;
@@ -668,85 +702,43 @@ function solarResultHTML(r, sourceLabel='cálculo local'){
 }
 
 
-function daylightHours(latDeg, declDeg){
-  const lat=Number(latDeg||0)*Math.PI/180, dec=Number(declDeg||0)*Math.PI/180;
-  const c=-Math.tan(lat)*Math.tan(dec); const h0=Math.acos(Math.max(-1,Math.min(1,c))); return 2*h0*12/Math.PI;
-}
-function solarNoonAltitude(latDeg, declDeg){ return 90-Math.abs(Number(latDeg||0)-Number(declDeg||0)); }
+let solarLayoutState={mode:'roof',tempPoints:[],roofs:[],obstacles:[],calibration:{points:[],metersPerPixel:null,meters:0},placements:[],lat:0,lon:0,optimalAzimuth:0,optimalTilt:15};
 
-function solarPathDraw(canvas, lat){
-  if(!canvas)return; const ctx=canvas.getContext('2d'); const w=canvas.width,h=canvas.height; ctx.clearRect(0,0,w,h);
-  const pad=38; ctx.strokeStyle=getComputedStyle(document.documentElement).getPropertyValue('--line')||'#ddd'; ctx.fillStyle=getComputedStyle(document.documentElement).getPropertyValue('--muted')||'#667085'; ctx.lineWidth=1;
-  ctx.beginPath(); ctx.moveTo(pad,h-pad); ctx.lineTo(w-pad,h-pad); ctx.moveTo(pad,h-pad); ctx.lineTo(pad,pad); ctx.stroke();
-  ctx.font='12px system-ui'; ctx.fillText('Leste',w-pad-34,h-14); ctx.fillText('Sul',w/2-10,h-14); ctx.fillText('Oeste',pad,h-14); ctx.fillText('altura solar',pad+7,pad-9);
-  const sets=[{name:'Junho (inverno)',dec:-23.44},{name:'Equinócio',dec:0},{name:'Dezembro (verão)',dec:23.44}];
-  for(const set of sets){ let first=true; ctx.beginPath(); for(let hour=-6;hour<=6;hour+=0.1){ const latr=(Number(lat)||0)*Math.PI/180, decr=set.dec*Math.PI/180, H=hour*15*Math.PI/180; const sinAlt=Math.sin(latr)*Math.sin(decr)+Math.cos(latr)*Math.cos(decr)*Math.cos(H); const alt=Math.asin(Math.max(-1,Math.min(1,sinAlt))); const deg=alt*180/Math.PI; if(deg<=0) {first=true; continue;} const x=w/2+(H/(6*Math.PI/180))*(w/2-pad); const y=h-pad-(deg/90)*(h-pad*2); if(first){ctx.moveTo(x,y);first=false;}else ctx.lineTo(x,y); } ctx.stroke(); }
-  const maxAlt=Math.max(1,90-Math.abs(Number(lat)||0)+23.44); ctx.fillText(`Latitude ${num(lat)}°`,pad+7,h-pad-8);
-}
+function daylightHours(latDeg,declDeg){const lat=Number(latDeg||0)*Math.PI/180,dec=Number(declDeg||0)*Math.PI/180,c=-Math.tan(lat)*Math.tan(dec),h0=Math.acos(Math.max(-1,Math.min(1,c)));return 2*h0*12/Math.PI;}
+function solarNoonAltitude(latDeg,declDeg){return 90-Math.abs(Number(latDeg||0)-Number(declDeg||0));}
+function solarPathDraw(canvas,lat){if(!canvas)return;const ctx=canvas.getContext('2d'),w=canvas.width,h=canvas.height;ctx.clearRect(0,0,w,h);const pad=38;ctx.strokeStyle=getComputedStyle(document.documentElement).getPropertyValue('--line')||'#ddd';ctx.fillStyle=getComputedStyle(document.documentElement).getPropertyValue('--muted')||'#667085';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(pad,h-pad);ctx.lineTo(w-pad,h-pad);ctx.moveTo(pad,h-pad);ctx.lineTo(pad,pad);ctx.stroke();ctx.font='12px system-ui';ctx.fillText('Leste',w-pad-34,h-14);ctx.fillText('Sul',w/2-10,h-14);ctx.fillText('Oeste',pad,h-14);ctx.fillText('altura solar',pad+7,pad-9);const sets=[-23.44,0,23.44];for(const dec of sets){let first=true;ctx.beginPath();for(let hour=-6;hour<=6;hour+=.1){const la=(Number(lat)||0)*Math.PI/180,de=dec*Math.PI/180,H=hour*15*Math.PI/180,sinAlt=Math.sin(la)*Math.sin(de)+Math.cos(la)*Math.cos(de)*Math.cos(H),deg=Math.asin(Math.max(-1,Math.min(1,sinAlt)))*180/Math.PI;if(deg<=0){first=true;continue;}const x=w/2+(H/(6*Math.PI/180))*(w/2-pad),y=h-pad-(deg/90)*(h-pad*2);if(first){ctx.moveTo(x,y);first=false;}else ctx.lineTo(x,y);}ctx.stroke();}ctx.fillText('Latitude '+num(lat)+'°',pad+7,h-pad-8);}
 
-function solarMapRender(){
-  const img=document.getElementById('solarMapPreview'),canvas=document.getElementById('solarOverlay');if(!img||!canvas||!img.naturalWidth)return;
-  const rect=img.getBoundingClientRect(); const scale=rect.width/img.naturalWidth; canvas.width=Math.round(rect.width); canvas.height=Math.round(img.naturalHeight*scale); canvas.style.width=rect.width+'px'; canvas.style.height=canvas.height+'px'; canvas.style.left=(img.offsetLeft||0)+'px'; canvas.style.top=(img.offsetTop||0)+'px';
-  const ctx=canvas.getContext('2d');ctx.clearRect(0,0,canvas.width,canvas.height);
-  const count=Math.max(1,val('sunPanelCount')),bearing=normalizeBearing(val('sunArrayBearing')),cols=Math.max(1,Math.round(Math.sqrt(count))),rows=Math.max(1,Math.ceil(count/cols));
-  const centerX=Number(canvas.dataset.cx)||canvas.width/2,centerY=Number(canvas.dataset.cy)||canvas.height/2; canvas.dataset.cx=centerX;canvas.dataset.cy=centerY;
-  const cellW=Math.max(28,canvas.width/(cols*6)),cellH=cellW*0.55; const totalW=cols*cellW,totalH=rows*cellH;
-  ctx.save();ctx.translate(centerX,centerY);ctx.rotate((bearing)*Math.PI/180);
-  for(let i=0;i<count;i++){const r=Math.floor(i/cols),c=i%cols; const x=-totalW/2+c*cellW,y=-totalH/2+r*cellH;ctx.fillStyle='rgba(59,130,246,.32)';ctx.strokeStyle='rgba(30,64,175,.9)';ctx.fillRect(x+1,y+1,cellW-2,cellH-2);ctx.strokeRect(x+1,y+1,cellW-2,cellH-2);}
-  ctx.restore();
-  ctx.save();ctx.translate(32,32);ctx.strokeStyle='rgba(17,24,39,.9)';ctx.fillStyle='rgba(255,255,255,.88)';ctx.beginPath();ctx.arc(0,0,22,0,Math.PI*2);ctx.fill();ctx.stroke();ctx.fillStyle='#111827';ctx.font='bold 12px system-ui';ctx.textAlign='center';ctx.fillText('N',0,-8);ctx.fillText('S',0,17);ctx.fillText('L',14,5);ctx.fillText('O',-14,5);ctx.restore();
-}
-function runSolarPositionLocal(data){
-  const lat=Number(data?.lat); const lon=Number(data?.lon); const roof=normalizeBearing(val('sunRoofAzimuth')); const tilt=val('sunRoofTilt'); const ideal=Number(data?.optimalAzimuth ?? (Math.abs(lat)>1&&lat<0?0:180)); const idealTilt=Number(data?.optimalTilt ?? Math.max(10,Math.abs(lat)));
-  const diff=Math.abs(((roof-ideal+180)%360)-180); const orientationFactor=Math.max(.75,1-(diff/180)*.24); const tiltDiff=Math.abs(tilt-idealTilt); const tiltFactor=Math.max(.90,1-(tiltDiff/90)*.10); const rel=orientationFactor*tiltFactor;
-  const result=document.getElementById('result'); if(!result)return;
-  const monthly=data?.monthly||[]; const monthlyHtml=monthly.length?monthly.map(m=>`<div class="result-row"><span>${esc(m.name||m.month)}</span><strong>${num(m.kwh)} kWh/kWp</strong></div>`).join(''):'';
-  result.innerHTML=`<div class="result-box"><div class="result-label">Estudo de insolação · ${lat?`lat ${num(lat)}°, lon ${num(lon)}°`:'localização aproximada'}</div><div class="result-main">${esc(solarBearingName(ideal))} / ${num(idealTilt)}°</div><div class="result-sub"><div class="result-row"><span>Orientação recomendada</span><strong>${num(ideal)}° — ${esc(solarBearingName(ideal))}</strong></div><div class="result-row"><span>Inclinação recomendada</span><strong>${num(idealTilt)}°</strong></div><div class="result-row"><span>Azimute do telhado informado</span><strong>${num(roof)}° — ${esc(solarBearingName(roof))}</strong></div><div class="result-row"><span>Inclinação do telhado</span><strong>${num(tilt)}°</strong></div><div class="result-row"><span>Eficiência relativa estimada da orientação/inclinação</span><strong>${pct(rel*100)}</strong></div><div class="result-row"><span>Horas de luz — junho</span><strong>${num(daylightHours(lat,-23.44))} h/dia</strong></div><div class="result-row"><span>Horas de luz — equinócio</span><strong>${num(daylightHours(lat,0))} h/dia</strong></div><div class="result-row"><span>Horas de luz — dezembro</span><strong>${num(daylightHours(lat,23.44))} h/dia</strong></div><div class="result-row"><span>Altura solar ao meio-dia — equinócio</span><strong>${num(solarNoonAltitude(lat,0))}°</strong></div>${data?.annualKwhPerKwp?`<div class="result-row"><span>Geração anual de referência</span><strong>${num(data.annualKwhPerKwp)} kWh/kWp</strong></div>`:''}</div>${monthlyHtml?`<div class="solar-monthly"><h3>📅 Produção específica mensal</h3>${monthlyHtml}</div>`:''}<div class="note">No Brasil, uma orientação próxima ao Norte costuma ser favorável para geração anual em sistemas fixos no hemisfério Sul; o valor ótimo exato depende da latitude, clima e dados do local. O estudo usa ${data?.source==='PVGIS'?'dados PVGIS quando disponíveis e':'um modelo de fallback porque os dados externos não estavam disponíveis; '}não considera sombreamento específico do imóvel.</div></div>`;
-  solarPathDraw(document.getElementById('solarPathCanvas'),lat||0);
-  const img=document.getElementById('solarMapPreview'); if(img&&img.naturalWidth)solarMapRender();
-}
-
-async function runSolarPositionStudy(){
-  const status=document.getElementById('solarImageStatus'); if(status)status.textContent='☀️ Consultando localização e dados solares...';
-  const payload={cep:document.getElementById('sunCep')?.value||'',street:document.getElementById('sunStreet')?.value||'',neighborhood:document.getElementById('sunNeighborhood')?.value||'',city:document.getElementById('sunCity')?.value||'',state:document.getElementById('sunState')?.value||'',roofAzimuth:val('sunRoofAzimuth'),roofTilt:val('sunRoofTilt')};
-  try{const res=await fetch('/api/solar/resource',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});const data=await res.json();if(!res.ok)throw new Error(data.detail||'Não foi possível consultar os dados solares.');
-    document.getElementById('sunArrayBearing').value=String(Math.round(data.optimalAzimuth||0));
-    runSolarPositionLocal(data); if(status)status.innerHTML=`✅ Localização: <strong>${esc(data.displayName||payload.city)}</strong>. Dados solares: ${esc(data.source||'modelo local')}.`;
-  }catch(e){
-    const lat=Number(document.getElementById('sunLat')?.value|| (document.getElementById('sunState')?.value?.toUpperCase()==='MT'?-15.6014:0));
-    runSolarPositionLocal({lat,lon:0,optimalAzimuth:lat<0?0:180,optimalTilt:Math.max(10,Math.abs(lat)),source:'fallback'});
-    if(status)status.innerHTML=`⚠️ ${esc(e.message)} O gráfico e a simulação continuam disponíveis em modo aproximado.`;
-  }
-}
-async function fetchCepForSolar(){
-  const cep=(document.getElementById('sunCep')?.value||'').replace(/\D/g,''); const status=document.getElementById('solarImageStatus'); if(cep.length!==8){if(status)status.textContent='Informe um CEP com 8 dígitos.';return;}
-  try{const res=await fetch(`/api/address/cep/${cep}`);const d=await res.json();if(!res.ok)throw new Error(d.detail||'CEP não encontrado.'); document.getElementById('sunStreet').value=d.logradouro||'';document.getElementById('sunNeighborhood').value=d.bairro||'';document.getElementById('sunCity').value=d.localidade||'';document.getElementById('sunState').value=d.uf||'';if(status)status.textContent='✅ Endereço preenchido pelo CEP.';}catch(e){if(status)status.textContent=`⚠️ ${esc(e.message)}`;}
-}
-
-async function updateSolarPrices(){
-  const status=document.getElementById('solarResourceStatus'); if(status)status.textContent='💰 Consultando preços de referência online...';
-  try{const q=new URLSearchParams({city:document.getElementById('solarCity')?.value||'Cuiabá',state:document.getElementById('solarState')?.value||'MT'});const res=await fetch('/api/solar/prices?'+q.toString());const d=await res.json();if(!res.ok)throw new Error(d.detail||'Falha na consulta de preços.');if(!d.configured){if(status)status.textContent='⚠️ Consulta online desativada. Configure SERPAPI_KEY no servidor; os preços editáveis continuam disponíveis.';return;} const map={panel:'pricePanel',inverter:'priceInverter',mounting:'priceMounting',dcProtection:'priceDcProtection',acProtection:'priceAcProtection'};let changed=0;for(const item of d.items||[]){const id=map[item.key];if(id&&item.best?.price){document.getElementById(id).value=Number(item.best.price).toFixed(2);changed++;}} if(status)status.innerHTML=`✅ ${changed} preços de referência atualizados para ${esc(d.city)}, ${esc(d.state)}. Clique em “Calcular sistema” para aplicar.`;}catch(e){if(status)status.innerHTML=`⚠️ ${esc(e.message)} Os preços manuais continuam disponíveis.`;}
-}
-async function updateSolarResource(){
-  const status=document.getElementById('solarResourceStatus'); if(status)status.textContent='☀️ Buscando dados solares para a localização...';
-  const payload={cep:document.getElementById('solarCep')?.value||'',city:document.getElementById('solarCity')?.value||'',state:document.getElementById('solarState')?.value||'',address:document.getElementById('solarAddress')?.value||'',roofAzimuth:0,roofTilt:Math.max(10,Math.abs(-15))};
-  try{const res=await fetch('/api/solar/resource',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}); const d=await res.json();if(!res.ok)throw new Error(d.detail||'Não foi possível buscar dados solares.'); if(d.specificMonthly){document.getElementById('solarPSH').value=String((d.specificMonthly/(30*Math.max(.1,val('solarPR')/100)*(val('solarPanelPower')/1000))).toFixed(2));} if(status)status.innerHTML=`✅ ${esc(d.displayName||`${payload.city}, ${payload.state}`)} · inclinação ótima ${num(d.optimalTilt)}° · orientação ${num(d.optimalAzimuth)}° · ${num(d.annualKwhPerKwp)} kWh/kWp/ano.`; }catch(e){if(status)status.innerHTML=`⚠️ ${esc(e.message)} O cálculo continuará usando as horas de sol pico informadas.`;}
-}
-function solarImageRead(){
-  const input=document.getElementById('sunMapImage'); if(!input)return; const file=input.files?.[0]; if(!file)return; const reader=new FileReader(); reader.onload=()=>{const img=document.getElementById('solarMapPreview');img.src=reader.result;img.onload=()=>{const st=document.getElementById('solarImageStage');st.classList.add('visible');const canvas=document.getElementById('solarOverlay');canvas.dataset.cx=(img.getBoundingClientRect().width/2).toString();canvas.dataset.cy=(img.getBoundingClientRect().height/2).toString();solarMapRender();};document.getElementById('solarImageStatus').textContent=`✅ Imagem carregada: ${file.name}.`;};reader.readAsDataURL(file);
-}
-async function solarAIImage(){
-  const img=document.getElementById('solarMapPreview'); const status=document.getElementById('solarImageStatus'); if(!img?.src){if(status)status.textContent='Carregue primeiro uma imagem.';return;} if(status)status.textContent='✨ A IA está analisando telhado, orientação aparente e áreas possíveis...';
-  try{const res=await fetch('/api/solar/image-analyze',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({imageData:img.src,terrainWidth:val('terrainW'),terrainDepth:val('terrainD'),roofAzimuth:val('sunRoofAzimuth'),lat:0,lon:0})});const d=await res.json();if(!res.ok)throw new Error(d.detail||'Falha na análise da imagem.');if(d.recommendedAzimuth!==undefined)document.getElementById('sunArrayBearing').value=String(Math.round(d.recommendedAzimuth)); if(status)status.innerHTML=`✅ ${esc(d.summary||'Análise concluída.')} ${d.confidence?`Confiança informada pela IA: ${esc(d.confidence)}.`:''}`; if(d.zones?.length){const canvas=document.getElementById('solarOverlay'),imgEl=document.getElementById('solarMapPreview');const rect=imgEl.getBoundingClientRect(); const z=d.zones[0]; canvas.dataset.cx=String(Math.min(rect.width*.95,Math.max(rect.width*.05,Number(z.x||.5)*rect.width))); canvas.dataset.cy=String(Math.min(rect.height*.95,Math.max(rect.height*.05,Number(z.y||.5)*rect.height)));solarMapRender();}}
-  catch(e){if(status)status.innerHTML=`⚠️ ${esc(e.message)} O posicionamento manual continua disponível.`;}
-}
-function bindSolarPositionInteractions(){
-  const file=document.getElementById('sunMapImage');if(file)file.addEventListener('change',solarImageRead);
-  const canvas=document.getElementById('solarOverlay');if(canvas)canvas.addEventListener('click',e=>{const r=canvas.getBoundingClientRect();canvas.dataset.cx=String(e.clientX-r.left);canvas.dataset.cy=String(e.clientY-r.top);solarMapRender();});
-  ['sunPanelCount','sunArrayBearing'].forEach(id=>document.getElementById(id)?.addEventListener('input',solarMapRender));
-  document.getElementById('sunCepBtn')?.addEventListener('click',fetchCepForSolar); document.getElementById('solarAiImageBtn')?.addEventListener('click',solarAIImage); document.getElementById('solarAutoArrayBtn')?.addEventListener('click',()=>{const canvas=document.getElementById('solarOverlay');if(canvas){canvas.dataset.cx=canvas.width/2;canvas.dataset.cy=canvas.height/2;solarMapRender();}}); document.getElementById('calcBtn')?.addEventListener('click',e=>{if(location.pathname.includes('posicao-solar')){e.preventDefault();runSolarPositionStudy();}});
-}
-
+function solarCanvasPoint(e){const c=document.getElementById('solarOverlay'),img=document.getElementById('solarMapPreview');if(!c||!img||!img.naturalWidth)return null;const r=c.getBoundingClientRect();return{x:Math.max(0,Math.min(img.naturalWidth,(e.clientX-r.left)*(img.naturalWidth/r.width))),y:Math.max(0,Math.min(img.naturalHeight,(e.clientY-r.top)*(img.naturalHeight/r.height)))};}
+function solarDist(a,b){return Math.hypot(a.x-b.x,a.y-b.y);}
+function solarPolygonArea(poly){let a=0;for(let i=0;i<poly.length;i++){const j=(i+1)%poly.length;a+=poly[i].x*poly[j].y-poly[j].x*poly[i].y;}return Math.abs(a/2);}
+function solarPointInPolygon(p,poly){let inside=false;for(let i=0,j=poly.length-1;i<poly.length;j=i++){const xi=poly[i].x,yi=poly[i].y,xj=poly[j].x,yj=poly[j].y;const hit=((yi>p.y)!=(yj>p.y))&&(p.x<(xj-xi)*(p.y-yi)/(yj-yi||1e-12)+xi);if(hit)inside=!inside;}return inside;}
+function solarBearingVector(b){const a=normalizeBearing(b)*Math.PI/180;return{x:Math.sin(a),y:-Math.cos(a)};}
+function solarPerpVector(b){const a=normalizeBearing(b)*Math.PI/180;return{x:Math.cos(a),y:Math.sin(a)};}
+function solarScaleInfo(){if(solarLayoutState.calibration.metersPerPixel>0)return{value:solarLayoutState.calibration.metersPerPixel,approx:false};const area=Math.max(0,val('solarRoofArea')),roof=solarLayoutState.roofs[0];if(area>0&&roof&&roof.points.length>=3){const px=solarPolygonArea(roof.points);if(px>10)return{value:Math.sqrt(area/px),approx:true};}return{value:0,approx:true};}
+function solarSolarStatus(msg){const e=document.getElementById('solarImageStatus');if(e)e.textContent=msg;}
+function solarSetSolarMode(mode){solarLayoutState.mode=mode;if(mode!=='roof')solarLayoutState.tempPoints=[];document.getElementById('solarRoofModeBtn')?.classList.toggle('active',mode==='roof');document.getElementById('solarObstacleModeBtn')?.classList.toggle('active',mode==='obstacle');document.getElementById('solarCalibrateBtn')?.classList.toggle('active',mode==='calibrate');}
+function solarFinishRoof(){if(solarLayoutState.tempPoints.length<3){solarSolarStatus('Marque pelo menos 3 pontos para fechar o telhado.');return;}const roof={points:solarLayoutState.tempPoints.splice(0),azimuth:normalizeBearing(val('solarMarkRoofAzimuth')),tilt:Math.max(0,Math.min(60,val('solarMarkRoofTilt'))),height:Math.max(0,val('solarMarkRoofHeight')),name:'Telhado '+(solarLayoutState.roofs.length+1)};solarLayoutState.roofs.push(roof);solarSetSolarMode('roof');solarSolarStatus('Plano de telhado salvo. Marque outro plano ou calcule o posicionamento.');solarLayoutRender();}
+function solarFinishCalibration(){if(solarLayoutState.tempPoints.length!==2){solarSolarStatus('Clique em dois pontos conhecidos para calibrar.');return;}const meters=Math.max(0,val('solarKnownDistance')),px=solarDist(solarLayoutState.tempPoints[0],solarLayoutState.tempPoints[1]);if(!meters||px<1){solarSolarStatus('Informe a distância real e escolha dois pontos separados.');return;}solarLayoutState.calibration={points:solarLayoutState.tempPoints.splice(0),metersPerPixel:meters/px,meters};solarSetSolarMode('roof');solarSolarStatus('Escala calibrada: '+num(meters/px)+' m/pixel.');solarLayoutRender();}
+function solarAddObstacle(p){solarLayoutState.obstacles.push({point:p,height:Math.max(0,val('solarObstacleHeight')),name:'Obstáculo '+(solarLayoutState.obstacles.length+1)});solarSolarStatus('Obstáculo '+solarLayoutState.obstacles.length+' marcado.');solarLayoutRender();}
+function solarUndo(){if(solarLayoutState.tempPoints.length)solarLayoutState.tempPoints.pop();else if(solarLayoutState.obstacles.length)solarLayoutState.obstacles.pop();else if(solarLayoutState.roofs.length)solarLayoutState.roofs.pop();solarLayoutRender();}
+function solarClearMarks(){solarLayoutState.tempPoints=[];solarLayoutState.roofs=[];solarLayoutState.obstacles=[];solarLayoutState.placements=[];solarLayoutState.calibration={points:[],metersPerPixel:null,meters:0};document.getElementById('solarLayoutResult')?.replaceChildren();solarSolarStatus('Marcações limpas. Desenhe o primeiro plano de telhado.');solarLayoutRender();}
+function solarClearLayout(){solarLayoutState.placements=[];document.getElementById('solarLayoutResult')?.replaceChildren();solarLayoutRender();}
+function solarLayoutRect(center,u,v,length,width,scale){const a=u.x*length/(2*scale),b=u.y*length/(2*scale),c=v.x*width/(2*scale),d=v.y*width/(2*scale);return[{x:center.x-a-c,y:center.y-b-d},{x:center.x+a-c,y:center.y+b-d},{x:center.x+a+c,y:center.y+b+d},{x:center.x-a+c,y:center.y-b+d}];}
+function solarRectInside(poly,rect){return rect.every(p=>solarPointInPolygon(p,poly));}
+function solarRectBlocked(rect){const center={x:rect.reduce((s,p)=>s+p.x,0)/4,y:rect.reduce((s,p)=>s+p.y,0)/4};const diag=solarDist(rect[0],rect[2])/2;const scale=solarScaleInfo().value;const angle=Math.max(5,Math.min(80,val('solarShadowAltitude')||20))*Math.PI/180;return solarLayoutState.obstacles.some(o=>{const radius=(Math.max(0,o.height)/Math.tan(angle))/Math.max(scale,1e-9);return solarDist(center,o.point)<=radius+diag;});}
+function solarGeneratePlacements(roof,target,scale,landscape){const baseL=Math.max(.2,val('solarPanelLength')),baseW=Math.max(.2,val('solarPanelWidth')),gap=Math.max(0,val('solarPanelGap')),edge=Math.max(0,val('solarEdgeClearance'));const L=(landscape?baseW:baseL)+2*edge,W=(landscape?baseL:baseW)+2*edge;const u0=solarBearingVector(roof.azimuth),v0=solarPerpVector(roof.azimuth),u=landscape?v0:u0,v=landscape?u0:v0;const us=roof.points.map(p=>p.x*u.x+p.y*u.y),vs=roof.points.map(p=>p.x*v.x+p.y*v.y);const minU=Math.min(...us)+L/(2*scale),maxU=Math.max(...us)-L/(2*scale),minV=Math.min(...vs)+W/(2*scale),maxV=Math.max(...vs)-W/(2*scale);if(maxU<minU||maxV<minV)return[];const stepU=(L+gap)/scale,stepV=(W+gap)/scale,out=[];let loops=0;for(let vv=minV;vv<=maxV+1e-8&&out.length<target&&loops<15000;vv+=stepV){for(let uu=minU;uu<=maxU+1e-8&&out.length<target;uu+=stepU){loops++;const center={x:u.x*uu+v.x*vv,y:u.y*uu+v.y*vv},rect=solarLayoutRect(center,u,v,L,W,scale);if(!solarRectInside(roof.points,rect)||solarRectBlocked(rect))continue;out.push({rect,roof:roof.name,orientation:landscape?'landscape':'portrait',azimuth:roof.azimuth,tilt:roof.tilt});}}return out;}
+function solarRoofScore(roof){const ideal=normalizeBearing(solarLayoutState.optimalAzimuth||0),diff=Math.abs(((roof.azimuth-ideal+180)%360)-180),orient=1-diff/180,tiltIdeal=Math.max(5,Number(solarLayoutState.optimalTilt||15)),tilt=Math.max(0,1-Math.abs(roof.tilt-tiltIdeal)/60);return orient*.65+tilt*.35;}
+function solarComputeModuleLayout(target){const si=solarScaleInfo();if(!solarLayoutState.roofs.length)return{placements:[],reason:'Marque pelo menos um plano de telhado.'};if(!si.value)return{placements:[],reason:'Calibre a escala ou informe uma área útil de telhado maior que zero.'};const roofs=solarLayoutState.roofs.map(roof=>{const p=solarGeneratePlacements(roof,target,si.value,false),l=solarGeneratePlacements(roof,target,si.value,true),best=l.length>p.length?l:p;return{roof,score:solarRoofScore(roof),placements:best,capacity:best.length};}).sort((a,b)=>b.score-a.score);let remaining=target,placements=[],details=[];for(const x of roofs){const chosen=x.placements.slice(0,remaining);placements=placements.concat(chosen);remaining-=chosen.length;details.push({name:x.roof.name,count:chosen.length,capacity:x.capacity,score:x.score,azimuth:x.roof.azimuth,tilt:x.roof.tilt});if(remaining<=0)break;}return{placements,roofs:details,remaining,scale:si.value,scaleApprox:si.approx};}
+function solarLayoutResultHTML(target,layout){const rows=(layout.roofs||[]).map(r=>'<div class="result-row"><span>'+esc(r.name)+' · '+num(r.azimuth)+'° / '+num(r.tilt)+'°</span><strong>'+r.count+' de '+r.capacity+'</strong></div>').join('');const missing=Math.max(0,target-layout.placements.length);return '<div class="solar-layout-result"><div class="result-label">Pré-dimensionamento geométrico</div><div class="result-main">'+layout.placements.length+' / '+target+'</div><div class="result-sub"><div class="result-row"><span>Orientação de referência</span><strong>'+num(solarLayoutState.optimalAzimuth)+'° — '+esc(solarBearingName(solarLayoutState.optimalAzimuth))+'</strong></div><div class="result-row"><span>Inclinação de referência</span><strong>'+num(solarLayoutState.optimalTilt)+'°</strong></div><div class="result-row"><span>Escala usada</span><strong>'+num(layout.scale||0)+' m/pixel '+(layout.scaleApprox?'(aprox.)':'')+'</strong></div><div class="result-row"><span>Módulos sem posição</span><strong>'+missing+'</strong></div>'+rows+'</div><div class="note">'+(missing?'⚠️ Não foi possível acomodar todos os módulos nos planos marcados.':'✅ A quantidade dimensionada encontrou posições geométricas nos planos marcados.')+' A sombra é uma aproximação conservadora baseada na altura dos obstáculos e no ângulo solar mínimo informado.</div></div>';}
+function solarLayoutAuto(){const target=Math.max(0,Math.round(calcSolarLocal().panels));if(!target){solarSolarStatus('Calcule o sistema com consumo maior que zero antes do posicionamento.');return;}if(!solarLayoutState.roofs.length){const box=document.getElementById('solarLayoutResult');if(box)box.innerHTML='<div class="notice">Marque pelo menos um plano de telhado na imagem para calcular as posições.</div>';return;}const layout=solarComputeModuleLayout(target);if(!layout.placements.length){const box=document.getElementById('solarLayoutResult');if(box)box.innerHTML='<div class="notice">⚠️ '+esc(layout.reason||'Não encontrei posições.')+'</div>';solarLayoutState.placements=[];solarLayoutRender();return;}solarLayoutState.placements=layout.placements;const box=document.getElementById('solarLayoutResult');if(box)box.innerHTML=solarLayoutResultHTML(target,layout);solarLayoutRender();solarSolarStatus('Posicionamento calculado: '+layout.placements.length+' de '+target+' módulos.');}
+function solarLayoutRender(){const img=document.getElementById('solarMapPreview'),canvas=document.getElementById('solarOverlay'),wrap=document.getElementById('solarCanvasWrap');if(!img||!canvas||!wrap||!img.naturalWidth)return;const w=Math.max(260,Math.round(img.clientWidth)),h=Math.max(160,Math.round(img.clientHeight));canvas.width=w;canvas.height=h;wrap.style.height=h+'px';const sx=w/img.naturalWidth,sy=h/img.naturalHeight,ctx=canvas.getContext('2d'),p=q=>({x:q.x*sx,y:q.y*sy});ctx.clearRect(0,0,w,h);function poly(pts,fill,stroke,dash){ctx.save();ctx.beginPath();ctx.moveTo(pts[0].x,pts[0].y);for(let i=1;i<pts.length;i++)ctx.lineTo(pts[i].x,pts[i].y);ctx.closePath();ctx.fillStyle=fill;ctx.fill();ctx.strokeStyle=stroke;ctx.lineWidth=2;if(dash)ctx.setLineDash(dash);ctx.stroke();ctx.restore();}solarLayoutState.roofs.forEach(r=>{poly(r.points.map(p),'rgba(16,185,129,.14)','rgba(5,150,105,.95)',[]);});const a=Math.max(5,Math.min(80,val('solarShadowAltitude')||20))*Math.PI/180;solarLayoutState.obstacles.forEach(o=>{const q=p(o.point),rad=(o.height/Math.tan(a))*Math.min(sx,sy);ctx.save();ctx.beginPath();ctx.arc(q.x,q.y,Math.max(8,rad),0,Math.PI*2);ctx.fillStyle='rgba(245,158,11,.12)';ctx.fill();ctx.strokeStyle='rgba(217,119,6,.95)';ctx.setLineDash([6,5]);ctx.stroke();ctx.restore();});solarLayoutState.placements.forEach(pl=>poly(pl.rect.map(p),'rgba(59,130,246,.45)','rgba(30,64,175,.95)',[]));if(solarLayoutState.tempPoints.length){const pts=solarLayoutState.tempPoints.map(p);ctx.save();ctx.strokeStyle='rgba(220,38,38,.95)';ctx.fillStyle='rgba(220,38,38,.95)';ctx.beginPath();ctx.moveTo(pts[0].x*sx,pts[0].y*sy);for(let i=1;i<pts.length;i++)ctx.lineTo(pts[i].x*sx,pts[i].y*sy);ctx.stroke();pts.forEach(q=>{ctx.beginPath();ctx.arc(q.x*sx,q.y*sy,4,0,Math.PI*2);ctx.fill();});ctx.restore();}if(solarLayoutState.calibration.points.length===2){const q=solarLayoutState.calibration.points.map(p);ctx.save();ctx.strokeStyle='rgba(124,58,237,.95)';ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(q[0].x*sx,q[0].y*sy);ctx.lineTo(q[1].x*sx,q[1].y*sy);ctx.stroke();ctx.restore();}ctx.save();ctx.fillStyle='rgba(255,255,255,.92)';ctx.strokeStyle='rgba(17,24,39,.8)';ctx.beginPath();ctx.arc(34,34,23,0,Math.PI*2);ctx.fill();ctx.stroke();ctx.fillStyle='#111827';ctx.font='bold 12px system-ui';ctx.textAlign='center';ctx.fillText('N',34,25);ctx.fillText('S',34,47);ctx.fillText('L',46,37);ctx.fillText('O',22,37);ctx.restore();}
+function solarImageRead(){const input=document.getElementById('solarMapImage'),img=document.getElementById('solarMapPreview');if(!input||!img||!input.files?.[0])return;const file=input.files[0],reader=new FileReader();reader.onload=()=>{img.src=reader.result;img.onload=()=>{document.getElementById('solarCanvasWrap')?.classList.add('visible');solarLayoutRender();};solarSolarStatus('Imagem carregada: '+file.name+'. Comece pelos planos de telhado.');};reader.readAsDataURL(file);}
+function solarAddressPayload(){const address=document.getElementById('solarAddress')?.value||'';return{cep:document.getElementById('solarCep')?.value||'',address,street:address,neighborhood:document.getElementById('solarNeighborhood')?.value||'',city:document.getElementById('solarCity')?.value||'',state:document.getElementById('solarState')?.value||'',roofAzimuth:solarLayoutState.roofs[0]?.azimuth||0,roofTilt:solarLayoutState.roofs[0]?.tilt||15};}
+async function fetchCepForSolar(){const cep=(document.getElementById('solarCep')?.value||'').replace(/\D/g,'');const st=document.getElementById('solarResourceStatus');if(cep.length!==8){if(st)st.textContent='Informe um CEP com 8 dígitos.';return;}try{const res=await fetch('/api/address/cep/'+cep),d=await res.json();if(!res.ok)throw new Error(d.detail||'CEP não encontrado.');document.getElementById('solarAddress').value=[d.logradouro,d.complemento].filter(Boolean).join(', ');document.getElementById('solarNeighborhood').value=d.bairro||'';document.getElementById('solarCity').value=d.localidade||'';document.getElementById('solarState').value=d.uf||'';if(st)st.textContent='✅ Endereço preenchido. Clique em “Localizar endereço”.';}catch(e){if(st)st.textContent='⚠️ '+esc(e.message);}}
+async function searchSolarAddress(){const st=document.getElementById('solarResourceStatus');if(st)st.textContent='🧭 Localizando endereço...';try{const res=await fetch('/api/address/search',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(solarAddressPayload())}),d=await res.json();if(!res.ok)throw new Error(d.detail||'Não foi possível localizar o endereço.');solarLayoutState.lat=Number(d.lat||0);solarLayoutState.lon=Number(d.lon||0);solarPathDraw(document.getElementById('solarPathCanvas'),solarLayoutState.lat);if(st)st.innerHTML='✅ '+esc(d.displayName||'Endereço localizado')+' · lat '+num(d.lat)+' · lon '+num(d.lon);solarSolarStatus('Endereço localizado.');}catch(e){if(st)st.innerHTML='⚠️ '+esc(e.message);}}
+async function updateSolarResource(){const st=document.getElementById('solarResourceStatus');if(st)st.textContent='☀️ Consultando dados solares...';try{const res=await fetch('/api/solar/resource',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(solarAddressPayload())}),d=await res.json();if(!res.ok)throw new Error(d.detail||'Não foi possível obter os dados solares.');solarLayoutState.lat=Number(d.lat||0);solarLayoutState.lon=Number(d.lon||0);solarLayoutState.optimalAzimuth=normalizeBearing(Number(d.optimalAzimuth||0));solarLayoutState.optimalTilt=Number(d.optimalTilt||15);const annual=Number(d.roof?.annualKwhPerKwp||d.annualKwhPerKwp||0),pr=Math.max(.1,Math.min(1,val('solarPR')/100||.8));if(annual>0)document.getElementById('solarPSH').value=Math.max(1,Math.min(8,(annual/(365*pr))).toFixed(2));if(st)st.innerHTML='✅ '+esc(d.displayName||'Localização')+' · '+esc(d.source||'modelo local')+' · referência '+num(d.optimalAzimuth)+'° / '+num(d.optimalTilt)+'°';solarPathDraw(document.getElementById('solarPathCanvas'),solarLayoutState.lat);solarLayoutRender();}catch(e){if(st)st.innerHTML='⚠️ '+esc(e.message)+' O cálculo continuará com as horas de sol informadas.';}}
+async function updateSolarPrices(){const st=document.getElementById('solarResourceStatus');try{const q=new URLSearchParams({city:document.getElementById('solarCity')?.value||'Cuiabá',state:document.getElementById('solarState')?.value||'MT'}),res=await fetch('/api/solar/prices?'+q.toString()),d=await res.json();if(!res.ok)throw new Error(d.detail||'Falha na consulta de preços.');if(!d.configured){if(st)st.textContent='⚠️ Consulta online desativada. Os preços editáveis continuam disponíveis.';return;}const map={panel:'pricePanel',inverter:'priceInverter',mounting:'priceMounting',dcProtection:'priceDcProtection',acProtection:'priceAcProtection'};let changed=0;for(const item of d.items||[]){const id=map[item.key];if(id&&item.best?.price){document.getElementById(id).value=Number(item.best.price).toFixed(2);changed++;}}if(st)st.textContent='✅ '+changed+' preços atualizados.';}catch(e){if(st)st.textContent='⚠️ '+esc(e.message);}}
+function bindSolarCalculatorInteractions(){solarLayoutState={mode:'roof',tempPoints:[],roofs:[],obstacles:[],calibration:{points:[],metersPerPixel:null,meters:0},placements:[],lat:0,lon:0,optimalAzimuth:0,optimalTilt:15};document.getElementById('solarMapImage')?.addEventListener('change',solarImageRead);document.getElementById('solarOverlay')?.addEventListener('click',e=>{const p=solarCanvasPoint(e);if(!p)return;if(solarLayoutState.mode==='calibrate'){if(solarLayoutState.tempPoints.length<2)solarLayoutState.tempPoints.push(p);if(solarLayoutState.tempPoints.length===2)solarFinishCalibration();return;}if(solarLayoutState.mode==='obstacle'){solarAddObstacle(p);return;}solarLayoutState.tempPoints.push(p);solarLayoutRender();solarSolarStatus('Ponto '+solarLayoutState.tempPoints.length+' marcado. Clique em “Concluir marcação”.');});document.getElementById('solarRoofModeBtn')?.addEventListener('click',()=>solarSetSolarMode('roof'));document.getElementById('solarObstacleModeBtn')?.addEventListener('click',()=>solarSetSolarMode('obstacle'));document.getElementById('solarCalibrateBtn')?.addEventListener('click',()=>{solarLayoutState.tempPoints=[];solarSetSolarMode('calibrate');solarSolarStatus('Clique em dois pontos cuja distância real você conhece.');});document.getElementById('solarFinishMarkBtn')?.addEventListener('click',()=>solarLayoutState.mode==='calibrate'?solarFinishCalibration():solarFinishRoof());document.getElementById('solarUndoBtn')?.addEventListener('click',solarUndo);document.getElementById('solarClearMarksBtn')?.addEventListener('click',solarClearMarks);document.getElementById('solarAutoLayoutBtn')?.addEventListener('click',solarLayoutAuto);document.getElementById('solarLayoutClearBtn')?.addEventListener('click',solarClearLayout);document.getElementById('solarCepBtn')?.addEventListener('click',fetchCepForSolar);document.getElementById('solarAddressBtn')?.addEventListener('click',searchSolarAddress);document.getElementById('solarResourceBtn')?.addEventListener('click',updateSolarResource);document.getElementById('solarPricesBtn')?.addEventListener('click',updateSolarPrices);['solarPanelLength','solarPanelWidth','solarPanelGap','solarEdgeClearance','solarShadowAltitude','solarMarkRoofAzimuth','solarMarkRoofTilt','solarObstacleHeight'].forEach(id=>document.getElementById(id)?.addEventListener('input',solarLayoutRender));window.addEventListener('resize',()=>setTimeout(solarLayoutRender,60));solarSetSolarMode('roof');solarPathDraw(document.getElementById('solarPathCanvas'),solarLayoutState.lat);}
 function converterArquivosUI(){return `<div class="tool-layout"><section class="card panel"><h2>Conversor de arquivos</h2><div class="notice"><strong>Converta no Resolvei.</strong><br>Vídeos usam FFmpeg; imagens e PDFs são processados pelo servidor.</div><div class="field full"><label for="convertFile">Arquivo</label><input id="convertFile" type="file" accept=".mp4,.avi,.mov,.mkv,.webm,.jpg,.jpeg,.png,.webp,.bmp,.pdf"></div><div class="form-grid"><div class="field"><label for="convertFormat">Formato de saída</label><select id="convertFormat"><option value="">Selecione o arquivo primeiro</option></select></div><div class="field"><label>Limite</label><div class="notice" style="margin:0">Até 200 MB.</div></div></div><div class="actions"><button class="btn primary" id="convertBtn" disabled>Converter arquivo</button><button class="btn ghost" id="convertResetBtn" type="button">Limpar</button></div><div id="convertProgress" class="notice" style="display:none">⏳ Convertendo...</div><div id="convertStatus" class="notice">Nenhum arquivo selecionado.</div></section><section id="convertResult"><div class="result-box"><div class="result-label">Resultado</div><div class="result-main">—</div><p>O arquivo convertido aparecerá aqui.</p></div></section></div>`;}
 function toolUI(id){
   switch(id){
@@ -811,7 +803,7 @@ function toolUI(id){
     case 'piscina': return panel(input('length','Comprimento',{suffix:'m',value:'5'})+input('width','Largura',{suffix:'m',value:'3'})+input('depth','Profundidade média',{suffix:'m',value:'1.3'}));
     case 'cobertura': return panel(input('span','Vão horizontal considerado',{suffix:'m',value:'5'})+input('slope','Inclinação',{suffix:'%',value:'30'}));
     case 'placas-solares': return solarCalculatorUI();
-    case 'posicao-solar': return positionSolarUI();
+    case 'posicao-solar': return solarCalculatorUI();
     case 'area-retangulo': return panel(input('length','Comprimento',{suffix:'m',value:'5'})+input('width','Largura',{suffix:'m',value:'4'}));
     case 'area-triangulo': return panel(input('base','Base',{suffix:'m',value:'5'})+input('height','Altura',{suffix:'m',value:'3'}));
     case 'area-circulo': return panel(input('radius','Raio',{suffix:'m',value:'2'}));
@@ -881,8 +873,8 @@ function calculate(id){
     case 'caixa-dagua': {const liters=val('people')*val('perperson')*val('days');main=`${num(liters)} L`;label='Capacidade estimada';row('m³',`${num(liters/1000)} m³`);break;}
     case 'piscina': {const v=val('length')*val('width')*val('depth');main=`${num(v*1000)} L`;label='Volume aproximado';row('Volume',`${num(v)} m³`);break;}
     case 'cobertura': {const h=val('span')*val('slope')/100;main=`${num(h)} m`;label='Desnível';row('Inclinação',pct(val('slope')));break;}
-    case 'placas-solares': {const r=calcSolarLocal(); out.innerHTML=solarResultHTML(r, 'cálculo local'); return;}
-    case 'posicao-solar': {runSolarPositionStudy(); return;}
+    case 'placas-solares':
+    case 'posicao-solar': {const r=calcSolarLocal(); out.innerHTML=solarResultHTML(r, 'cálculo local'); solarAutoLayout(); return;}
     case 'area-retangulo': main=`${num(val('length')*val('width'))} m²`;label='Área';break;
     case 'area-triangulo': main=`${num(val('base')*val('height')/2)} m²`;label='Área';break;
     case 'area-circulo': main=`${num(Math.PI*val('radius')**2)} m²`;label='Área';break;
@@ -1015,7 +1007,7 @@ function bind(){
   const gs=document.getElementById('globalSearch'); if(gs){gs.addEventListener('keydown',e=>{if(e.key==='Enter'){const q=gs.value.trim(); if(q){location.hash='#/ferramentas?q='+encodeURIComponent(q)}}});}
   document.querySelectorAll('[data-search]').forEach(b=>b.addEventListener('click',()=>{location.hash='#/ferramentas?q='+encodeURIComponent(b.dataset.search)}));
   const ls=document.getElementById('listSearch'); if(ls){const q=new URLSearchParams((location.search||'').replace(/^\?/,'') || location.hash.split('?')[1] || '').get('q')||'';ls.value=q; const grid=document.getElementById('toolGrid'); if(q)grid.innerHTML=smartSearch(q).replace(/^<div class="notice">/, '<div class="notice">'); ls.addEventListener('input',()=>{const r=smartSearch(ls.value);grid.innerHTML=r;document.querySelectorAll('[data-fav]').forEach(b=>b.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();toggleFav(b.dataset.fav)}));});}
-  const calc=document.getElementById('calcBtn'); const rid=location.pathname.match(/ferramenta\/([^/]+)/)?.[1] || location.hash.match(/ferramenta\/([^?]+)/)?.[1]; if(calc&&rid&&rid!=='posicao-solar')calc.addEventListener('click',()=>calculate(rid));
+  const calc=document.getElementById('calcBtn'); const rid=location.pathname.match(/ferramenta\/([^/]+)/)?.[1] || location.hash.match(/ferramenta\/([^?]+)/)?.[1]; if(calc&&rid)calc.addEventListener('click',()=>calculate(rid));
   if(rid==='conversor-arquivos')bindFileConverter();
   if(['jpg-png-webp','heic-jpg','imagem-pdf','pdf-imagens-zip','mp4-mp3','mp4-gif','csv-xlsx','zip-arquivos','mov-mp4','jpg-heic','imagem-comprimir'].includes(rid))bindUniversalFileConverter(rid);
   if(rid==='por-quanto-vender'){
@@ -1081,8 +1073,7 @@ function bind(){
   }
   if(rid==='custo-receita'){const box=document.getElementById('recipeItems');if(box&&!box.children.length){addRecipeItemRow({name:'',qty:1,unit:'g',price:0});addRecipeItemRow({name:'',qty:1,unit:'g',price:0});addRecipeItemRow({name:'',qty:1,unit:'g',price:0});} const ar=document.getElementById('addRecipeItem');if(ar)ar.addEventListener('click',()=>addRecipeItemRow()); const ai=document.getElementById('analyzeRecipeBtn');if(ai)ai.addEventListener('click',analyzeRecipeAI);}
   if(rid==='churrasco'){/* sugestões são renderizadas junto da ferramenta */}
-  if(rid==='placas-solares'){const btn=document.getElementById('solarResourceBtn');if(btn)btn.addEventListener('click',updateSolarResource);const pb=document.getElementById('solarPricesBtn');if(pb)pb.addEventListener('click',updateSolarPrices);}
-  if(rid==='posicao-solar'){bindSolarPositionInteractions();}
+  if(['placas-solares','posicao-solar'].includes(rid)){bindSolarCalculatorInteractions();}
   if(rid==='festa'){const type=document.getElementById('partyType');if(type)type.addEventListener('change',()=>{const a=document.getElementById('age'); if(a)a.closest('.field').style.display=type.value.startsWith('aniversario-')?'':'none';}); if(type&&!type.value.startsWith('aniversario-')){const a=document.getElementById('age');if(a)a.closest('.field').style.display='none';} const ai=document.getElementById('aiPartyBtn');if(ai)ai.addEventListener('click',refinePartyAI); }
   const reset=document.getElementById('resetBtn'); if(reset)reset.addEventListener('click',()=>{location.reload();});
   const add=document.getElementById('addItem');if(add)add.addEventListener('click',addShoppingItem);
