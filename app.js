@@ -129,24 +129,32 @@ const panel = (form, output='<div class="result-box"><div class="result-label">R
 
 function porQuantoVenderUI(){
   return `<div class="tool-layout"><section class="card panel">
-    <h2>Vamos descobrir o preço de venda</h2>
-    <div class="notice"><strong>É simples:</strong> diga o que você vende e informe seus gastos. A IA calcula um preço mínimo e uma faixa de preço para você avaliar.</div>
+    <h2>Por quanto devo vender?</h2>
+    <div class="notice"><strong>Seu preço precisa pagar a conta.</strong> Esta ferramenta funciona como um pequeno consultor de negócio: calcula seu custo real, ponto de equilíbrio, margem, preços por estratégia e quanto você precisa vender para atingir uma meta.</div>
     <div class="form-grid">
       <div class="field full"><label for="sellProduct">O que você vende?</label><input id="sellProduct" placeholder="Ex.: bolo de chocolate, brigadeiro, coxinha, marmita..."></div>
       <div class="field"><label for="sellType">Tipo</label><select id="sellType"><option value="doce">Doce</option><option value="salgado">Salgado</option><option value="comida">Comida / refeição</option><option value="bebida">Bebida</option><option value="outro">Outro</option></select></div>
       <div class="field"><label for="sellCity">Cidade</label><input id="sellCity" value="Cuiabá" placeholder="Ex.: Cuiabá"></div>
-      <div class="field"><label for="sellState">Estado (UF)</label><input id="sellState" value="MT" maxlength="2" placeholder="MT"></div>
-      <div class="field"><label for="sellQuantity">Quantas unidades você produz?</label><input id="sellQuantity" type="number" min="1" step="1" value="10"></div>
-      <div class="field"><label for="sellCost">Quanto gasta para produzir tudo?</label><input id="sellCost" type="number" min="0" step="0.01" placeholder="Ex.: 80"><small>Ingredientes e preparo do lote.</small></div>
+      <div class="field"><label for="sellState">UF</label><input id="sellState" value="MT" maxlength="2" placeholder="MT"></div>
+      <div class="field"><label for="sellQuantity">Unidades produzidas no lote</label><input id="sellQuantity" type="number" min="1" step="1" value="10"></div>
+      <div class="field"><label for="sellCost">Ingredientes + preparo do lote</label><input id="sellCost" type="number" min="0" step="0.01" placeholder="Ex.: 80,00"><small>Quanto você realmente gasta para produzir o lote.</small></div>
       <div class="field"><label for="sellPackaging">Embalagem por unidade</label><input id="sellPackaging" type="number" min="0" step="0.01" value="0" placeholder="Ex.: 1,50"></div>
-      <div class="field"><label for="sellOther">Outros gastos do lote</label><input id="sellOther" type="number" min="0" step="0.01" value="0" placeholder="Gás, energia, entrega..."></div>
+      <div class="field"><label for="sellOther">Outros gastos do lote</label><input id="sellOther" type="number" min="0" step="0.01" value="0" placeholder="Gás, energia, perdas..."></div>
+      <div class="field"><label for="sellHours">Horas de trabalho no lote</label><input id="sellHours" type="number" min="0" step="0.25" value="0" placeholder="Ex.: 4"></div>
+      <div class="field"><label for="sellHourly">Quanto vale sua hora de trabalho?</label><input id="sellHourly" type="number" min="0" step="0.01" value="0" placeholder="Ex.: 20,00"><small>Se não souber, deixe 0 para não incluir mão de obra.</small></div>
+      <div class="field"><label for="sellFixed">Custos fixos por mês</label><input id="sellFixed" type="number" min="0" step="0.01" value="0" placeholder="Ex.: 500,00"><small>Aluguel, internet, equipamentos, contador etc.</small></div>
+      <div class="field"><label for="sellMonthlyQty">Unidades que pretende vender por mês</label><input id="sellMonthlyQty" type="number" min="1" step="1" value="100" placeholder="Ex.: 100"></div>
+      <div class="field"><label for="sellFees">Taxas sobre a venda (%)</label><input id="sellFees" type="number" min="0" max="100" step="0.1" value="0" placeholder="Ex.: 5"><small>Cartão, marketplace, comissão ou delivery.</small></div>
+      <div class="field"><label for="sellTax">Impostos sobre a venda (%)</label><input id="sellTax" type="number" min="0" max="100" step="0.1" value="0" placeholder="Ex.: 6"></div>
+      <div class="field"><label for="sellMargin">Lucro desejado (%)</label><input id="sellMargin" type="number" min="0" max="90" step="0.5" value="30" placeholder="Ex.: 30"><small>Percentual do preço de venda que você quer que sobre como lucro.</small></div>
+      <div class="field"><label for="sellMarket">Preço praticado por concorrentes (opcional)</label><input id="sellMarket" type="number" min="0" step="0.01" value="0" placeholder="Ex.: 12,00"><small>Use apenas se você já pesquisou sua região.</small></div>
+      <div class="field"><label for="sellGoal">Quanto quer ganhar por mês? (opcional)</label><input id="sellGoal" type="number" min="0" step="0.01" value="0" placeholder="Ex.: 2000,00"></div>
     </div>
-    <div class="notice"><strong>Não sabe algum valor?</strong> Pode deixar em branco. A IA fará uma estimativa e avisará o que vale a pena conferir.</div>
-    <div class="actions"><button class="btn primary" type="button" id="sellCalcBtn">✨ Calcular preço de venda</button><button class="btn ghost" type="button" id="sellResetBtn">Limpar</button></div>
+    <div class="notice"><strong>Como usar:</strong> primeiro informe seus gastos. Depois, se quiser uma análise mais completa, preencha custos fixos, taxas, impostos, preço dos concorrentes e sua meta mensal.</div>
+    <div class="actions"><button class="btn primary" type="button" id="sellCalcBtn">📊 Analisar meu preço</button><button class="btn ghost" type="button" id="sellResetBtn">Limpar</button></div>
     <div id="sellResult" style="margin-top:18px"></div>
   </section></div>`;
 }
-
 function receitaCustoUI(){
   return `<div class="tool-layout"><section class="card panel">
     <h2>Ingredientes</h2>
@@ -1013,31 +1021,64 @@ function bind(){
   if(['jpg-png-webp','heic-jpg','imagem-pdf','pdf-imagens-zip','mp4-mp3','mp4-gif','csv-xlsx','zip-arquivos','mov-mp4','jpg-heic','imagem-comprimir'].includes(rid))bindUniversalFileConverter(rid);
   if(rid==='por-quanto-vender'){
     const btn=document.getElementById('sellCalcBtn'), reset=document.getElementById('sellResetBtn');
-    if(btn)btn.addEventListener('click',async()=>{
+    if(btn)btn.addEventListener('click',()=>{
+      const n=id=>Math.max(0,Number(document.getElementById(id)?.value)||0);
       const product=document.getElementById('sellProduct')?.value.trim();
-      const type=document.getElementById('sellType')?.value||'outro';
-      const city=document.getElementById('sellCity')?.value.trim()||'Cuiabá';
-      const state=(document.getElementById('sellState')?.value.trim()||'MT').toUpperCase();
-      const quantity=Math.max(1,Number(document.getElementById('sellQuantity')?.value)||1);
-      const productionCost=Math.max(0,Number(document.getElementById('sellCost')?.value)||0);
-      const packaging=Math.max(0,Number(document.getElementById('sellPackaging')?.value)||0);
-      const otherCosts=Math.max(0,Number(document.getElementById('sellOther')?.value)||0);
-      const session=window.resolveiAiSession||{};
-      const apiKey=session.apiKey||'', provider=session.provider||'gemini', model=session.model||'';
+      const qty=Math.max(1,n('sellQuantity'));
+      const production=n('sellCost'), packaging=n('sellPackaging'), other=n('sellOther');
+      const hours=n('sellHours'), hourly=n('sellHourly'), fixed=n('sellFixed');
+      const monthlyQty=Math.max(1,n('sellMonthlyQty')||100);
+      const fees=Math.min(100,n('sellFees')), tax=Math.min(100,n('sellTax')), margin=Math.min(90,n('sellMargin')||30);
+      const market=n('sellMarket'), goal=n('sellGoal');
+      const city=document.getElementById('sellCity')?.value.trim()||'';
+      const state=(document.getElementById('sellState')?.value.trim()||'').toUpperCase();
       const out=document.getElementById('sellResult');
       if(!product){out.innerHTML='<div class="notice">Digite o produto que você vende.</div>';return;}
-      if(!apiKey){out.innerHTML='<div class="notice"><strong>✨ Conecte sua IA primeiro.</strong><br>Abra <a href="#/conectar-api">Usar minha IA</a>, informe sua própria API Key e volte para esta ferramenta.</div>';return;}
-      btn.disabled=true;btn.textContent='⏳ Calculando...';
-      out.innerHTML='<div class="result-box"><div class="result-label">Analisando</div><div class="result-main">Calculando preço...</div><p>A IA está considerando seus custos e a cidade informada.</p></div>';
-      try{
-        const r=await fetch('/api/sales/price',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({product,type,city,state,quantity,production_cost:productionCost,packaging_per_unit:packaging,other_costs:otherCosts,provider,api_key:apiKey,model})});
-        const data=await r.json();if(!r.ok)throw new Error(data.detail||'Não foi possível calcular.');
-        const range=data.price_range||{};
-        out.innerHTML=`<div class="result-box"><div class="result-label">Preço sugerido por unidade</div><div class="result-main">${money(data.suggested_price)}</div><p>${esc(data.summary||'')}</p><div class="form-grid" style="margin-top:14px"><div><strong>Preço mínimo</strong><br>${money(data.minimum_price)}</div><div><strong>Faixa para avaliar</strong><br>${money(range.min)} a ${money(range.max)}</div><div><strong>Custo por unidade</strong><br>${money(data.unit_cost)}</div><div><strong>Lucro por unidade</strong><br>${money(data.profit_per_unit)}</div></div>${data.tips?.length?`<div class="notice" style="margin-top:14px"><strong>Dicas da IA</strong><ul>${data.tips.map(x=>`<li>${esc(x)}</li>`).join('')}</ul></div>`:''}<small>${esc(data.note||'Estimativa: compare com seus custos reais e com os preços praticados na sua região.')}</small></div>`;
-      }catch(e){out.innerHTML=`<div class="notice"><strong>Não consegui calcular.</strong><br>${esc(e.message)}</div>`;}
-      finally{btn.disabled=false;btn.textContent='✨ Calcular preço de venda';}
+      const labor=hours*hourly;
+      const fixedBatch=(fixed/monthlyQty)*qty;
+      const totalBatch=production+packaging*qty+other+labor+fixedBatch;
+      const unitCost=totalBatch/qty;
+      const rate=(fees+tax)/100;
+      const breakEven=rate<1?unitCost/(1-rate):Infinity;
+      const target=rate+(margin/100);
+      const suggested=target<1?unitCost/(1-target):Infinity;
+      const price20=rate<0.8?unitCost/(1-rate-0.20):Infinity;
+      const price40=rate<0.6?unitCost/(1-rate-0.40):Infinity;
+      const contribution=suggested*(1-rate)-unitCost;
+      const unitsForGoal=contribution>0?Math.ceil(goal/contribution):0;
+      const monthlyRevenue=suggested*monthlyQty;
+      const monthlyProfit=contribution*monthlyQty;
+      const marginReal=suggested>0?(contribution/suggested)*100:0;
+      const marketNote=market>0?(suggested>market?`Seu preço calculado fica ${pct((suggested/market-1)*100)} acima do preço informado.`:`Seu preço calculado fica ${pct((1-suggested/market)*100)} abaixo do preço informado.`):'';
+      const cityNote=city?` Referência informada: ${esc(city)}/${esc(state)}. A cidade não altera a matemática; use-a para comparar seus custos e concorrentes locais.`:'';
+      out.innerHTML=`<div class="result-box">
+        <div class="result-label">Preço recomendado</div><div class="result-main">${money(suggested)}</div>
+        <p><strong>Margem calculada: ${pct(marginReal)}.</strong>${cityNote}</p>
+        <div class="form-grid" style="margin-top:14px">
+          <div><strong>Custo real por unidade</strong><br>${money(unitCost)}</div>
+          <div><strong>Ponto de equilíbrio</strong><br>${money(breakEven)}<br><small>Preço para não ter prejuízo.</small></div>
+          <div><strong>Preço com 20% de lucro</strong><br>${money(price20)}</div>
+          <div><strong>Preço com 40% de lucro</strong><br>${money(price40)}</div>
+          <div><strong>Lucro por unidade</strong><br>${money(contribution)}</div>
+          <div><strong>Lucro no lote</strong><br>${money(contribution*qty)}</div>
+        </div>
+        <div class="notice" style="margin-top:16px"><strong>📊 Visão de negócio</strong><br>Seu lote custa <strong>${money(totalBatch)}</strong>. Vendendo ${num(qty)} unidades a ${money(suggested)}, o faturamento do lote será <strong>${money(suggested*qty)}</strong> e o resultado após custos e taxas será <strong>${money(contribution*qty)}</strong>.</div>
+        <div class="notice" style="margin-top:12px"><strong>🎯 Meta mensal</strong><br>Com ${num(monthlyQty)} unidades/mês, o faturamento estimado é <strong>${money(monthlyRevenue)}</strong> e o lucro estimado é <strong>${money(monthlyProfit)}</strong>.${goal>0?(unitsForGoal?` Para buscar ${money(goal)} de lucro por mês, venda aproximadamente <strong>${num(unitsForGoal)} unidades/mês</strong>.`:' A meta não é atingível com os parâmetros atuais; revise preço, margem ou custos.') : ''}</div>
+        ${market>0?`<div class="notice" style="margin-top:12px"><strong>🏪 Comparação local</strong><br>Você informou ${money(market)} como referência. ${marketNote} Se o mercado não aceitar seu preço, revise tamanho, embalagem, custo ou valor percebido antes de simplesmente cortar sua margem.</div>`:''}
+        <div style="margin-top:14px"><strong>Checklist do consultor</strong><ul>
+          <li>${production>0?'✓':'⚠️'} Ingredientes/preparo: ${money(production)} por lote.</li>
+          <li>${labor>0?'✓':'⚠️'} Mão de obra: ${money(labor)} por lote.</li>
+          <li>${fixed>0?'✓':'⚠️'} Custos fixos rateados: ${money(fixedBatch)} por lote.</li>
+          <li>${fees+tax>0?'✓':'⚠️'} Taxas + impostos: ${pct(fees+tax)} da venda.</li>
+          <li>${market>0?'✓':'ℹ️'} Concorrentes: ${market>0?'preço informado':'não informado'}.</li>
+        </ul></div>
+        <small><strong>Importante:</strong> o preço recomendado é uma referência matemática. Se o público não aceitar o valor, os caminhos são reduzir custos, aumentar valor percebido ou ajustar produto/porção. ${esc('Análise para '+product+'.')}</small>
+      </div>`;
     });
-    if(reset)reset.addEventListener('click',()=>{['sellProduct','sellCost','sellPackaging','sellOther'].forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});document.getElementById('sellQuantity').value='10';document.getElementById('sellResult').innerHTML='';});
+    if(reset)reset.addEventListener('click',()=>{
+      ['sellProduct','sellCost','sellPackaging','sellOther','sellHours','sellHourly','sellFixed','sellFees','sellTax','sellMarket','sellGoal'].forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});
+      document.getElementById('sellQuantity').value='10';document.getElementById('sellMonthlyQty').value='100';document.getElementById('sellMargin').value='30';document.getElementById('sellCity').value='Cuiabá';document.getElementById('sellState').value='MT';document.getElementById('sellResult').innerHTML='';
+    });
   }
   if(rid==='custo-receita'){const box=document.getElementById('recipeItems');if(box&&!box.children.length){addRecipeItemRow({name:'',qty:1,unit:'g',price:0});addRecipeItemRow({name:'',qty:1,unit:'g',price:0});addRecipeItemRow({name:'',qty:1,unit:'g',price:0});} const ar=document.getElementById('addRecipeItem');if(ar)ar.addEventListener('click',()=>addRecipeItemRow()); const ai=document.getElementById('analyzeRecipeBtn');if(ai)ai.addEventListener('click',analyzeRecipeAI);}
   if(rid==='churrasco'){/* sugestões são renderizadas junto da ferramenta */}
