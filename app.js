@@ -65,6 +65,22 @@ const tools = [
   {id:'mov-mp4',cat:'medidas',icon:'📱',title:'MOV → MP4',desc:'Converta vídeos do iPhone para MP4.',tags:'mov mp4 iphone celular video converter'},
   {id:'jpg-heic',cat:'medidas',icon:'📱',title:'JPG → HEIC',desc:'Converta imagens para HEIC quando o servidor suportar esse formato.',tags:'jpg heic iphone celular imagem converter'},
   {id:'imagem-comprimir',cat:'medidas',icon:'🗜️',title:'Comprimir imagem',desc:'Reduza o tamanho de JPG, PNG e WEBP.',tags:'imagem comprimir reduzir tamanho jpg png webp'},
+  {id:'docx-pdf',cat:'medidas',icon:'📝',title:'DOCX → PDF',desc:'Gere um PDF simples a partir do texto de um documento Word.',tags:'docx word pdf documento converter'},
+  {id:'pdf-docx',cat:'medidas',icon:'📝',title:'PDF → DOCX',desc:'Extraia o texto de um PDF para um documento Word editável.',tags:'pdf docx word documento converter'},
+  {id:'pdf-txt',cat:'medidas',icon:'📄',title:'PDF → TXT',desc:'Extraia o texto de um PDF para texto puro.',tags:'pdf txt texto documento'},
+  {id:'txt-pdf',cat:'medidas',icon:'📄',title:'TXT → PDF',desc:'Transforme texto simples em PDF.',tags:'txt pdf texto documento'},
+  {id:'pdf-xlsx',cat:'medidas',icon:'📊',title:'PDF → XLSX',desc:'Organize texto de páginas de PDF em uma planilha Excel.',tags:'pdf xlsx excel planilha documento'},
+  {id:'xlsx-csv',cat:'medidas',icon:'📊',title:'XLSX → CSV',desc:'Exporte uma planilha Excel para CSV.',tags:'xlsx csv excel planilha'},
+  {id:'audio-mp3-wav',cat:'medidas',icon:'🎵',title:'Áudio MP3 ↔ WAV',desc:'Converta formatos comuns de áudio.',tags:'mp3 wav audio converter'},
+  {id:'audio-ogg',cat:'medidas',icon:'🎵',title:'Áudio → OGG',desc:'Converta áudio para OGG.',tags:'mp3 wav ogg audio converter'},
+  {id:'video-webm',cat:'medidas',icon:'🎬',title:'Vídeo → WEBM',desc:'Converta vídeos para WEBM.',tags:'mp4 mov webm video converter'},
+  {id:'video-avi',cat:'medidas',icon:'🎬',title:'Vídeo → AVI',desc:'Converta vídeos para AVI.',tags:'mp4 mov avi video converter'},
+  {id:'video-audio',cat:'medidas',icon:'🎧',title:'Vídeo → áudio',desc:'Extraia o áudio de vídeos.',tags:'video mp3 audio extrair'},
+  {id:'svg-png',cat:'medidas',icon:'🖼️',title:'SVG → PNG',desc:'Converta gráficos vetoriais SVG para PNG.',tags:'svg png imagem vetor'},
+  {id:'png-ico',cat:'medidas',icon:'🔷',title:'PNG → ICO',desc:'Crie ícones ICO para sites e atalhos.',tags:'png ico favicon icon'},
+  {id:'imagem-redimensionar',cat:'medidas',icon:'↔️',title:'Redimensionar imagem',desc:'Defina largura e altura de uma imagem.',tags:'redimensionar imagem pixels foto'},
+  {id:'pdf-comprimir',cat:'medidas',icon:'🗜️',title:'Comprimir PDF',desc:'Reduza o tamanho de um PDF quando possível.',tags:'pdf comprimir reduzir tamanho'},
+  {id:'arquivos-zip',cat:'medidas',icon:'🗜️',title:'ZIP de vários arquivos',desc:'Compacte vários arquivos em um único ZIP.',tags:'zip arquivos compactar'},
   {id:'area-retangulo',cat:'medidas',icon:'▭',title:'Área do retângulo',desc:'Calcule área a partir de largura e comprimento.',tags:'area retangulo terreno ambiente'},
   {id:'area-triangulo',cat:'medidas',icon:'△',title:'Área do triângulo',desc:'Calcule área de triângulos.',tags:'area triangulo'},
   {id:'area-circulo',cat:'medidas',icon:'○',title:'Área do círculo',desc:'Calcule área a partir do raio ou diâmetro.',tags:'area circulo círculo'},
@@ -705,6 +721,33 @@ function bindSolarPositionInteractions(){
 function converterArquivosUI(){return `<div class="tool-layout"><section class="card panel"><h2>Conversor de arquivos</h2><div class="notice"><strong>Converta no Resolvei.</strong><br>Vídeos usam FFmpeg; imagens e PDFs são processados pelo servidor.</div><div class="field full"><label for="convertFile">Arquivo</label><input id="convertFile" type="file" accept=".mp4,.avi,.mov,.mkv,.webm,.jpg,.jpeg,.png,.webp,.bmp,.pdf"></div><div class="form-grid"><div class="field"><label for="convertFormat">Formato de saída</label><select id="convertFormat"><option value="">Selecione o arquivo primeiro</option></select></div><div class="field"><label>Limite</label><div class="notice" style="margin:0">Até 200 MB.</div></div></div><div class="actions"><button class="btn primary" id="convertBtn" disabled>Converter arquivo</button><button class="btn ghost" id="convertResetBtn" type="button">Limpar</button></div><div id="convertProgress" class="notice" style="display:none">⏳ Convertendo...</div><div id="convertStatus" class="notice">Nenhum arquivo selecionado.</div></section><section id="convertResult"><div class="result-box"><div class="result-label">Resultado</div><div class="result-main">—</div><p>O arquivo convertido aparecerá aqui.</p></div></section></div>`;}
 function toolUI(id){
   switch(id){
+    case 'jpg-png-webp': return universalFileConverterUI(id);
+    case 'heic-jpg': return universalFileConverterUI(id);
+    case 'imagem-pdf': return universalFileConverterUI(id);
+    case 'pdf-imagens-zip': return universalFileConverterUI(id);
+    case 'mp4-mp3': return universalFileConverterUI(id);
+    case 'mp4-gif': return universalFileConverterUI(id);
+    case 'csv-xlsx': return universalFileConverterUI(id);
+    case 'zip-arquivos': return universalFileConverterUI(id);
+    case 'mov-mp4': return universalFileConverterUI(id);
+    case 'jpg-heic': return universalFileConverterUI(id);
+    case 'imagem-comprimir': return universalFileConverterUI(id);
+    case 'docx-pdf': return universalFileConverterUI(id);
+    case 'pdf-docx': return universalFileConverterUI(id);
+    case 'pdf-txt': return universalFileConverterUI(id);
+    case 'txt-pdf': return universalFileConverterUI(id);
+    case 'pdf-xlsx': return universalFileConverterUI(id);
+    case 'xlsx-csv': return universalFileConverterUI(id);
+    case 'audio-mp3-wav': return universalFileConverterUI(id);
+    case 'audio-ogg': return universalFileConverterUI(id);
+    case 'video-webm': return universalFileConverterUI(id);
+    case 'video-avi': return universalFileConverterUI(id);
+    case 'video-audio': return universalFileConverterUI(id);
+    case 'svg-png': return universalFileConverterUI(id);
+    case 'png-ico': return universalFileConverterUI(id);
+    case 'imagem-redimensionar': return universalFileConverterUI(id);
+    case 'pdf-comprimir': return universalFileConverterUI(id);
+    case 'arquivos-zip': return universalFileConverterUI(id);
     case 'jpg-png-webp': case 'heic-jpg': case 'imagem-pdf': case 'pdf-imagens-zip': case 'mp4-mp3': case 'mp4-gif': case 'csv-xlsx': case 'zip-arquivos': case 'mov-mp4': case 'jpg-heic': case 'imagem-comprimir': return universalFileConverterUI(id);
     case 'conversor-arquivos': return converterArquivosUI();
     case 'porcentagem': return panel(input('p1','Porcentagem',{value:'15'})+input('p2','Valor',{value:'200',prefix:'R$'}),); 
@@ -905,25 +948,34 @@ function smartSearch(q){
 }
 function universalFileConverterUI(id){
   const cfg={
-    'jpg-png-webp':{title:'Converter imagem',accept:'.jpg,.jpeg,.png,.webp,.bmp',help:'JPG, PNG e WEBP são ideais para uso na web e celular.'},
-    'heic-jpg':{title:'HEIC → JPG',accept:'.heic,.heif',help:'Converta fotos HEIC/HEIF para JPG.'},
-    'imagem-pdf':{title:'Imagem → PDF',accept:'.jpg,.jpeg,.png,.webp,.bmp',help:'Envie uma ou várias imagens para gerar um PDF.',multiple:true},
-    'pdf-imagens-zip':{title:'PDF → imagens ZIP',accept:'.pdf',help:'Cada página vira uma imagem dentro de um ZIP.'},
-    'mp4-mp3':{title:'MP4 → MP3',accept:'.mp4,.mov,.avi,.mkv,.webm',help:'Extraia o áudio do vídeo.'},
-    'mp4-gif':{title:'MP4 → GIF',accept:'.mp4,.mov,.webm,.avi',help:'Converte o vídeo para GIF animado.'},
-    'csv-xlsx':{title:'CSV ↔ XLSX',accept:'.csv,.xlsx',help:'Converta CSV para Excel ou Excel para CSV.'},
-    'zip-arquivos':{title:'Comprimir arquivos',accept:'*/*',help:'Selecione vários arquivos e baixe um único ZIP.',multiple:true},
-    'mov-mp4':{title:'MOV → MP4',accept:'.mov,.mp4',help:'Conversão prática para vídeos de celular.'},
-    'jpg-heic':{title:'JPG → HEIC',accept:'.jpg,.jpeg,.png,.webp',help:'Converte para HEIC se o ambiente tiver suporte.'},
-    'imagem-comprimir':{title:'Comprimir imagem',accept:'.jpg,.jpeg,.png,.webp',help:'Reduza o tamanho do arquivo mantendo boa qualidade.'}
+    'jpg-png-webp':{title:'Converter imagem',accept:'.jpg,.jpeg,.png,.webp,.bmp'},'heic-jpg':{title:'HEIC → JPG',accept:'.heic,.heif'},'imagem-pdf':{title:'Imagem → PDF',accept:'.jpg,.jpeg,.png,.webp,.bmp',multiple:true},
+    'pdf-imagens-zip':{title:'PDF → imagens ZIP',accept:'.pdf'},'mp4-mp3':{title:'MP4 → MP3',accept:'.mp4,.mov,.avi,.mkv,.webm'},'mp4-gif':{title:'MP4 → GIF',accept:'.mp4,.mov,.webm,.avi'},
+    'csv-xlsx':{title:'CSV ↔ XLSX',accept:'.csv,.xlsx'},'zip-arquivos':{title:'Comprimir arquivos',accept:'*/*',multiple:true},'mov-mp4':{title:'MOV → MP4',accept:'.mov,.mp4'},
+    'jpg-heic':{title:'JPG → HEIC',accept:'.jpg,.jpeg,.png,.webp'},'imagem-comprimir':{title:'Comprimir imagem',accept:'.jpg,.jpeg,.png,.webp'},
+    'docx-pdf':{title:'DOCX → PDF',accept:'.docx'},'pdf-docx':{title:'PDF → DOCX',accept:'.pdf'},'pdf-txt':{title:'PDF → TXT',accept:'.pdf'},'txt-pdf':{title:'TXT → PDF',accept:'.txt'},
+    'pdf-xlsx':{title:'PDF → XLSX',accept:'.pdf'},'xlsx-csv':{title:'XLSX → CSV',accept:'.xlsx'},'audio-mp3-wav':{title:'Áudio MP3 ↔ WAV',accept:'.mp3,.wav'},
+    'audio-ogg':{title:'Áudio → OGG',accept:'.mp3,.wav,.ogg'},'video-webm':{title:'Vídeo → WEBM',accept:'.mp4,.mov,.avi,.mkv,.webm'},
+    'video-avi':{title:'Vídeo → AVI',accept:'.mp4,.mov,.mkv,.webm'},'video-audio':{title:'Vídeo → áudio',accept:'.mp4,.mov,.avi,.mkv,.webm'},
+    'svg-png':{title:'SVG → PNG',accept:'.svg'},'png-ico':{title:'PNG → ICO',accept:'.png'},'imagem-redimensionar':{title:'Redimensionar imagem',accept:'.jpg,.jpeg,.png,.webp'},
+    'pdf-comprimir':{title:'Comprimir PDF',accept:'.pdf'},'arquivos-zip':{title:'ZIP de vários arquivos',accept:'*/*',multiple:true}
   }[id]||{};
-  return `<div class="tool-layout"><section class="card panel"><h2>${cfg.title||'Conversor'}</h2><div class="notice"><strong>${cfg.help||''}</strong><br>Limite de upload: 200 MB por arquivo.</div><div class="field full"><label for="uFile">Arquivo</label><input id="uFile" type="file" accept="${cfg.accept||'*/*'}" ${cfg.multiple?'multiple':''}></div><div class="form-grid"><div class="field"><label for="uFormat">Formato de saída</label><select id="uFormat"><option value="">Selecione o arquivo</option></select></div><div class="field"><label for="uQuality">Qualidade</label><input id="uQuality" type="number" min="10" max="100" value="85"><small>Usado em compressão de imagens.</small></div></div><div class="actions"><button class="btn primary" id="uBtn" disabled>Converter</button><button class="btn ghost" id="uReset" type="button">Limpar</button></div><div id="uStatus" class="notice">Nenhum arquivo selecionado.</div></section><section id="uResult"><div class="result-box"><div class="result-label">Resultado</div><div class="result-main">—</div><p>O arquivo convertido aparecerá aqui.</p></div></section></div>`;
+  const dims=['imagem-redimensionar'].includes(id)?'<div class="form-grid"><div class="field"><label for="uWidth">Largura (px)</label><input id="uWidth" type="number" min="1" value="1600"></div><div class="field"><label for="uHeight">Altura (px)</label><input id="uHeight" type="number" min="1" value="1200"></div></div>':'';
+  return `<div class="tool-layout"><section class="card panel"><h2>${cfg.title||'Conversor'}</h2><div class="notice">Processamento automático do Resolvei. Para vídeo/áudio, o servidor precisa ter FFmpeg. Conversões de documentos priorizam o texto e podem não preservar todo o layout.</div><div class="field full"><label for="uFile">Arquivo</label><input id="uFile" type="file" accept="${cfg.accept||'*/*'}" ${cfg.multiple?'multiple':''}></div>${dims}<div class="form-grid"><div class="field"><label for="uFormat">Formato de saída</label><select id="uFormat"><option value="">Selecione o arquivo</option></select></div><div class="field"><label for="uQuality">Qualidade</label><input id="uQuality" type="number" min="10" max="100" value="85"></div></div><div class="actions"><button class="btn primary" id="uBtn" disabled>Converter</button><button class="btn ghost" id="uReset" type="button">Limpar</button></div><div id="uStatus" class="notice">Nenhum arquivo selecionado.</div></section><section id="uResult"><div class="result-box"><div class="result-label">Resultado</div><div class="result-main">—</div><p>O arquivo convertido aparecerá aqui.</p></div></section></div>`;
 }
 function bindUniversalFileConverter(id){
   const f=document.getElementById('uFile'),fmt=document.getElementById('uFormat'),btn=document.getElementById('uBtn'),st=document.getElementById('uStatus'),res=document.getElementById('uResult');
-  const maps={'jpg-png-webp':[['jpg','JPG'],['png','PNG'],['webp','WEBP']],'heic-jpg':[['jpg','JPG']],'imagem-pdf':[['pdf','PDF']],'pdf-imagens-zip':[['jpg','JPG/ZIP']],'mp4-mp3':[['mp3','MP3']],'mp4-gif':[['gif','GIF']],'csv-xlsx':[['xlsx','XLSX'],['csv','CSV']],'zip-arquivos':[['zip','ZIP']],'mov-mp4':[['mp4','MP4']],'jpg-heic':[['heic','HEIC']],'imagem-comprimir':[['jpg','JPG'],['png','PNG'],['webp','WEBP']]};
-  const update=()=>{const files=[...(f?.files||[])];if(!files.length)return;const ext=(files[0].name.split('.').pop()||'').toLowerCase();let opts=maps[id]||[];if(id==='csv-xlsx')opts=ext==='csv'?[['xlsx','XLSX']]:[['csv','CSV']];if(id==='jpg-png-webp')opts=opts.filter(x=>x[0]!==ext.replace('jpeg','jpg'));if(id==='imagem-comprimir')opts=opts.filter(x=>x[0]!==ext.replace('jpeg','jpg'));fmt.innerHTML=opts.map(x=>'<option value="'+x[0]+'">'+x[1]+'</option>').join('');btn.disabled=!opts.length;st.innerHTML=files.length>1?files.length+' arquivos selecionados.':('Arquivo: <strong>'+esc(files[0].name)+'</strong> · '+num(files[0].size/1024/1024)+' MB');};
-  f?.addEventListener('change',update);btn?.addEventListener('click',async()=>{const files=[...(f?.files||[])],out=fmt?.value;if(!files.length||!out)return;btn.disabled=true;st.textContent='Enviando e convertendo...';try{const fd=new FormData();files.forEach(x=>fd.append('files',x));fd.append('output_format',out);fd.append('quality',document.getElementById('uQuality')?.value||85);fd.append('tool_id',id);const rr=await fetch('/api/files/convert-plus',{method:'POST',body:fd});if(!rr.ok){let d={};try{d=await rr.json()}catch{}throw new Error(d.detail||'Não foi possível converter.');}const blob=await rr.blob(),cd=rr.headers.get('content-disposition')||'',m=cd.match(/filename="?([^"]+)"?/i),name=m?m[1]:'resolvei-convertido.'+out,url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;a.className='btn primary';res.innerHTML='<div class="result-box"><div class="result-label">Conversão concluída</div><div class="result-main">✓</div><p>'+esc(name)+'</p></div>';res.querySelector('.result-box').appendChild(a);st.textContent='✅ Concluído.';a.click();setTimeout(()=>URL.revokeObjectURL(url),10000);}catch(e){st.innerHTML='⚠️ '+esc(e.message);}finally{btn.disabled=false;}});document.getElementById('uReset')?.addEventListener('click',()=>{f.value='';fmt.innerHTML='<option>Selecione o arquivo</option>';btn.disabled=true;st.textContent='Nenhum arquivo selecionado.';});
+  const maps={
+    'jpg-png-webp':[['jpg','JPG'],['png','PNG'],['webp','WEBP']],'heic-jpg':[['jpg','JPG']],'imagem-pdf':[['pdf','PDF']],'pdf-imagens-zip':[['zip','ZIP']],
+    'mp4-mp3':[['mp3','MP3']],'mp4-gif':[['gif','GIF']],'csv-xlsx':[['xlsx','XLSX'],['csv','CSV']],'zip-arquivos':[['zip','ZIP']],'mov-mp4':[['mp4','MP4']],
+    'jpg-heic':[['heic','HEIC']],'imagem-comprimir':[['jpg','JPG'],['png','PNG'],['webp','WEBP']],'docx-pdf':[['pdf','PDF']],'pdf-docx':[['docx','DOCX']],
+    'pdf-txt':[['txt','TXT']],'txt-pdf':[['pdf','PDF']],'pdf-xlsx':[['xlsx','XLSX']],'xlsx-csv':[['csv','CSV']],'audio-mp3-wav':[['mp3','MP3'],['wav','WAV']],
+    'audio-ogg':[['ogg','OGG']],'video-webm':[['webm','WEBM']],'video-avi':[['avi','AVI']],'video-audio':[['mp3','MP3']],
+    'svg-png':[['png','PNG']],'png-ico':[['ico','ICO']],'imagem-redimensionar':[['jpg','JPG'],['png','PNG'],['webp','WEBP']],
+    'pdf-comprimir':[['pdf','PDF']],'arquivos-zip':[['zip','ZIP']]
+  };
+  const update=()=>{const files=[...(f?.files||[])];if(!files.length)return;const ext=(files[0].name.split('.').pop()||'').toLowerCase();let opts=maps[id]||[];if(id==='csv-xlsx')opts=ext==='csv'?[['xlsx','XLSX']]:[['csv','CSV']];if(id==='audio-mp3-wav')opts=ext==='mp3'?[['wav','WAV']]:[['mp3','MP3']];if(id==='jpg-png-webp'||id==='imagem-comprimir'||id==='imagem-redimensionar')opts=opts.filter(x=>x[0]!==ext.replace('jpeg','jpg'));fmt.innerHTML=opts.map(x=>'<option value="'+x[0]+'">'+x[1]+'</option>').join('');btn.disabled=!opts.length;st.innerHTML=files.length>1?files.length+' arquivos selecionados.':('Arquivo: <strong>'+esc(files[0].name)+'</strong> · '+num(files[0].size/1024/1024)+' MB');};
+  f?.addEventListener('change',update);
+  btn?.addEventListener('click',async()=>{const files=[...(f?.files||[])],out=fmt?.value;if(!files.length||!out)return;btn.disabled=true;st.textContent='Enviando e convertendo...';try{const fd=new FormData();files.forEach(x=>fd.append('files',x));fd.append('output_format',out);fd.append('quality',document.getElementById('uQuality')?.value||85);fd.append('tool_id',id);fd.append('width',document.getElementById('uWidth')?.value||0);fd.append('height',document.getElementById('uHeight')?.value||0);const rr=await fetch('/api/files/convert-plus',{method:'POST',body:fd});if(!rr.ok){let d={};try{d=await rr.json()}catch{}throw new Error(d.detail||'Não foi possível converter.');}const blob=await rr.blob(),cd=rr.headers.get('content-disposition')||'',m=cd.match(/filename="?([^"]+)"?/i),name=m?m[1]:'resolvei-convertido.'+out,url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;a.className='btn primary';res.innerHTML='<div class="result-box"><div class="result-label">Conversão concluída</div><div class="result-main">✓</div><p>'+esc(name)+'</p></div>';res.querySelector('.result-box').appendChild(a);st.textContent='✅ Concluído.';a.click();setTimeout(()=>URL.revokeObjectURL(url),10000);}catch(e){st.innerHTML='⚠️ '+esc(e.message);}finally{btn.disabled=false;}});document.getElementById('uReset')?.addEventListener('click',()=>{f.value='';fmt.innerHTML='<option>Selecione o arquivo</option>';btn.disabled=true;st.textContent='Nenhum arquivo selecionado.';});
 }
 
 function bind(){
