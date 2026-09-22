@@ -591,7 +591,7 @@ async def convert_file(file: UploadFile = File(...), output_format: str = Form(.
 
 
 @app.post("/api/files/convert-plus")
-async def convert_plus(files: list[UploadFile] = File(...), output_format: str = Form(...), quality: int = Form(85), tool_id: str = Form("")):
+async def convert_plus(files: list[UploadFile] = File(...), output_format: str = Form(...), quality: int = Form(85), tool_id: str = Form(""), width: int = Form(0), height: int = Form(0)):
     """General-purpose document/media conversion endpoint used by the expanded Resolvei converters."""
     output_format = output_format.lower().lstrip(".")
     quality = max(10, min(100, int(quality or 85)))
@@ -680,17 +680,91 @@ async def convert_plus(files: list[UploadFile] = File(...), output_format: str =
                 out=out.with_suffix(".mp3")
                 p=subprocess.run([ffmpeg,"-y","-i",str(src),"-vn","-codec:a","libmp3lame","-q:a","2",str(out)],capture_output=True,text=True,timeout=600)
                 if p.returncode!=0: raise RuntimeError("FFmpeg não conseguiu extrair o áudio.")
-            elif tool_id in {"mp4-gif","mov-mp4"}:
+            elif tool_id in {"mp4-gif","mov-mp4","video-webm","video-avi","video-audio"}:
                 ffmpeg=shutil.which("ffmpeg")
                 if not ffmpeg: raise RuntimeError("FFmpeg não está instalado no servidor.")
                 if tool_id=="mp4-gif":
-                    out=out.with_suffix(".gif")
-                    cmd=[ffmpeg,"-y","-i",str(src),"-vf","fps=12,scale=640:-1:flags=lanczos","-t","10",str(out)]
+                    out=out.with_suffix(".gif"); cmd=[ffmpeg,"-y","-i",str(src),"-vf","fps=12,scale=640:-1:flags=lanczos","-t","10",str(out)]
+                elif tool_id=="video-webm":
+                    out=out.with_suffix(".webm"); cmd=[ffmpeg,"-y","-i",str(src),"-c:v","libvpx-vp9","-c:a","libopus",str(out)]
+                elif tool_id=="video-avi":
+                    out=out.with_suffix(".avi"); cmd=[ffmpeg,"-y","-i",str(src),"-c:v","mpeg4","-c:a","mp3",str(out)]
+                elif tool_id=="video-audio":
+                    out=out.with_suffix(".mp3"); cmd=[ffmpeg,"-y","-i",str(src),"-vn","-codec:a","libmp3lame","-q:a","2",str(out)]
                 else:
-                    out=out.with_suffix(".mp4")
-                    cmd=[ffmpeg,"-y","-i",str(src),"-c:v","libx264","-c:a","aac","-movflags","+faststart",str(out)]
+                    out=out.with_suffix(".mp4"); cmd=[ffmpeg,"-y","-i",str(src),"-c:v","libx264","-c:a","aac","-movflags","+faststart",str(out)]
                 p=subprocess.run(cmd,capture_output=True,text=True,timeout=600)
                 if p.returncode!=0: raise RuntimeError("FFmpeg não conseguiu converter o vídeo.")
+            elif tool_id in {"audio-mp3-wav","audio-ogg"}:
+                ffmpeg=shutil.which("ffmpeg")
+                if not ffmpeg: raise RuntimeError("FFmpeg não está instalado no servidor.")
+                out=out.with_suffix("."+output_format)
+                codec="pcm_s16le" if output_format=="wav" else "libvorbis"
+                p=subprocess.run([ffmpeg,"-y","-i",str(src),"-vn","-codec:a",codec,str(out)],capture_output=True,text=True,timeout=600)
+                if p.returncode!=0: raise RuntimeError("FFmpeg não conseguiu converter o áudio.")
+            elif tool_id=="docx-pdf":
+                from docx import Document
+                from reportlab.lib.pagesizes import A4
+                from reportlab.pdfgen import canvas
+                doc=Document(src); out=out.with_suffix(".pdf"); pdf=canvas.Canvas(str(out),pagesize=A4); w,h=A4; y=h-50
+                for para in doc.paragraphs:
+                    text=para.text.strip()
+                    if not text: y-=12; continue
+                    for line in text.splitlines():
+                        pdf.drawString(40,y,line[:120]); y-=14
+                        if y<45: pdf.showPage(); y=h-50
+                pdf.save()
+            elif tool_id=="pdf-docx":
+                from docx import Document
+                import fitz
+                docx=Document(); pdf=fitz.open(src)
+                for i,page in enumerate(pdf):
+                    if i: docx.add_page_break()
+                    for line in page.get_text("text").splitlines(): docx.add_paragraph(line)
+                out=out.with_suffix(".docx"); docx.save(out); pdf.close()
+            elif tool_id=="pdf-txt":
+                import fitz
+                pdf=fitz.open(src); out=out.with_suffix(".txt"); out.write_text("\n\n".join(p.get_text("text") for p in pdf),encoding="utf-8"); pdf.close()
+            elif tool_id=="txt-pdf":
+                from reportlab.lib.pagesizes import A4
+                from reportlab.pdfgen import canvas
+                out=out.with_suffix(".pdf"); pdf=canvas.Canvas(str(out),pagesize=A4); w,h=A4; y=h-50
+                for line in src.read_text(encoding="utf-8",errors="replace").splitlines():
+                    pdf.drawString(40,y,line[:120]); y-=14
+                    if y<45: pdf.showPage(); y=h-50
+                pdf.save()
+            elif tool_id=="pdf-xlsx":
+                import fitz, openpyxl
+                pdf=fitz.open(src); wb=openpyxl.Workbook(); ws=wb.active; ws.title="PDF"
+                for pageno,page in enumerate(pdf,1):
+                    for line in page.get_text("text").splitlines(): ws.append([pageno,line])
+                out=out.with_suffix(".xlsx"); wb.save(out); pdf.close()
+            elif tool_id=="xlsx-csv":
+                import openpyxl, csv
+                wb=openpyxl.load_workbook(src,read_only=True,data_only=True); ws=wb.active; out=out.with_suffix(".csv")
+                with out.open("w",encoding="utf-8-sig",newline="") as f:
+                    w=csv.writer(f)
+                    for row in ws.iter_rows(values_only=True): w.writerow(list(row))
+            elif tool_id=="svg-png":
+                try:
+                    import cairosvg
+                    out=out.with_suffix(".png"); cairosvg.svg2png(url=str(src),write_to=str(out),output_width=width or None,output_height=height or None)
+                except Exception as exc: raise RuntimeError("SVG→PNG requer cairosvg no servidor.") from exc
+            elif tool_id=="png-ico":
+                from PIL import Image
+                img=Image.open(src).convert("RGBA"); out=out.with_suffix(".ico"); img.save(out,format="ICO",sizes=[(16,16),(32,32),(48,48),(256,256)])
+            elif tool_id=="imagem-redimensionar":
+                from PIL import Image
+                img=Image.open(src); w=width or img.width; h=height or img.height; img=img.resize((w,h),Image.Resampling.LANCZOS); out=out.with_suffix("."+output_format)
+                if output_format=="jpg": img=img.convert("RGB")
+                img.save(out,format=output_format.upper(),quality=quality if output_format in {"jpg","webp"} else None)
+            elif tool_id=="pdf-comprimir":
+                import fitz
+                pdf=fitz.open(src); out=out.with_suffix(".pdf"); pdf.save(out,garbage=4,deflate=True,clean=True); pdf.close()
+            elif tool_id=="arquivos-zip":
+                out=Path(td)/"resolvei-arquivos.zip"
+                with zipfile.ZipFile(out,"w",zipfile.ZIP_DEFLATED) as z:
+                    for p in paths: z.write(p,p.name)
             else:
                 raise ValueError("Conversor não reconhecido.")
 
