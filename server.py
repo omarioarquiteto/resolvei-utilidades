@@ -347,6 +347,34 @@ def ai_chat(req: AIChatRequest, authorization: str | None = None):
     except Exception as exc:
         raise HTTPException(status_code=502,detail=f"Falha ao consultar {provider}: {exc}") from exc
 
+class AIPublicChatRequest(BaseModel):
+    provider: str
+    api_key: str
+    message: str
+    model: str = ""
+
+@app.post("/api/ai/chat-public")
+def ai_chat_public(req: AIPublicChatRequest):
+    provider=req.provider.lower().strip()
+    if provider not in {"gemini","openai","anthropic","openrouter"}:
+        raise HTTPException(status_code=400,detail="Provedor de IA não suportado.")
+    api_key=req.api_key.strip()
+    message=req.message.strip()
+    if not api_key:
+        raise HTTPException(status_code=400,detail="Informe sua API Key.")
+    if not message:
+        raise HTTPException(status_code=400,detail="Informe o que você quer resolver.")
+    # A chave é recebida apenas para esta requisição e não é persistida.
+    try:
+        answer=_provider_call(provider,api_key,req.model.strip(),message)
+        return {"provider":provider,"model":req.model.strip(),"answer":answer}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        detail=str(exc)
+        if len(detail)>300: detail=detail[:300]
+        raise HTTPException(status_code=502,detail=f"Falha ao consultar {provider}: {detail}") from exc
+
 def openai_json(prompt: str, schema_name: str, schema: dict[str, Any]) -> dict[str, Any]:
     if not OPENAI_API_KEY:
         raise RuntimeError("OPENAI_API_KEY não configurada")
