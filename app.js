@@ -152,8 +152,7 @@ function porQuantoVenderUI(){
     </div>
     <div class="notice"><strong>Como usar:</strong> primeiro informe seus gastos. Depois, se quiser uma análise mais completa, preencha custos fixos, taxas, impostos, preço dos concorrentes e sua meta mensal.</div>
     <div class="actions"><button class="btn primary" type="button" id="sellCalcBtn">📊 Analisar meu preço</button><button class="btn ghost" type="button" id="sellResetBtn">Limpar</button></div>
-    <div id="sellResult" style="margin-top:18px"></div>
-  </section></div>`;
+  </section><section id="result"><div id="sellResult"><div class="result-box"><div class="result-label">Resultado</div><div class="result-main">—</div><p>Preencha os dados e clique em “Analisar meu preço”.</p></div></div></section></div>`;
 }
 function receitaCustoUI(){
   return `<div class="tool-layout"><section class="card panel">
