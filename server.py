@@ -1012,66 +1012,51 @@ def analyze_recipe(req: RecipeRequest) -> dict[str, Any]:
 
 @app.post("/api/sales/price")
 def sales_price(req: SalesPriceRequest) -> dict[str, Any]:
+    # Precificação determinística: sem IA, sem API key e sem dados externos.
     if not req.product.strip():
         raise HTTPException(status_code=400, detail="Informe o produto que você vende.")
-    if not req.api_key.strip():
-        raise HTTPException(status_code=400, detail="Informe sua própria API Key em Usar minha IA.")
-    state=(req.state or "MT").strip().upper()
-    city=(req.city or "Cuiabá").strip()
-    qty=max(float(req.quantity),1.0)
-    supplied_cost=max(float(req.production_cost or 0),0.0)
+    qty=max(float(req.quantity or 0),1.0)
+    production=max(float(req.production_cost or 0),0.0)
     packaging=max(float(req.packaging_per_unit or 0),0.0)
     other=max(float(req.other_costs or 0),0.0)
-    prompt=f"""Você é um consultor simples de precificação para pequenos vendedores de alimentos no Brasil.
-Produto: {req.product.strip()}
-Tipo: {req.type}
-Cidade/UF: {city}/{state}
-Quantidade produzida no lote: {qty:g} unidades
-Custo de produção informado para o lote: R$ {supplied_cost:.2f}
-Embalagem por unidade: R$ {packaging:.2f}
-Outros gastos do lote: R$ {other:.2f}
-
-Ajude uma pessoa com pouca familiaridade com finanças a definir um preço de venda.
-Se o custo informado for maior que zero, use-o como base e NÃO invente outro custo.
-Se for zero, estime um custo provável para esse produto na cidade/UF e deixe claro que é apenas uma estimativa.
-Considere uma faixa plausível de preço ao consumidor para a cidade/UF, mas como você não está fazendo cotação ao vivo, trate isso como referência aproximada.
-Calcule custo total do lote, custo por unidade, preço mínimo, preço sugerido, faixa de preço, lucro por unidade e lucro do lote.
-Não duplique embalagem ou outros gastos já informados.
-Retorne SOMENTE JSON válido:
-{{"summary":"frase curta e simples","estimated_production_cost":0.0,"unit_cost":0.0,"minimum_price":0.0,"suggested_price":0.0,"price_range":{{"min":0.0,"max":0.0}},"profit_per_unit":0.0,"batch_profit":0.0,"tips":["dica 1","dica 2"],"note":"explicação curta"}}"""
-    try:
-        raw=_provider_call(req.provider or "gemini", req.api_key.strip(), req.model.strip(), prompt)
-        match=re.search(r"\{.*\}", raw, re.S)
-        if not match:
-            raise ValueError("A IA não retornou um resultado em JSON.")
-        data=json.loads(match.group(0))
-        def money_num(v):
-            try: return max(float(v),0.0)
-            except Exception: return 0.0
-        estimated=money_num(data.get("estimated_production_cost"))
-        base_cost=supplied_cost if supplied_cost>0 else estimated
-        if base_cost<=0:
-            raise ValueError("A IA não conseguiu estimar um custo de produção.")
-        total_cost=base_cost + other + packaging*qty
-        unit_cost=total_cost/qty
-        suggested=max(money_num(data.get("suggested_price")),unit_cost)
-        minimum=max(money_num(data.get("minimum_price")),unit_cost)
-        pr=data.get("price_range") or {}
-        price_min=money_num(pr.get("min")) or minimum
-        price_max=money_num(pr.get("max")) or suggested
-        if price_max<price_min: price_min,price_max=price_max,price_min
-        profit_unit=max(suggested-unit_cost,0.0)
-        return {"summary":str(data.get("summary") or "Preço de referência para começar a venda."),
-                "estimated_production_cost":base_cost,"unit_cost":unit_cost,"minimum_price":minimum,
-                "suggested_price":suggested,"price_range":{"min":price_min,"max":price_max},
-                "profit_per_unit":profit_unit,"batch_profit":profit_unit*qty,
-                "tips":[str(x) for x in (data.get("tips") or [])[:5]],
-                "note":str(data.get("note") or "Os preços variam conforme bairro, concorrência, tamanho e qualidade.")}
-    except HTTPException:
-        raise
-    except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"Não foi possível obter a análise da IA: {exc}")
-
+    # Campos adicionais são enviados pelo frontend através dos valores já incorporados
+    # no custo de produção/outros gastos. O endpoint mantém compatibilidade com versões anteriores.
+    total_batch=production + (packaging*qty) + other
+    unit_cost=total_batch/qty
+    if unit_cost<=0:
+        raise HTTPException(status_code=400, detail="Informe pelo menos o custo dos ingredientes/preparo ou outro gasto do lote.")
+    fees=min(max(float(getattr(req,"fees_percent",0) or 0),0.0),100.0)
+    tax=min(max(float(getattr(req,"tax_percent",0) or 0),0.0),100.0)
+    margin=min(max(float(getattr(req,"target_margin",30) or 30),0.0),90.0)
+    rate=(fees+tax)/100.0
+    if rate>=1:
+        raise HTTPException(status_code=400, detail="Taxas e impostos precisam ficar abaixo de 100%.")
+    if rate + margin/100 >= 1:
+        raise HTTPException(status_code=400, detail="A soma de taxas, impostos e lucro desejado ultrapassa 100%. Reduza a margem.")
+    break_even=unit_cost/(1-rate)
+    suggested=unit_cost/(1-rate-margin/100)
+    price20=unit_cost/(1-rate-0.20) if rate<0.80 else None
+    price40=unit_cost/(1-rate-0.40) if rate<0.60 else None
+    net_per_unit=suggested*(1-rate)-unit_cost
+    return {
+        "product": req.product.strip(),
+        "city": (req.city or "").strip(),
+        "state": (req.state or "").strip().upper(),
+        "quantity": qty,
+        "total_batch_cost": total_batch,
+        "unit_cost": unit_cost,
+        "break_even_price": break_even,
+        "minimum_price": break_even,
+        "suggested_price": suggested,
+        "price_20_margin": price20,
+        "price_40_margin": price40,
+        "profit_per_unit": max(net_per_unit,0.0),
+        "batch_profit": max(net_per_unit,0.0)*qty,
+        "fees_percent": fees,
+        "tax_percent": tax,
+        "target_margin": margin,
+        "note": "Cálculo matemático baseado nos custos informados. A cidade/UF serve para contextualizar a comparação com o mercado local; não é uma cotação automática de preços."
+    }
 
 @app.post("/api/party/suggest")
 def party_suggest(req: PartyRequest) -> dict[str, Any]:
