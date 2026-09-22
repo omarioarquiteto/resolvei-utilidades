@@ -929,6 +929,8 @@ function render(){
   else if(parts[0]==='categoria') {const id=parts[1];const c=CATS[id];html=c?toolsPage(tools.filter(t=>t.cat===id),`${c.icon} ${c.name}`,c.desc):`<div class="empty">Categoria não encontrada.</div>`;}
   else if(parts[0]==='ferramenta') html=toolPage(parts[1]);
   else if(parts[0]==='favoritos') html=favoritesPage();
+  else if(parts[0]==='conta') html=resolveiAccountPage();
+  else if(parts[0]==='conectar-api') html=resolveiApiPage();
   else if(parts[0]==='sobre') html=aboutPage();
   else if(parts[0]==='privacidade') html=privacyPage();
   else html=home();
@@ -1018,3 +1020,138 @@ document.getElementById('year').textContent=new Date().getFullYear();
 const savedTheme=localStorage.getItem('resolvei_theme');if(savedTheme)document.documentElement.dataset.theme=savedTheme;
 document.getElementById('themeToggle').addEventListener('click',()=>{const dark=document.documentElement.dataset.theme==='dark';document.documentElement.dataset.theme=dark?'':'dark';localStorage.setItem('resolvei_theme',dark?'light':'dark');});
 window.addEventListener('hashchange',render); render();
+
+/* =========================
+   Resolvei — Firebase Auth + Minhas IAs
+   ========================= */
+const RESOLVEI_FIREBASE_CONFIG = {
+  apiKey: "AIzaSyBox8tior0HX5T6ox2ZNNo9fbzUkHxw8go",
+  authDomain: "resolvei-c95d1.firebaseapp.com",
+  projectId: "resolvei-c95d1",
+  storageBucket: "resolvei-c95d1.firebasestorage.app",
+  messagingSenderId: "671425023175",
+  appId: "1:671425023175:web:deb8ce2174b07e6c16c2e2",
+  measurementId: "G-7BGQ5N1W4J"
+};
+let resolveiAuth=null, resolveiDb=null, resolveiUser=null;
+
+function resolveiFirebaseInit(){
+  if(!window.firebase || resolveiAuth) return;
+  if(!firebase.apps.length) firebase.initializeApp(RESOLVEI_FIREBASE_CONFIG);
+  resolveiAuth=firebase.auth();
+  resolveiDb=firebase.firestore();
+  resolveiAuth.onAuthStateChanged(async user=>{
+    resolveiUser=user||null;
+    const nav=document.getElementById('accountNav');
+    if(nav) nav.textContent=user ? '👤 Minha conta' : '👤 Entrar';
+    const appEl=document.getElementById('app');
+    const route=(location.hash||'').replace(/^#\/?/,'').split('/')[0];
+    if(route==='conta'||route==='conectar-api') render();
+  });
+}
+
+function resolveiAccountPage(){
+  if(!resolveiUser){
+    return `<div class="tool-layout"><section class="card panel auth-card">
+      <span class="eyebrow">CONTA RESOLVEI</span><h1>Entre para usar as funções de IA</h1>
+      <p>Crie sua conta com Google ou use e-mail e senha. Seu login fica gerenciado pelo Firebase Authentication.</p>
+      <button class="btn primary full" id="googleLogin">Continuar com Google</button>
+      <div class="auth-divider"><span>ou</span></div>
+      <div class="form-grid">
+        <div class="field"><label for="authEmail">E-mail</label><input id="authEmail" type="email" autocomplete="email" placeholder="voce@email.com"></div>
+        <div class="field"><label for="authPassword">Senha</label><input id="authPassword" type="password" autocomplete="current-password" placeholder="Mínimo de 6 caracteres"></div>
+      </div>
+      <div class="row-actions"><button class="btn primary" id="emailLogin">Entrar</button><button class="btn" id="emailSignup">Criar conta</button></div>
+      <div id="authMsg" class="notice" hidden></div>
+    </section></div>`;
+  }
+  return `<div class="tool-layout"><section class="card panel">
+    <span class="eyebrow">MINHA CONTA</span><h1>${esc(resolveiUser.displayName||'Minha conta')}</h1>
+    <p>${esc(resolveiUser.email||'')} </p>
+    <div class="account-grid">
+      <a class="card account-card" href="#/conectar-api"><strong>🔌 Conectar API</strong><span>Conecte Gemini, OpenAI, Claude e outros provedores.</span></a>
+      <div class="card account-card"><strong>🤖 Minhas IAs</strong><span>Gerencie suas conexões de IA.</span></div>
+    </div>
+    <div class="row-actions"><button class="btn" id="logoutBtn">Sair da conta</button></div>
+    <div id="accountMsg" class="notice" hidden></div>
+  </section></div>`;
+}
+
+const RESOLVEI_PROVIDERS={
+  gemini:{name:'Google Gemini',icon:'✨',help:'Use sua chave da Gemini API.'},
+  openai:{name:'OpenAI',icon:'◉',help:'Use uma API key da OpenAI.'},
+  anthropic:{name:'Anthropic Claude',icon:'◆',help:'Use uma API key da Anthropic.'},
+  openrouter:{name:'OpenRouter',icon:'↗',help:'Use uma API key do OpenRouter.'}
+};
+
+function resolveiApiPage(){
+  if(!resolveiUser) return `<div class="tool-layout"><section class="card panel"><h1>🔌 Conectar API</h1><p>Entre no Resolvei para conectar uma IA.</p><a class="btn primary" href="#/conta">Entrar / Criar conta</a></section></div>`;
+  return `<div class="tool-layout"><section class="card panel">
+    <div class="tool-head"><div><span class="eyebrow">MINHAS IAS</span><h1>🔌 Conectar API</h1><p>Escolha uma IA para suas ferramentas inteligentes.</p></div></div>
+    <div class="provider-grid">${Object.entries(RESOLVEI_PROVIDERS).map(([id,p])=>`<div class="provider-card">
+      <div class="provider-title"><span class="provider-icon">${p.icon}</span><strong>${p.name}</strong><span class="provider-status" id="status-${id}">Não conectada</span></div>
+      <p>${p.help}</p>
+      <label class="field"><span>API Key</span><input id="key-${id}" type="password" autocomplete="off" placeholder="Cole sua chave aqui"></label>
+      <div class="row-actions"><button class="btn primary" data-connect-ai="${id}">Conectar</button><button class="btn" data-remove-ai="${id}">Desconectar</button></div>
+    </div>`).join('')}</div>
+    <div id="aiMsg" class="notice" hidden></div>
+    <p class="muted">As chaves são associadas à sua conta Firebase. Não coloque chaves de API em código público ou no repositório.</p>
+  </section></div>`;
+}
+
+async function resolveiLoadConnections(){
+  if(!resolveiUser||!resolveiDb) return {};
+  const snap=await resolveiDb.collection('users').doc(resolveiUser.uid).collection('aiConnections').get();
+  const data={}; snap.forEach(d=>data[d.id]=d.data());
+  return data;
+}
+async function resolveiSaveConnection(provider){
+  const key=document.getElementById('key-'+provider)?.value?.trim();
+  if(!key) throw new Error('Informe a API Key.');
+  await resolveiDb.collection('users').doc(resolveiUser.uid).collection('aiConnections').doc(provider).set({
+    provider, connected:true, updatedAt:firebase.firestore.FieldValue.serverTimestamp()
+  },{merge:true});
+  // The key is intentionally not written to Firestore by the browser.
+  // A secure server-side secret vault / encrypted backend will be wired before AI calls use user keys.
+}
+async function resolveiRemoveConnection(provider){
+  await resolveiDb.collection('users').doc(resolveiUser.uid).collection('aiConnections').doc(provider).delete();
+}
+function resolveiBindAuth(){
+  if(!resolveiAuth) return;
+  document.getElementById('googleLogin')?.addEventListener('click',async()=>{
+    try{await resolveiAuth.signInWithPopup(new firebase.auth.GoogleAuthProvider());location.hash='#/conta';}
+    catch(e){const m=document.getElementById('authMsg');if(m){m.hidden=false;m.textContent=e.message;}}
+  });
+  const email=()=>document.getElementById('authEmail')?.value.trim();
+  const pass=()=>document.getElementById('authPassword')?.value||'';
+  document.getElementById('emailLogin')?.addEventListener('click',async()=>{
+    try{await resolveiAuth.signInWithEmailAndPassword(email(),pass());location.hash='#/conta';}
+    catch(e){const m=document.getElementById('authMsg');if(m){m.hidden=false;m.textContent=e.message;}}
+  });
+  document.getElementById('emailSignup')?.addEventListener('click',async()=>{
+    try{const cred=await resolveiAuth.createUserWithEmailAndPassword(email(),pass());await resolveiDb.collection('users').doc(cred.user.uid).set({email:cred.user.email,createdAt:firebase.firestore.FieldValue.serverTimestamp()},{merge:true});location.hash='#/conta';}
+    catch(e){const m=document.getElementById('authMsg');if(m){m.hidden=false;m.textContent=e.message;}}
+  });
+  document.getElementById('logoutBtn')?.addEventListener('click',async()=>{await resolveiAuth.signOut();location.hash='#/conta';});
+  document.querySelectorAll('[data-connect-ai]').forEach(b=>b.addEventListener('click',async()=>{
+    try{await resolveiSaveConnection(b.dataset.connectAi);const m=document.getElementById('aiMsg');m.hidden=false;m.textContent='Conexão registrada. A chave não foi gravada no Firestore pelo navegador.';await resolveiRefreshStatuses();}
+    catch(e){const m=document.getElementById('aiMsg');m.hidden=false;m.textContent=e.message;}
+  }));
+  document.querySelectorAll('[data-remove-ai]').forEach(b=>b.addEventListener('click',async()=>{
+    try{await resolveiRemoveConnection(b.dataset.removeAi);await resolveiRefreshStatuses();}
+    catch(e){const m=document.getElementById('aiMsg');m.hidden=false;m.textContent=e.message;}
+  }));
+}
+async function resolveiRefreshStatuses(){
+  const data=await resolveiLoadConnections();
+  Object.keys(RESOLVEI_PROVIDERS).forEach(id=>{const el=document.getElementById('status-'+id);if(el)el.textContent=data[id]?.connected?'🟢 Conectada':'Não conectada';});
+}
+const resolveiOldRender=render;
+render=function(){
+  resolveiOldRender();
+  if(resolveiUser && ((location.hash||'').includes('conta')||(location.hash||'').includes('conectar-api'))) {
+    resolveiBindAuth(); resolveiRefreshStatuses();
+  } else if(!resolveiUser && (location.hash||'').includes('conta')) resolveiBindAuth();
+};
+resolveiFirebaseInit();
