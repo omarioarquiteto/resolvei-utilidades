@@ -66,6 +66,9 @@ class RecipeRequest(BaseModel):
     city: str = "Cuiabá"
     state: str = "MT"
     cep: str = ""
+    provider: str = ""
+    api_key: str = ""
+    model: str = ""
 
 
 class PartyRequest(BaseModel):
@@ -955,6 +958,22 @@ def analyze_recipe(req: RecipeRequest) -> dict[str, Any]:
     if not raw:
         raise HTTPException(status_code=422, detail="Não encontrei ingredientes estruturados nessa página. Tente outra URL ou insira os ingredientes manualmente.")
     ingredients = normalize_ingredients(raw, title)
+    # Quando o usuário fornece sua própria IA, ela também estima o custo dos ingredientes
+    # para a cidade/UF informadas. A chave não é persistida.
+    if req.api_key.strip():
+        price_prompt = f"""Você é um estimador de preços de supermercado no Brasil. Analise os ingredientes abaixo para a receita "{title}". Para cada ingrediente, estime o preço do PRODUTO/QUANTIDADE efetivamente usada na receita, em reais, considerando preços típicos e atuais para {req.city}, {req.state.upper()}. Não confunda preço da embalagem inteira com custo proporcional à quantidade usada. Seja conservador quando houver variação regional. Retorne JSON exatamente no formato {{"items":[{{"name":"...","price":0.0,"source":"estimativa IA"}}]}}. Nunca invente links ou lojas. Ingredientes: """ + json.dumps([{"name":x.get("name",""),"quantity":x.get("quantity",1),"unit":x.get("unit","un.")} for x in ingredients], ensure_ascii=False)
+        try:
+            raw_prices = _provider_call(req.provider or "gemini", req.api_key.strip(), req.model.strip(), price_prompt)
+            match = re.search(r"\{.*\}", raw_prices, re.S)
+            if match:
+                estimated = json.loads(match.group(0)).get("items", [])
+                by_name={str(x.get("name","")).strip().lower():x for x in estimated if isinstance(x,dict)}
+                for ing in ingredients:
+                    p=by_name.get(str(ing.get("name","")).strip().lower())
+                    if p and isinstance(p.get("price"),(int,float)):
+                        ing["recipe_price"]=float(p["price"])
+        except Exception:
+            pass
     price_items: list[dict[str, Any]] = []
     basket_total = 0.0
     if SERPAPI_KEY:
