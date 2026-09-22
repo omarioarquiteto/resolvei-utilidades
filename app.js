@@ -531,6 +531,7 @@ function solarCalculatorUI(){
       <button class="btn" id="solarCepBtn" type="button">📍 Preencher pelo CEP</button>
       <button class="btn" id="solarAddressBtn" type="button">🧭 Localizar endereço</button>
       <button class="btn" id="solarResourceBtn" type="button">☀️ Atualizar dados solares</button>
+      <button class="btn" id="solarPricesBtn" type="button">💰 Atualizar preços</button>
     </div>
     <div id="solarResourceStatus" class="notice">Informe o endereço e, quando necessário, use “Localizar endereço”.</div>
 
@@ -607,13 +608,18 @@ function positionSolarUI(){
 }
 
 function solarConfigFromDOM(){
+  const panelLength=Math.max(.2,val('solarPanelLength')||2.28);
+  const panelWidth=Math.max(.2,val('solarPanelWidth')||1.13);
   return {
     consumption:Math.max(0,val('solarConsumption')),
     tariff:Math.max(0,val('solarTariff')),
     psh:Math.max(1,val('solarPSH')),
     pr:Math.min(1,Math.max(.1,val('solarPR')/100)),
     panelW:Math.max(100,val('solarPanelPower')),
-    panelArea:Math.max(.1,val('solarPanelArea')),
+    panelLength,panelWidth,panelArea:panelLength*panelWidth,
+    panelGap:Math.max(0,val('solarPanelGap')),
+    edgeClearance:Math.max(0,val('solarEdgeClearance')),
+    shadowAltitude:Math.max(5,Math.min(80,val('solarShadowAltitude')||20)),
     roofArea:Math.max(0,val('solarRoofArea')),
     coverage:Math.min(2,Math.max(.1,val('solarConsumptionCoverage')/100)),
     economyFactor:Math.min(1,Math.max(.1,val('solarEconomyFactor')/100)),
@@ -703,7 +709,7 @@ function daylightHours(latDeg,declDeg){const lat=Number(latDeg||0)*Math.PI/180,d
 function solarNoonAltitude(latDeg,declDeg){return 90-Math.abs(Number(latDeg||0)-Number(declDeg||0));}
 function solarPathDraw(canvas,lat){if(!canvas)return;const ctx=canvas.getContext('2d'),w=canvas.width,h=canvas.height;ctx.clearRect(0,0,w,h);const pad=38;ctx.strokeStyle=getComputedStyle(document.documentElement).getPropertyValue('--line')||'#ddd';ctx.fillStyle=getComputedStyle(document.documentElement).getPropertyValue('--muted')||'#667085';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(pad,h-pad);ctx.lineTo(w-pad,h-pad);ctx.moveTo(pad,h-pad);ctx.lineTo(pad,pad);ctx.stroke();ctx.font='12px system-ui';ctx.fillText('Leste',w-pad-34,h-14);ctx.fillText('Sul',w/2-10,h-14);ctx.fillText('Oeste',pad,h-14);ctx.fillText('altura solar',pad+7,pad-9);const sets=[-23.44,0,23.44];for(const dec of sets){let first=true;ctx.beginPath();for(let hour=-6;hour<=6;hour+=.1){const la=(Number(lat)||0)*Math.PI/180,de=dec*Math.PI/180,H=hour*15*Math.PI/180,sinAlt=Math.sin(la)*Math.sin(de)+Math.cos(la)*Math.cos(de)*Math.cos(H),deg=Math.asin(Math.max(-1,Math.min(1,sinAlt)))*180/Math.PI;if(deg<=0){first=true;continue;}const x=w/2+(H/(6*Math.PI/180))*(w/2-pad),y=h-pad-(deg/90)*(h-pad*2);if(first){ctx.moveTo(x,y);first=false;}else ctx.lineTo(x,y);}ctx.stroke();}ctx.fillText('Latitude '+num(lat)+'°',pad+7,h-pad-8);}
 
-function solarCanvasPoint(e){const c=document.getElementById('solarOverlay');if(!c)return null;const r=c.getBoundingClientRect();return{x:e.clientX-r.left,y:e.clientY-r.top};}
+function solarCanvasPoint(e){const c=document.getElementById('solarOverlay'),img=document.getElementById('solarMapPreview');if(!c||!img||!img.naturalWidth)return null;const r=c.getBoundingClientRect();return{x:Math.max(0,Math.min(img.naturalWidth,(e.clientX-r.left)*(img.naturalWidth/r.width))),y:Math.max(0,Math.min(img.naturalHeight,(e.clientY-r.top)*(img.naturalHeight/r.height)))};}
 function solarDist(a,b){return Math.hypot(a.x-b.x,a.y-b.y);}
 function solarPolygonArea(poly){let a=0;for(let i=0;i<poly.length;i++){const j=(i+1)%poly.length;a+=poly[i].x*poly[j].y-poly[j].x*poly[i].y;}return Math.abs(a/2);}
 function solarPointInPolygon(p,poly){let inside=false;for(let i=0,j=poly.length-1;i<poly.length;j=i++){const xi=poly[i].x,yi=poly[i].y,xj=poly[j].x,yj=poly[j].y;const hit=((yi>p.y)!=(yj>p.y))&&(p.x<(xj-xi)*(p.y-yi)/(yj-yi||1e-12)+xi);if(hit)inside=!inside;}return inside;}
