@@ -496,7 +496,7 @@ function formatMonths(m){ const n=Math.max(0,Math.ceil(Number(m)||0)); const y=M
 
 
 function solarCalculatorUI(){
-  return \`<div class="tool-layout solar-tool-layout"><section class="card panel solar-main-panel">
+  return `<div class="tool-layout solar-tool-layout"><section class="card panel solar-main-panel">
     <h2>☀️ Dimensionamento fotovoltaico + posicionamento</h2>
     <div class="notice"><strong>Agora é uma única ferramenta.</strong> O Resolvei dimensiona a quantidade de módulos e, usando uma imagem superior do imóvel, permite desenhar os planos de telhado, obstáculos e uma escala para testar automaticamente a posição dos módulos. A etapa visual é preliminar e não substitui levantamento, projeto ou análise estrutural.</div>
 
@@ -600,7 +600,7 @@ function solarCalculatorUI(){
     <div class="actions"><button class="btn primary" id="calcBtn">Calcular sistema completo</button><button class="btn ghost" id="resetBtn">Limpar</button></div>
   </section><section id="result"></section></div>
 
-  <section class="card panel solar-path-section"><h2>☀️ Trajetória aparente do Sol</h2><canvas id="solarPathCanvas" width="900" height="340"></canvas><div class="note">Visualização aproximada da trajetória solar para a latitude localizada. A análise de sombra do imóvel usa os obstáculos que você marcou na imagem.</div></section>\`;
+  <section class="card panel solar-path-section"><h2>☀️ Trajetória aparente do Sol</h2><canvas id="solarPathCanvas" width="900" height="340"></canvas><div class="note">Visualização aproximada da trajetória solar para a latitude localizada. A análise de sombra do imóvel usa os obstáculos que você marcou na imagem.</div></section>`;
 }
 
 function positionSolarUI(){
