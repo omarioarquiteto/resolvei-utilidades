@@ -104,6 +104,7 @@ const tools = [
   {id:'receita',cat:'cozinha',icon:'🥣',title:'Ajustar receita',desc:'Escalone ingredientes para mais ou menos pessoas.',tags:'receita porções ingredientes'},
   {id:'temperatura-cozinha',cat:'cozinha',icon:'🔥',title:'Temperatura de forno',desc:'Converta °C, °F e marcações comuns de forno.',tags:'forno receita cozinha temperatura'},
   {id:'custo-receita',cat:'cozinha',icon:'🧾',title:'Custo da receita',desc:'Some ingredientes e descubra custo por porção.',tags:'custo receita comida ingredientes'},
+  {id:'por-quanto-vender',cat:'cozinha',icon:'🏷️',title:'Por quanto devo vender?',desc:'Descubra um preço de venda para doces, salgados e comidas.',tags:'preço venda doces salgados comida bolo brigadeiro marmita preço lucro margem'},
   {id:'churrasco',cat:'festas',icon:'🥩',title:'Quantidade para churrasco',desc:'Estime carne, acompanhamentos e bebidas.',tags:'churrasco carne convidados festa'},
   {id:'festa',cat:'festas',icon:'🥳',title:'Planejador de festa',desc:'Estime comida, bebida, bolo e descartáveis.',tags:'festa aniversario convidados salgados'},
   {id:'bolo',cat:'festas',icon:'🍰',title:'Quantidade de bolo',desc:'Estime o peso do bolo pela quantidade de convidados.',tags:'bolo aniversário convidados festa'},
@@ -125,6 +126,26 @@ const input = (id,label,opts={}) => {
 const select = (id,label,items,value) => `<div class="field"><label for="${id}">${label}</label><select id="${id}">${items.map(([v,t])=>`<option value="${v}" ${v===value?'selected':''}>${t}</option>`).join('')}</select></div>`;
 const panel = (form, output='<div class="result-box"><div class="result-label">Resultado</div><div class="result-main">—</div><p>Preencha os campos e clique em calcular.</p></div>') => `<div class="tool-layout"><section class="card panel"><h2>Preencha os dados</h2><div class="form-grid">${form}</div><div class="actions"><button class="btn primary" id="calcBtn">Calcular</button><button class="btn ghost" id="resetBtn">Limpar</button></div></section><section id="result">${output}</section></div>`;
 
+
+function porQuantoVenderUI(){
+  return `<div class="tool-layout"><section class="card panel">
+    <h2>Vamos descobrir o preço de venda</h2>
+    <div class="notice"><strong>É simples:</strong> diga o que você vende e informe seus gastos. A IA calcula um preço mínimo e uma faixa de preço para você avaliar.</div>
+    <div class="form-grid">
+      <div class="field full"><label for="sellProduct">O que você vende?</label><input id="sellProduct" placeholder="Ex.: bolo de chocolate, brigadeiro, coxinha, marmita..."></div>
+      <div class="field"><label for="sellType">Tipo</label><select id="sellType"><option value="doce">Doce</option><option value="salgado">Salgado</option><option value="comida">Comida / refeição</option><option value="bebida">Bebida</option><option value="outro">Outro</option></select></div>
+      <div class="field"><label for="sellCity">Cidade</label><input id="sellCity" value="Cuiabá" placeholder="Ex.: Cuiabá"></div>
+      <div class="field"><label for="sellState">Estado (UF)</label><input id="sellState" value="MT" maxlength="2" placeholder="MT"></div>
+      <div class="field"><label for="sellQuantity">Quantas unidades você produz?</label><input id="sellQuantity" type="number" min="1" step="1" value="10"></div>
+      <div class="field"><label for="sellCost">Quanto gasta para produzir tudo?</label><input id="sellCost" type="number" min="0" step="0.01" placeholder="Ex.: 80"><small>Ingredientes e preparo do lote.</small></div>
+      <div class="field"><label for="sellPackaging">Embalagem por unidade</label><input id="sellPackaging" type="number" min="0" step="0.01" value="0" placeholder="Ex.: 1,50"></div>
+      <div class="field"><label for="sellOther">Outros gastos do lote</label><input id="sellOther" type="number" min="0" step="0.01" value="0" placeholder="Gás, energia, entrega..."></div>
+    </div>
+    <div class="notice"><strong>Não sabe algum valor?</strong> Pode deixar em branco. A IA fará uma estimativa e avisará o que vale a pena conferir.</div>
+    <div class="actions"><button class="btn primary" type="button" id="sellCalcBtn">✨ Calcular preço de venda</button><button class="btn ghost" type="button" id="sellResetBtn">Limpar</button></div>
+    <div id="sellResult" style="margin-top:18px"></div>
+  </section></div>`;
+}
 
 function receitaCustoUI(){
   return `<div class="tool-layout"><section class="card panel">
@@ -807,6 +828,7 @@ function toolUI(id){
     case 'receita': return panel(input('from','Porções originais',{value:'4',step:'1'})+input('to','Porções desejadas',{value:'10',step:'1'})+input('ingredient','Quantidade do ingrediente',{value:'500'})+select('unit','Unidade',[['g','g'],['ml','ml'],['un','unidades'],['xicaras','xícaras'],['colheres','colheres']],'g'));
     case 'temperatura-cozinha': return panel(input('temp','Temperatura',{value:'180'})+select('direction','Converter de',[['c2f','°C para °F'],['f2c','°F para °C']],'c2f'));
     case 'custo-receita': return receitaCustoUI();
+    case 'por-quanto-vender': return porQuantoVenderUI();
     case 'churrasco': return churrascoUI();
     case 'festa': return festaUI();
     case 'bolo': return panel(input('guests','Convidados',{value:'30',step:'1'})+select('event','Tipo',[['normal','Festa comum'],['principal','Bolo como sobremesa principal']],'normal'));
@@ -989,6 +1011,34 @@ function bind(){
   const calc=document.getElementById('calcBtn'); const rid=location.pathname.match(/ferramenta\/([^/]+)/)?.[1] || location.hash.match(/ferramenta\/([^?]+)/)?.[1]; if(calc&&rid&&rid!=='posicao-solar')calc.addEventListener('click',()=>calculate(rid));
   if(rid==='conversor-arquivos')bindFileConverter();
   if(['jpg-png-webp','heic-jpg','imagem-pdf','pdf-imagens-zip','mp4-mp3','mp4-gif','csv-xlsx','zip-arquivos','mov-mp4','jpg-heic','imagem-comprimir'].includes(rid))bindUniversalFileConverter(rid);
+  if(rid==='por-quanto-vender'){
+    const btn=document.getElementById('sellCalcBtn'), reset=document.getElementById('sellResetBtn');
+    if(btn)btn.addEventListener('click',async()=>{
+      const product=document.getElementById('sellProduct')?.value.trim();
+      const type=document.getElementById('sellType')?.value||'outro';
+      const city=document.getElementById('sellCity')?.value.trim()||'Cuiabá';
+      const state=(document.getElementById('sellState')?.value.trim()||'MT').toUpperCase();
+      const quantity=Math.max(1,Number(document.getElementById('sellQuantity')?.value)||1);
+      const productionCost=Math.max(0,Number(document.getElementById('sellCost')?.value)||0);
+      const packaging=Math.max(0,Number(document.getElementById('sellPackaging')?.value)||0);
+      const otherCosts=Math.max(0,Number(document.getElementById('sellOther')?.value)||0);
+      const session=window.resolveiAiSession||{};
+      const apiKey=session.apiKey||'', provider=session.provider||'gemini', model=session.model||'';
+      const out=document.getElementById('sellResult');
+      if(!product){out.innerHTML='<div class="notice">Digite o produto que você vende.</div>';return;}
+      if(!apiKey){out.innerHTML='<div class="notice"><strong>✨ Conecte sua IA primeiro.</strong><br>Abra <a href="#/conectar-api">Usar minha IA</a>, informe sua própria API Key e volte para esta ferramenta.</div>';return;}
+      btn.disabled=true;btn.textContent='⏳ Calculando...';
+      out.innerHTML='<div class="result-box"><div class="result-label">Analisando</div><div class="result-main">Calculando preço...</div><p>A IA está considerando seus custos e a cidade informada.</p></div>';
+      try{
+        const r=await fetch('/api/sales/price',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({product,type,city,state,quantity,production_cost:productionCost,packaging_per_unit:packaging,other_costs:otherCosts,provider,api_key:apiKey,model})});
+        const data=await r.json();if(!r.ok)throw new Error(data.detail||'Não foi possível calcular.');
+        const range=data.price_range||{};
+        out.innerHTML=`<div class="result-box"><div class="result-label">Preço sugerido por unidade</div><div class="result-main">${money(data.suggested_price)}</div><p>${esc(data.summary||'')}</p><div class="form-grid" style="margin-top:14px"><div><strong>Preço mínimo</strong><br>${money(data.minimum_price)}</div><div><strong>Faixa para avaliar</strong><br>${money(range.min)} a ${money(range.max)}</div><div><strong>Custo por unidade</strong><br>${money(data.unit_cost)}</div><div><strong>Lucro por unidade</strong><br>${money(data.profit_per_unit)}</div></div>${data.tips?.length?`<div class="notice" style="margin-top:14px"><strong>Dicas da IA</strong><ul>${data.tips.map(x=>`<li>${esc(x)}</li>`).join('')}</ul></div>`:''}<small>${esc(data.note||'Estimativa: compare com seus custos reais e com os preços praticados na sua região.')}</small></div>`;
+      }catch(e){out.innerHTML=`<div class="notice"><strong>Não consegui calcular.</strong><br>${esc(e.message)}</div>`;}
+      finally{btn.disabled=false;btn.textContent='✨ Calcular preço de venda';}
+    });
+    if(reset)reset.addEventListener('click',()=>{['sellProduct','sellCost','sellPackaging','sellOther'].forEach(id=>{const e=document.getElementById(id);if(e)e.value='';});document.getElementById('sellQuantity').value='10';document.getElementById('sellResult').innerHTML='';});
+  }
   if(rid==='custo-receita'){const box=document.getElementById('recipeItems');if(box&&!box.children.length){addRecipeItemRow({name:'',qty:1,unit:'g',price:0});addRecipeItemRow({name:'',qty:1,unit:'g',price:0});addRecipeItemRow({name:'',qty:1,unit:'g',price:0});} const ar=document.getElementById('addRecipeItem');if(ar)ar.addEventListener('click',()=>addRecipeItemRow()); const ai=document.getElementById('analyzeRecipeBtn');if(ai)ai.addEventListener('click',analyzeRecipeAI);}
   if(rid==='churrasco'){/* sugestões são renderizadas junto da ferramenta */}
   if(rid==='placas-solares'){const btn=document.getElementById('solarResourceBtn');if(btn)btn.addEventListener('click',updateSolarResource);const pb=document.getElementById('solarPricesBtn');if(pb)pb.addEventListener('click',updateSolarPrices);}
@@ -1004,7 +1054,7 @@ function bind(){
 
 async function analyzeRecipeAI(){
   const url=document.getElementById('recipeUrl')?.value?.trim(); const status=document.getElementById('recipeAiStatus'); if(!url){if(status)status.textContent='Informe a URL da receita.';return;} if(status)status.textContent='🔎 Lendo a receita, organizando ingredientes e estimando preços locais...';
-  const provider=localStorage.getItem('resolvei_ai_provider')||'gemini'; const apiKey=localStorage.getItem('resolvei_ai_key')||''; const model=localStorage.getItem('resolvei_ai_model')||'';
+  const aiSession=window.resolveiAiSession||{}; const provider=aiSession.provider||'gemini'; const apiKey=aiSession.apiKey||''; const model=aiSession.model||'';
   try{const res=await fetch('/api/recipe/analyze',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url,city:document.getElementById('recipeCity')?.value||'',state:document.getElementById('recipeState')?.value||'',provider,api_key:apiKey,model})}); const data=await res.json(); if(!res.ok)throw new Error(data.detail||'Falha ao analisar receita'); const box=document.getElementById('recipeItems');box.innerHTML='';(data.ingredients||[]).forEach(x=>addRecipeItemRow({name:x.name||'',qty:x.quantity||1,unit:x.unit||'un.',price:x.recipe_price||0})); if(status)status.innerHTML=`✅ Receita analisada. ${data.ingredients?.length||0} ingredientes encontrados.${data.price_note?`<br>${esc(data.price_note)}`:''}`; const result=document.getElementById('result');if(result&&data.price_summary){result.innerHTML=`<div class="result-box"><div class="result-label">Estimativa da compra</div><div class="result-main">${money(data.price_summary.total||0)}</div><div class="result-sub">${(data.price_summary.items||[]).map(x=>`<div class="result-row"><span>${esc(x.name)}</span><strong>${x.price?money(x.price):'sem preço'}</strong></div>`).join('')}</div><div class="note">Os preços regionais dependem da disponibilidade e da fonte consultada. Confirme no estabelecimento antes de comprar.</div></div>`;} }catch(e){if(status)status.innerHTML=`⚠️ ${esc(e.message)}<br>Você ainda pode inserir os ingredientes manualmente.`;}
 }
 async function refinePartyAI(){
@@ -1060,7 +1110,7 @@ function resolveiBindPublicAI(){
   provider.addEventListener("change",()=>{model.value=RESOLVEI_PROVIDERS[provider.value]?.defaultModel||"";});
   document.getElementById("resolveiAiRun")?.addEventListener("click",async()=>{
     const apiKey=key.value.trim(), message=prompt.value.trim();
-    localStorage.setItem("resolvei_ai_provider",provider.value); localStorage.setItem("resolvei_ai_key",apiKey); localStorage.setItem("resolvei_ai_model",model.value.trim());
+    window.resolveiAiSession={provider:provider.value,apiKey,model:model.value.trim()};
     if(!apiKey){status.hidden=false;status.textContent="Informe sua API Key.";return;}
     if(!message){status.hidden=false;status.textContent="Escreva o que você quer resolver.";return;}
     status.hidden=false;status.textContent="✨ Consultando a IA...";
