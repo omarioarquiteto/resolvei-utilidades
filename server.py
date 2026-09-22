@@ -4,6 +4,7 @@ import json
 import os
 import tempfile
 import shutil
+import zipfile
 import subprocess
 import re
 from pathlib import Path
@@ -480,7 +481,7 @@ async def convert_file(file: UploadFile = File(...), output_format: str = Form(.
         "mkv": {"mp4","webm"}, "webm": {"mp4","avi"},
         "jpg": {"png","webp","pdf"}, "jpeg": {"png","webp","pdf"},
         "png": {"jpg","webp","pdf"}, "webp": {"jpg","png","pdf"},
-        "bmp": {"jpg","png","webp"}, "pdf": {"jpg","png"}
+        "bmp": {"jpg","png","webp"}, "pdf": {"jpg","png","dxf","dwg"}
     }
     filename = Path(file.filename or "arquivo").name
     src_ext = Path(filename).suffix.lower().lstrip(".")
@@ -513,9 +514,50 @@ async def convert_file(file: UploadFile = File(...), output_format: str = Form(.
                 doc = fitz.open(src)
                 if len(doc) == 0: raise ValueError("PDF vazio.")
                 if out_ext in {"jpg","png"}:
-                    page = doc[0]
-                    pix = page.get_pixmap(matrix=fitz.Matrix(2,2), alpha=False)
-                    pix.save(str(out))
+                    if len(doc) == 1:
+                        pix = doc[0].get_pixmap(matrix=fitz.Matrix(2,2), alpha=False)
+                        pix.save(str(out))
+                    else:
+                        out = out.with_suffix(".zip")
+                        with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
+                            for i, page in enumerate(doc):
+                                pix = page.get_pixmap(matrix=fitz.Matrix(2,2), alpha=False)
+                                img = Path(td) / f"pagina-{i+1}.{out_ext}"
+                                pix.save(str(img))
+                                z.write(img, img.name)
+                elif out_ext in {"dxf","dwg"}:
+                    import ezdxf
+                    cad = ezdxf.new("R2018")
+                    msp = cad.modelspace()
+                    for page_no, page in enumerate(doc):
+                        layer=f"PDF_PAGE_{page_no+1}"
+                        for item in page.get_drawings():
+                            op=item[0]
+                            if op=="l":
+                                p1,p2=item[1],item[2]; msp.add_line((p1.x,-p1.y),(p2.x,-p2.y),dxfattribs={"layer":layer})
+                            elif op=="re":
+                                r=item[1]; pts=[(r.x0,-r.y0),(r.x1,-r.y0),(r.x1,-r.y1),(r.x0,-r.y1)]
+                                msp.add_lwpolyline(pts,close=True,dxfattribs={"layer":layer})
+                            elif op=="qu":
+                                q=item[1]; pts=[(q.ul.x,-q.ul.y),(q.ur.x,-q.ur.y),(q.lr.x,-q.lr.y),(q.ll.x,-q.ll.y)]
+                                msp.add_lwpolyline(pts,close=True,dxfattribs={"layer":layer})
+                        for block in page.get_text("dict").get("blocks",[]):
+                            for line in block.get("lines",[]):
+                                for span in line.get("spans",[]):
+                                    txt=span.get("text","").strip()
+                                    if txt:
+                                        x,y=span["origin"]; msp.add_text(txt,dxfattribs={"height":max(float(span.get("size",8)),1),"layer":f"TEXT_PAGE_{page_no+1}"}).set_placement((x,-y))
+                    dxf_path=out.with_suffix(".dxf")
+                    cad.saveas(dxf_path)
+                    if out_ext=="dwg":
+                        oda=shutil.which("ODAFileConverter") or shutil.which("odafileconverter")
+                        if not oda:
+                            raise RuntimeError("DWG exige ODA File Converter no servidor. Use DXF ou instale o conversor ODA.")
+                        target=Path(td)/"dwgout"; target.mkdir()
+                        p=subprocess.run([oda,str(td),str(target),"ACAD2018","DWG","0","1",str(dxf_path)],capture_output=True,text=True,timeout=300)
+                        generated=list(target.rglob("*.dwg"))
+                        if p.returncode!=0 or not generated: raise RuntimeError("Falha ao gerar DWG.")
+                        shutil.copy2(generated[0],out)
                 doc.close()
             else:
                 ffmpeg = shutil.which("ffmpeg")
@@ -529,11 +571,11 @@ async def convert_file(file: UploadFile = File(...), output_format: str = Form(.
                 p = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
                 if p.returncode != 0: raise RuntimeError("FFmpeg não conseguiu converter o vídeo.")
             media = {
-                "jpg":"image/jpeg","png":"image/png","webp":"image/webp","pdf":"application/pdf",
+                "jpg":"image/jpeg","png":"image/png","webp":"image/webp","pdf":"application/pdf","dxf":"application/dxf","dwg":"application/acad",
                 "mp4":"video/mp4","avi":"video/x-msvideo","mov":"video/quicktime","webm":"video/webm"
             }.get(out_ext, "application/octet-stream")
             return Response(content=out.read_bytes(), media_type=media,
-                            headers={"Content-Disposition": f'attachment; filename="resolvei-convertido.{out_ext}"'})
+                            headers={"Content-Disposition": f'attachment; filename="resolvei-convertido.{("zip" if out_ext in {"jpg","png"} and src_ext=="pdf" and out.suffix==".zip" else out_ext)}"'});
         except HTTPException:
             raise
         except subprocess.TimeoutExpired:
