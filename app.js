@@ -1060,6 +1060,7 @@ function resolveiBindPublicAI(){
   provider.addEventListener("change",()=>{model.value=RESOLVEI_PROVIDERS[provider.value]?.defaultModel||"";});
   document.getElementById("resolveiAiRun")?.addEventListener("click",async()=>{
     const apiKey=key.value.trim(), message=prompt.value.trim();
+    localStorage.setItem("resolvei_ai_provider",provider.value); localStorage.setItem("resolvei_ai_key",apiKey); localStorage.setItem("resolvei_ai_model",model.value.trim());
     if(!apiKey){status.hidden=false;status.textContent="Informe sua API Key.";return;}
     if(!message){status.hidden=false;status.textContent="Escreva o que você quer resolver.";return;}
     status.hidden=false;status.textContent="✨ Consultando a IA...";
