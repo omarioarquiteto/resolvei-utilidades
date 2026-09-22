@@ -7,6 +7,8 @@ import shutil
 import zipfile
 import subprocess
 import re
+import base64
+import hashlib
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
@@ -32,6 +34,27 @@ BASE_DIR = Path(__file__).resolve().parent
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "").strip()
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-5.6-luna").strip() or "gpt-5.6-luna"
 SERPAPI_KEY = os.getenv("SERPAPI_KEY", "").strip()
+FIREBASE_PROJECT_ID = os.getenv("FIREBASE_PROJECT_ID", "").strip()
+FIREBASE_CLIENT_EMAIL = os.getenv("FIREBASE_CLIENT_EMAIL", "").strip()
+FIREBASE_PRIVATE_KEY = os.getenv("FIREBASE_PRIVATE_KEY", "").replace("\\n", "\n").strip()
+RESOLVEI_CREDENTIAL_ENCRYPTION_KEY = os.getenv("RESOLVEI_CREDENTIAL_ENCRYPTION_KEY", "").strip()
+
+_firebase_admin = None
+if FIREBASE_PROJECT_ID and FIREBASE_CLIENT_EMAIL and FIREBASE_PRIVATE_KEY:
+    try:
+        import firebase_admin
+        from firebase_admin import credentials, auth as firebase_auth, firestore as firebase_firestore
+        _firebase_admin = firebase_admin
+        if not firebase_admin._apps:
+            cred = credentials.Certificate({
+                "type":"service_account","project_id":FIREBASE_PROJECT_ID,
+                "private_key_id":"resolvei-env","private_key":FIREBASE_PRIVATE_KEY,
+                "client_email":FIREBASE_CLIENT_EMAIL,"client_id":"",
+                "token_uri":"https://oauth2.googleapis.com/token"
+            })
+            firebase_admin.initialize_app(cred)
+    except Exception:
+        _firebase_admin = None
 
 app = FastAPI(title="Resolvei API", version="3.0.0")
 
@@ -72,6 +95,16 @@ class SolarResourceRequest(BaseModel):
     roofAzimuth: float = 0
     roofTilt: float = 15
 
+
+class AIConnectionRequest(BaseModel):
+    provider: str
+    api_key: str
+    model: str = ""
+
+class AIChatRequest(BaseModel):
+    message: str
+    provider: str = ""
+    model: str = ""
 
 class SolarImageRequest(BaseModel):
     imageData: str
@@ -211,6 +244,108 @@ def heuristic_parse(raw: str) -> dict[str, Any]:
         name = m.group(3).strip(" -:") or raw.strip()
     return {"name": name, "quantity": quantity, "unit": unit, "category": heuristic_category(name), "raw": raw, "recipe_price": 0}
 
+
+def _verify_firebase_token(authorization: str | None):
+    if not _firebase_admin:
+        raise HTTPException(status_code=503, detail="Firebase Admin não está configurado no servidor.")
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Faça login no Resolvei.")
+    try:
+        from firebase_admin import auth as firebase_auth
+        return firebase_auth.verify_id_token(authorization[7:].strip())
+    except Exception as exc:
+        raise HTTPException(status_code=401, detail="Sessão Firebase inválida ou expirada.") from exc
+
+def _credential_key() -> bytes:
+    if not RESOLVEI_CREDENTIAL_ENCRYPTION_KEY:
+        raise HTTPException(status_code=503, detail="RESOLVEI_CREDENTIAL_ENCRYPTION_KEY não configurada.")
+    try:
+        raw=base64.urlsafe_b64decode(RESOLVEI_CREDENTIAL_ENCRYPTION_KEY + "="*((4-len(RESOLVEI_CREDENTIAL_ENCRYPTION_KEY)%4)%4))
+        if len(raw)!=32: raise ValueError
+        return raw
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="A chave de criptografia deve ser Base64URL de 32 bytes.") from exc
+
+def _encrypt_secret(secret: str) -> str:
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+    nonce=os.urandom(12); ct=AESGCM(_credential_key()).encrypt(nonce,secret.encode(),None)
+    return base64.urlsafe_b64encode(nonce+ct).decode()
+
+def _decrypt_secret(value: str) -> str:
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+    raw=base64.urlsafe_b64decode(value.encode())
+    return AESGCM(_credential_key()).decrypt(raw[:12],raw[12:],None).decode()
+
+def _provider_call(provider: str, api_key: str, model: str, message: str) -> str:
+    provider=provider.lower()
+    if provider=="openai":
+        from openai import OpenAI
+        client=OpenAI(api_key=api_key)
+        resp=client.responses.create(model=model or "gpt-4.1-mini",input=message)
+        return getattr(resp,"output_text","") or ""
+    if provider=="gemini":
+        url="https://generativelanguage.googleapis.com/v1beta/models/"+(model or "gemini-2.5-flash")+":generateContent"
+        resp=requests.post(url,params={"key":api_key},json={"contents":[{"parts":[{"text":message}]}]},timeout=60)
+        resp.raise_for_status()
+        data=resp.json()
+        return data["candidates"][0]["content"]["parts"][0]["text"]
+    if provider=="anthropic":
+        model=model or "claude-3-5-haiku-latest"
+        resp=requests.post("https://api.anthropic.com/v1/messages",headers={"x-api-key":api_key,"anthropic-version":"2023-06-01","content-type":"application/json"},json={"model":model,"max_tokens":1200,"messages":[{"role":"user","content":message}]},timeout=60)
+        resp.raise_for_status()
+        return "".join(x.get("text","") for x in resp.json().get("content",[]))
+    if provider=="openrouter":
+        resp=requests.post("https://openrouter.ai/api/v1/chat/completions",headers={"Authorization":"Bearer "+api_key,"Content-Type":"application/json"},json={"model":model or "openai/gpt-4.1-mini","messages":[{"role":"user","content":message}]},timeout=60)
+        resp.raise_for_status()
+        return resp.json()["choices"][0]["message"]["content"]
+    raise HTTPException(status_code=400,detail="Provedor de IA não suportado.")
+
+@app.get("/api/ai/connections")
+def ai_connections(authorization: str | None = None):
+    user=_verify_firebase_token(authorization)
+    if not _firebase_admin: raise HTTPException(status_code=503,detail="Firebase indisponível.")
+    from firebase_admin import firestore as firebase_firestore
+    docs=firebase_firestore.client().collection("users").document(user["uid"]).collection("aiConnections").stream()
+    return {"connections":[{"provider":d.id,"connected":bool((d.to_dict() or {}).get("connected")),"model":(d.to_dict() or {}).get("model","")} for d in docs]}
+
+@app.post("/api/ai/connections")
+def ai_save_connection(req: AIConnectionRequest, authorization: str | None = None):
+    user=_verify_firebase_token(authorization)
+    if req.provider not in {"gemini","openai","anthropic","openrouter"}: raise HTTPException(status_code=400,detail="Provedor não suportado.")
+    if not req.api_key.strip(): raise HTTPException(status_code=400,detail="Informe a API Key.")
+    from firebase_admin import firestore as firebase_firestore
+    firebase_firestore.client().collection("users").document(user["uid"]).collection("aiConnections").document(req.provider).set({
+        "provider":req.provider,"connected":True,"model":req.model.strip(),"secret":_encrypt_secret(req.api_key.strip()),
+        "updatedAt":firebase_firestore.SERVER_TIMESTAMP
+    },merge=True)
+    return {"ok":True,"provider":req.provider,"connected":True,"model":req.model.strip()}
+
+@app.delete("/api/ai/connections/{provider}")
+def ai_delete_connection(provider: str, authorization: str | None = None):
+    user=_verify_firebase_token(authorization)
+    from firebase_admin import firestore as firebase_firestore
+    firebase_firestore.client().collection("users").document(user["uid"]).collection("aiConnections").document(provider).delete()
+    return {"ok":True}
+
+@app.post("/api/ai/chat")
+def ai_chat(req: AIChatRequest, authorization: str | None = None):
+    user=_verify_firebase_token(authorization)
+    from firebase_admin import firestore as firebase_firestore
+    docs=firebase_firestore.client().collection("users").document(user["uid"]).collection("aiConnections").stream()
+    conns={d.id:d.to_dict() or {} for d in docs}
+    provider=req.provider.lower().strip()
+    if not provider:
+        provider=next((x for x in ("gemini","openai","anthropic","openrouter") if conns.get(x,{}).get("connected")), "")
+    if not provider or not conns.get(provider,{}).get("secret"):
+        raise HTTPException(status_code=400,detail="Nenhuma IA conectada. Acesse Conectar API.")
+    key=_decrypt_secret(conns[provider]["secret"])
+    model=req.model.strip() or conns[provider].get("model","")
+    try:
+        answer=_provider_call(provider,key,model,req.message)
+        return {"provider":provider,"model":model,"answer":answer}
+    except HTTPException: raise
+    except Exception as exc:
+        raise HTTPException(status_code=502,detail=f"Falha ao consultar {provider}: {exc}") from exc
 
 def openai_json(prompt: str, schema_name: str, schema: dict[str, Any]) -> dict[str, Any]:
     if not OPENAI_API_KEY:
