@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import json
 import os
+import tempfile
+import shutil
+import subprocess
 import re
 from pathlib import Path
 from typing import Any
@@ -12,8 +15,8 @@ import socket
 import requests
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form
+from fastapi.responses import FileResponse, JSONResponse, Response
 from pydantic import BaseModel, Field
 
 load_dotenv()
@@ -469,6 +472,74 @@ def solar_prices(city: str="Cuiabá",state: str="MT") -> dict[str, Any]:
             items.append({"key":key,"query":q,"best":opts[0],"options":opts})
     return {"configured":True,"city":city,"state":state.upper(),"items":items}
 
+
+@app.post("/api/files/convert")
+async def convert_file(file: UploadFile = File(...), output_format: str = Form(...)):
+    allowed = {
+        "mp4": {"avi","webm","mov"}, "avi": {"mp4","webm"}, "mov": {"mp4","avi","webm"},
+        "mkv": {"mp4","webm"}, "webm": {"mp4","avi"},
+        "jpg": {"png","webp","pdf"}, "jpeg": {"png","webp","pdf"},
+        "png": {"jpg","webp","pdf"}, "webp": {"jpg","png","pdf"},
+        "bmp": {"jpg","png","webp"}, "pdf": {"jpg","png"}
+    }
+    filename = Path(file.filename or "arquivo").name
+    src_ext = Path(filename).suffix.lower().lstrip(".")
+    out_ext = output_format.lower().lstrip(".")
+    if src_ext not in allowed or out_ext not in allowed[src_ext]:
+        raise HTTPException(status_code=400, detail="Conversão não suportada.")
+    max_bytes = 200 * 1024 * 1024
+    with tempfile.TemporaryDirectory(prefix="resolvei-convert-") as td:
+        src = Path(td) / filename
+        with src.open("wb") as f:
+            total = 0
+            while True:
+                chunk = await file.read(1024 * 1024)
+                if not chunk: break
+                total += len(chunk)
+                if total > max_bytes: raise HTTPException(status_code=413, detail="O arquivo excede o limite de 200 MB.")
+                f.write(chunk)
+        out = Path(td) / f"convertido.{out_ext}"
+        try:
+            if src_ext in {"jpg","jpeg","png","webp","bmp"}:
+                from PIL import Image
+                img = Image.open(src)
+                if out_ext == "pdf":
+                    img.convert("RGB").save(out, "PDF")
+                else:
+                    if out_ext == "jpg": out = out.with_suffix(".jpg"); img = img.convert("RGB")
+                    img.save(out, format=out_ext.upper())
+            elif src_ext == "pdf":
+                import fitz
+                doc = fitz.open(src)
+                if len(doc) == 0: raise ValueError("PDF vazio.")
+                if out_ext in {"jpg","png"}:
+                    page = doc[0]
+                    pix = page.get_pixmap(matrix=fitz.Matrix(2,2), alpha=False)
+                    pix.save(str(out))
+                doc.close()
+            else:
+                ffmpeg = shutil.which("ffmpeg")
+                if not ffmpeg: raise RuntimeError("FFmpeg não está instalado no servidor.")
+                cmd = [ffmpeg, "-y", "-i", str(src)]
+                if out_ext == "avi": cmd += ["-c:v","mpeg4","-c:a","mp3"]
+                elif out_ext == "webm": cmd += ["-c:v","libvpx-vp9","-c:a","libopus"]
+                elif out_ext == "mov": cmd += ["-c:v","libx264","-c:a","aac"]
+                else: cmd += ["-c:v","libx264","-c:a","aac"]
+                cmd += [str(out)]
+                p = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
+                if p.returncode != 0: raise RuntimeError("FFmpeg não conseguiu converter o vídeo.")
+            media = {
+                "jpg":"image/jpeg","png":"image/png","webp":"image/webp","pdf":"application/pdf",
+                "mp4":"video/mp4","avi":"video/x-msvideo","mov":"video/quicktime","webm":"video/webm"
+            }.get(out_ext, "application/octet-stream")
+            return Response(content=out.read_bytes(), media_type=media,
+                            headers={"Content-Disposition": f'attachment; filename="resolvei-convertido.{out_ext}"'})
+        except HTTPException:
+            raise
+        except subprocess.TimeoutExpired:
+            raise HTTPException(status_code=504, detail="A conversão demorou demais e foi interrompida.")
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e) or "Falha na conversão.")
 
 @app.get("/api/health")
 def health() -> dict[str, Any]:
