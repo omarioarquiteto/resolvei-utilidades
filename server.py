@@ -16,6 +16,12 @@ import socket
 import requests
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
+try:
+    from pillow_heif import register_heif_opener
+    register_heif_opener()
+except Exception:
+    pass
+
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from fastapi.responses import FileResponse, JSONResponse, Response
 from pydantic import BaseModel, Field
@@ -582,6 +588,120 @@ async def convert_file(file: UploadFile = File(...), output_format: str = Form(.
             raise HTTPException(status_code=504, detail="A conversão demorou demais e foi interrompida.")
         except Exception as e:
             raise HTTPException(status_code=500, detail=str(e) or "Falha na conversão.")
+
+
+@app.post("/api/files/convert-plus")
+async def convert_plus(files: list[UploadFile] = File(...), output_format: str = Form(...), quality: int = Form(85), tool_id: str = Form("")):
+    """General-purpose document/media conversion endpoint used by the expanded Resolvei converters."""
+    output_format = output_format.lower().lstrip(".")
+    quality = max(10, min(100, int(quality or 85)))
+    if not files:
+        raise HTTPException(status_code=400, detail="Selecione pelo menos um arquivo.")
+    max_bytes = 200 * 1024 * 1024
+    with tempfile.TemporaryDirectory(prefix="resolvei-plus-") as td:
+        paths=[]
+        for up in files:
+            name=Path(up.filename or "arquivo").name
+            p=Path(td)/name
+            total=0
+            with p.open("wb") as f:
+                while True:
+                    chunk=await up.read(1024*1024)
+                    if not chunk: break
+                    total += len(chunk)
+                    if total > max_bytes:
+                        raise HTTPException(status_code=413, detail=f"{name} excede o limite de 200 MB.")
+                    f.write(chunk)
+            paths.append(p)
+        try:
+            if tool_id == "zip-arquivos":
+                out=Path(td)/"resolvei-arquivos.zip"
+                with zipfile.ZipFile(out,"w",zipfile.ZIP_DEFLATED) as z:
+                    for p in paths: z.write(p,p.name)
+                return Response(content=out.read_bytes(),media_type="application/zip",headers={"Content-Disposition":'attachment; filename="resolvei-arquivos.zip"'})
+
+            src=paths[0]
+            ext=src.suffix.lower().lstrip(".")
+            out=Path(td)/f"resolvei-convertido.{output_format}"
+
+            if tool_id in {"jpg-png-webp","imagem-comprimir","heic-jpg","jpg-heic"}:
+                from PIL import Image
+                img=Image.open(src)
+                if output_format in {"jpg","jpeg"}:
+                    out=out.with_suffix(".jpg")
+                    img.convert("RGB").save(out,"JPEG",quality=quality,optimize=True)
+                elif output_format=="png":
+                    img.save(out,"PNG",optimize=True)
+                elif output_format=="webp":
+                    img.save(out,"WEBP",quality=quality,method=6)
+                elif output_format=="heic":
+                    try:
+                        from pillow_heif import register_heif_opener
+                        register_heif_opener()
+                        img.convert("RGB").save(out,"HEIC",quality=quality)
+                    except Exception as exc:
+                        raise RuntimeError("HEIC não está disponível neste servidor. Instale pillow-heif para habilitar.") from exc
+            elif tool_id=="imagem-pdf":
+                from PIL import Image
+                images=[]
+                for p in paths:
+                    im=Image.open(p).convert("RGB")
+                    images.append(im)
+                if not images: raise ValueError("Nenhuma imagem válida.")
+                images[0].save(out,"PDF",save_all=True,append_images=images[1:])
+            elif tool_id=="pdf-imagens-zip":
+                if ext!="pdf": raise ValueError("Envie um PDF.")
+                import fitz
+                doc=fitz.open(src)
+                out=Path(td)/"resolvei-pdf-imagens.zip"
+                with zipfile.ZipFile(out,"w",zipfile.ZIP_DEFLATED) as z:
+                    for i,page in enumerate(doc):
+                        pix=page.get_pixmap(matrix=fitz.Matrix(2,2),alpha=False)
+                        img=Path(td)/f"pagina-{i+1}.jpg"
+                        pix.save(str(img)); z.write(img,img.name)
+                doc.close()
+            elif tool_id=="csv-xlsx":
+                if ext=="csv" and output_format=="xlsx":
+                    import csv, openpyxl
+                    wb=openpyxl.Workbook(); ws=wb.active
+                    with src.open("r",encoding="utf-8-sig",newline="") as f:
+                        for row in csv.reader(f): ws.append(row)
+                    wb.save(out)
+                elif ext=="xlsx" and output_format=="csv":
+                    import openpyxl, csv
+                    wb=openpyxl.load_workbook(src,read_only=True,data_only=True); ws=wb.active
+                    with out.open("w",encoding="utf-8-sig",newline="") as f:
+                        w=csv.writer(f)
+                        for row in ws.iter_rows(values_only=True): w.writerow(list(row))
+                else: raise ValueError("Conversão CSV/XLSX inválida.")
+            elif tool_id in {"mp4-mp3"}:
+                ffmpeg=shutil.which("ffmpeg")
+                if not ffmpeg: raise RuntimeError("FFmpeg não está instalado no servidor.")
+                out=out.with_suffix(".mp3")
+                p=subprocess.run([ffmpeg,"-y","-i",str(src),"-vn","-codec:a","libmp3lame","-q:a","2",str(out)],capture_output=True,text=True,timeout=600)
+                if p.returncode!=0: raise RuntimeError("FFmpeg não conseguiu extrair o áudio.")
+            elif tool_id in {"mp4-gif","mov-mp4"}:
+                ffmpeg=shutil.which("ffmpeg")
+                if not ffmpeg: raise RuntimeError("FFmpeg não está instalado no servidor.")
+                if tool_id=="mp4-gif":
+                    out=out.with_suffix(".gif")
+                    cmd=[ffmpeg,"-y","-i",str(src),"-vf","fps=12,scale=640:-1:flags=lanczos","-t","10",str(out)]
+                else:
+                    out=out.with_suffix(".mp4")
+                    cmd=[ffmpeg,"-y","-i",str(src),"-c:v","libx264","-c:a","aac","-movflags","+faststart",str(out)]
+                p=subprocess.run(cmd,capture_output=True,text=True,timeout=600)
+                if p.returncode!=0: raise RuntimeError("FFmpeg não conseguiu converter o vídeo.")
+            else:
+                raise ValueError("Conversor não reconhecido.")
+
+            mime={"jpg":"image/jpeg","png":"image/png","webp":"image/webp","heic":"image/heic","pdf":"application/pdf","zip":"application/zip","xlsx":"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet","csv":"text/csv","mp3":"audio/mpeg","gif":"image/gif","mp4":"video/mp4"}.get(output_format,"application/octet-stream")
+            return Response(content=out.read_bytes(),media_type=mime,headers={"Content-Disposition":f'attachment; filename="{out.name}"'})
+        except HTTPException:
+            raise
+        except subprocess.TimeoutExpired:
+            raise HTTPException(status_code=504,detail="A conversão demorou demais e foi interrompida.")
+        except Exception as exc:
+            raise HTTPException(status_code=500,detail=str(exc) or "Falha na conversão.")
 
 @app.get("/api/health")
 def health() -> dict[str, Any]:
