@@ -494,27 +494,50 @@ function solarPrice(n, fallback){ return Number.isFinite(Number(n))&&Number(n)>0
 function solarPriceField(id,label,value,help='') { return input(id,label,{prefix:'R$',value,step:'0.01',help}); }
 function formatMonths(m){ const n=Math.max(0,Math.ceil(Number(m)||0)); const y=Math.floor(n/12),mo=n%12; return y?`${y} ano${y>1?'s':''}${mo?` e ${mo} mês${mo>1?'es':''}`:''}`:`${n} mês${n!==1?'es':''}`; }
 
+
 function solarCalculatorUI(){
-  return `<div class="tool-layout"><section class="card panel">
-    <h2>☀️ Dimensionamento fotovoltaico</h2>
-    <div class="notice"><strong>Como funciona:</strong> informe o consumo médio da conta de energia, a tarifa, a potência do módulo e os custos de referência. O Resolvei estima o sistema, sugere um inversor, lista materiais, calcula o custo e simula o parcelamento/payback. Os preços são parâmetros editáveis e podem ser atualizados por consulta online quando o provedor estiver configurado.</div>
+  return \`<div class="tool-layout solar-tool-layout"><section class="card panel solar-main-panel">
+    <h2>☀️ Dimensionamento fotovoltaico + posicionamento</h2>
+    <div class="notice"><strong>Agora é uma única ferramenta.</strong> O Resolvei dimensiona a quantidade de módulos e, usando uma imagem superior do imóvel, permite desenhar os planos de telhado, obstáculos e uma escala para testar automaticamente a posição dos módulos. A etapa visual é preliminar e não substitui levantamento, projeto ou análise estrutural.</div>
+
+    <h3 class="subhead">⚡ 1. Consumo e sistema</h3>
     <div class="form-grid">
-      ${input('solarConsumption','Consumo médio mensal',{suffix:'kWh/mês',value:'500',help:'Use a média dos últimos 12 meses da conta, se disponível.'})}
-      ${input('solarTariff','Tarifa efetiva da energia',{prefix:'R$',value:'0.95',step:'0.01',help:'Informe o valor que você quer usar na simulação. Tarifas reais variam por distribuidora, classe e impostos.'})}
-      ${input('solarPSH','Horas de sol pico equivalentes',{suffix:'h/dia',value:'5',step:'0.1',help:'Pode ser substituído por dados do estudo de posição solar/PVGIS.'})}
-      ${input('solarPR','Performance global do sistema',{suffix:'%',value:'80',step:'1',help:'Inclui perdas de temperatura, cabos, sujeira, mismatch e inversor. Ajuste com projeto.'})}
-      ${input('solarPanelPower','Potência de cada módulo',{suffix:'Wp',value:'550',step:'5'})}
-      ${input('solarPanelArea','Área aproximada do módulo',{suffix:'m²',value:'2.6',step:'0.01',help:'Use a dimensão real do módulo escolhido para conferir o espaço disponível.'})}
-      ${input('solarRoofArea','Área útil disponível no telhado',{suffix:'m²',value:'30',step:'0.1',help:'Deixe maior que zero para conferir se a quantidade estimada cabe no telhado.'})}
+      ${input('solarConsumption','Consumo médio mensal',{suffix:'kWh/mês',value:'500',help:'Prefira a média dos últimos 12 meses.'})}
+      ${input('solarTariff','Tarifa efetiva',{prefix:'R$',value:'0.95',step:'0.01',help:'Valor usado somente na simulação financeira.'})}
+      ${input('solarPSH','Horas de sol pico',{suffix:'h/dia',value:'5',step:'0.1',help:'O botão de dados solares pode substituir este valor.'})}
+      ${input('solarPR','Performance global',{suffix:'%',value:'80',step:'1',help:'Perdas globais estimadas do sistema.'})}
+      ${input('solarPanelPower','Potência do módulo',{suffix:'Wp',value:'550',step:'5'})}
+      ${input('solarPanelArea','Área do módulo',{suffix:'m²',value:'2.6',step:'0.01'})}
+      ${input('solarPanelLength','Comprimento do módulo',{suffix:'m',value:'2.28',step:'0.01',help:'Use a medida real do fabricante.'})}
+      ${input('solarPanelWidth','Largura do módulo',{suffix:'m',value:'1.13',step:'0.01',help:'Use a medida real do fabricante.'})}
+      ${input('solarPanelGap','Espaço entre módulos',{suffix:'m',value:'0.02',step:'0.01'})}
+      ${input('solarEdgeClearance','Afastamento das bordas',{suffix:'m',value:'0.20',step:'0.05',help:'Margem geométrica preliminar. Verifique a estrutura e recomendações do fabricante.'})}
+      ${input('solarRoofArea','Área útil disponível',{suffix:'m²',value:'30',step:'0.1',help:'Use uma estimativa; a área desenhada na imagem pode refinar a análise.'})}
       ${select('solarPhase','Ligação elétrica',[['monofasico','Monofásica'],['bifasico','Bifásica'],['trifasico','Trifásica']],'bifasico')}
-      ${input('solarConsumptionCoverage','Cobertura alvo do consumo',{suffix:'%',value:'100',step:'1',help:'100% busca compensar a média mensal; um projeto real deve considerar consumo, tarifa e regras de compensação.'})}
-      ${input('solarEconomyFactor','Fator de economia usado no payback',{suffix:'%',value:'90',step:'1',help:'Fator de modelagem para não assumir que cada kWh gerado vira exatamente R$ 1 de economia. Não é uma alíquota regulatória.'})}
-      ${input('solarExtraCost','Outros custos do projeto',{prefix:'R$',value:'0',step:'0.01',help:'Frete, reforços, adequações de telhado ou outros itens.'})}
+      ${input('solarConsumptionCoverage','Cobertura alvo',{suffix:'%',value:'100',step:'1'})}
+      ${input('solarEconomyFactor','Fator de economia',{suffix:'%',value:'90',step:'1'})}
+      ${input('solarExtraCost','Outros custos',{prefix:'R$',value:'0',step:'0.01'})}
     </div>
+
+    <h3 class="subhead">📍 2. Endereço e dados solares</h3>
+    <div class="form-grid">
+      ${input('solarCep','CEP',{value:'',placeholder:'78000-000',help:'Digite o CEP para preencher rua, bairro, cidade e UF automaticamente.'})}
+      ${input('solarAddress','Rua / número',{value:'',placeholder:'Ex.: Rua das Flores, 100'})}
+      ${input('solarNeighborhood','Bairro',{value:''})}
+      ${input('solarCity','Cidade',{value:'Cuiabá'})}
+      ${input('solarState','UF',{value:'MT',maxlength:'2'})}
+    </div>
+    <div class="actions">
+      <button class="btn" id="solarCepBtn" type="button">📍 Preencher pelo CEP</button>
+      <button class="btn" id="solarAddressBtn" type="button">🧭 Localizar endereço</button>
+      <button class="btn" id="solarResourceBtn" type="button">☀️ Atualizar dados solares</button>
+    </div>
+    <div id="solarResourceStatus" class="notice">Informe o endereço e, quando necessário, use “Localizar endereço”.</div>
+
     <hr class="sep">
-    <h3 class="subhead">💰 Preços de referência — todos editáveis</h3>
+    <h3 class="subhead">💰 3. Preços de referência — editáveis</h3>
     <div class="form-grid solar-price-grid">
-      ${solarPriceField('pricePanel','Módulo fotovoltaico (un.)',SOLAR_DEFAULT_PRICES.panel,'Valor de referência. Confirme com fornecedor.')}
+      ${solarPriceField('pricePanel','Módulo fotovoltaico (un.)',SOLAR_DEFAULT_PRICES.panel,'Valor de referência.') }
       ${solarPriceField('priceInverter','Inversor (un.)',SOLAR_DEFAULT_PRICES.inverter)}
       ${solarPriceField('priceMounting','Estrutura por módulo',SOLAR_DEFAULT_PRICES.mounting)}
       ${solarPriceField('priceDcCable','Cabo solar por metro',SOLAR_DEFAULT_PRICES.dcCableM)}
@@ -529,54 +552,58 @@ function solarCalculatorUI(){
       ${solarPriceField('priceEngineering','Projeto + engenharia/homologação',SOLAR_DEFAULT_PRICES.engineering)}
       ${solarPriceField('priceLabor','Mão de obra',SOLAR_DEFAULT_PRICES.labor)}
     </div>
+
     <hr class="sep">
-    <h3 class="subhead">📍 Dados solares da localização</h3>
-    <div class="form-grid">
-      ${input('solarCep','CEP (opcional)',{value:'',placeholder:'78000-000',help:'Preencha a cidade manualmente ou use o botão para pesquisar dados solares.'})}
-      ${input('solarCity','Cidade',{value:'Cuiabá'})}
-      ${input('solarState','UF',{value:'MT'})}
-      ${input('solarAddress','Endereço (opcional)',{value:'',full:true,placeholder:'Rua, bairro, número'})}
+    <h3 class="subhead">🗺️ 4. Imagem superior do imóvel</h3>
+    <div class="notice">Use uma imagem realmente superior (satélite, drone, ortofoto ou implantação). Quanto mais perpendicular a imagem estiver ao terreno, melhor. Caso exista uma seta Norte, mantenha-a visível.</div>
+    <div class="field full"><label for="solarMapImage">Imagem do imóvel</label><input id="solarMapImage" type="file" accept="image/*"><small>O arquivo é carregado no navegador. A imagem só é enviada ao servidor quando você escolher a análise por IA.</small></div>
+
+    <div class="solar-mark-toolbar">
+      <button class="btn solar-mode active" id="solarRoofModeBtn" type="button">⌂ Marcar plano de telhado</button>
+      <button class="btn solar-mode" id="solarObstacleModeBtn" type="button">▴ Marcar obstáculo</button>
+      <button class="btn solar-mode" id="solarCalibrateBtn" type="button">📏 Calibrar escala</button>
+      <button class="btn" id="solarFinishMarkBtn" type="button">✓ Concluir marcação</button>
+      <button class="btn" id="solarUndoBtn" type="button">↶ Desfazer</button>
+      <button class="btn ghost" id="solarClearMarksBtn" type="button">Limpar marcações</button>
     </div>
-    <div class="actions"><button class="btn primary" id="calcBtn">Calcular sistema</button><button class="btn" id="solarResourceBtn" type="button">☀️ Atualizar dados solares</button><button class="btn" id="solarPricesBtn" type="button">💰 Consultar preços online</button><button class="btn ghost" id="resetBtn">Limpar</button></div>
-    <div id="solarResourceStatus" class="notice">Sem consulta externa. O cálculo funciona com as horas de sol pico informadas.</div>
-  </section><section id="result"></section></div>`;
+
+    <div class="form-grid solar-mark-fields">
+      ${input('solarMarkRoofAzimuth','Azimute do plano de telhado',{suffix:'°',value:'0',step:'1',help:'0° Norte · 90° Leste · 180° Sul · 270° Oeste.'})}
+      ${input('solarMarkRoofTilt','Inclinação do plano',{suffix:'°',value:'15',step:'1'})}
+      ${input('solarMarkRoofHeight','Altura do plano',{suffix:'m',value:'3',step:'0.1',help:'Altura aproximada do telhado em relação ao piso/terreno.'})}
+      ${input('solarObstacleHeight','Altura do obstáculo',{suffix:'m',value:'1',step:'0.1',help:'Use altura relativa acima do plano dos módulos quando possível.'})}
+      ${input('solarShadowAltitude','Ângulo solar mínimo usado na sombra',{suffix:'°',value:'20',step:'1',help:'Modelo conservador: quanto menor este ângulo, maior a zona excluída ao redor do obstáculo.'})}
+      ${input('solarKnownDistance','Distância conhecida para escala',{suffix:'m',value:'10',step:'0.1',help:'Informe uma distância real que você consiga identificar na imagem; depois clique em “Calibrar escala”.'})}
+    </div>
+
+    <div id="solarImageStatus" class="notice">1) Envie a imagem. 2) Marque os planos de telhado. 3) Marque obstáculos. 4) Calibre a escala. 5) Calcule o posicionamento.</div>
+    <div class="solar-canvas-wrap" id="solarCanvasWrap">
+      <img id="solarMapPreview" alt="Imagem superior do imóvel">
+      <canvas id="solarOverlay"></canvas>
+    </div>
+    <div class="solar-legend">
+      <span><i class="legend-swatch roof"></i> Plano de telhado</span>
+      <span><i class="legend-swatch obstacle"></i> Obstáculo / barreira</span>
+      <span><i class="legend-swatch panel"></i> Módulo proposto</span>
+      <span><i class="legend-swatch shadow"></i> Zona conservadora de sombra</span>
+    </div>
+    <div class="actions">
+      <button class="btn primary" id="solarAutoLayoutBtn" type="button">▦ Calcular posição dos módulos</button>
+      <button class="btn" id="solarAiImageBtn" type="button">✨ Sugerir áreas com IA</button>
+      <button class="btn" id="solarLayoutClearBtn" type="button">Limpar somente layout</button>
+    </div>
+    <div id="solarLayoutResult"></div>
+
+    <div class="notice"><strong>Como interpretar:</strong> o Resolvei procura caber a quantidade de módulos calculada nos planos marcados, respeitando orientação, inclinação, bordas, dimensão física do módulo e zonas de sombra aproximadas dos obstáculos. Em projeto real, ainda precisam ser verificados espaçamentos técnicos, acesso, carga de vento, fixação, estrutura, strings, tensão/corrente e requisitos da distribuidora.</div>
+
+    <div class="actions"><button class="btn primary" id="calcBtn">Calcular sistema completo</button><button class="btn ghost" id="resetBtn">Limpar</button></div>
+  </section><section id="result"></section></div>
+
+  <section class="card panel solar-path-section"><h2>☀️ Trajetória aparente do Sol</h2><canvas id="solarPathCanvas" width="900" height="340"></canvas><div class="note">Visualização aproximada da trajetória solar para a latitude localizada. A análise de sombra do imóvel usa os obstáculos que você marcou na imagem.</div></section>\`;
 }
 
 function positionSolarUI(){
-  return `<div class="tool-layout"><section class="card panel">
-    <h2>🧭 Estudo de insolação e posição dos módulos</h2>
-    <div class="notice"><strong>Importante:</strong> o estudo combina geolocalização, trajetória solar, orientação do telhado e uma simulação visual sobre sua imagem. O print do mapa não substitui levantamento, medição, projeto elétrico, análise de sombreamento de obstáculos ou verificação estrutural.</div>
-    <h3 class="subhead">📍 Localização</h3>
-    <div class="form-grid">
-      ${input('sunCep','CEP',{value:'78000-000',placeholder:'78000-000'})}
-      ${input('sunStreet','Rua / avenida',{value:'',placeholder:'Ex.: Rua das Flores'})}
-      ${input('sunNeighborhood','Bairro',{value:''})}
-      ${input('sunCity','Cidade',{value:'Cuiabá'})}
-      ${input('sunState','UF',{value:'MT'})}
-    </div>
-    <div class="actions"><button class="btn" id="sunCepBtn" type="button">📍 Preencher pelo CEP</button><button class="btn primary" id="calcBtn">Gerar estudo solar</button><button class="btn ghost" id="resetBtn">Limpar</button></div>
-    <hr class="sep">
-    <h3 class="subhead">📐 Terreno e telhado</h3>
-    <div class="form-grid">
-      ${input('terrainW','Largura do terreno',{suffix:'m',value:'10',step:'0.1'})}
-      ${input('terrainD','Profundidade do terreno',{suffix:'m',value:'25',step:'0.1'})}
-      ${input('sunRoofArea','Área útil de telhado',{suffix:'m²',value:'30',step:'0.1',help:'Área onde os módulos podem realmente ser instalados, sem caminhos, afastamentos ou obstáculos.'})}
-      ${input('sunRoofAzimuth','Azimute do telhado',{suffix:'°',value:'0',step:'1',help:'0° = Norte, 90° = Leste, 180° = Sul, 270° = Oeste. Ajuste após conferir a orientação do print.'})}
-      ${input('sunRoofTilt','Inclinação do telhado',{suffix:'°',value:'15',step:'1',help:'Ângulo do plano do telhado em relação à horizontal.'})}
-      ${input('sunPanelCount','Quantidade de módulos a simular',{suffix:'un.',value:'10',step:'1',min:1})}
-      ${input('sunPanelPower','Potência do módulo',{suffix:'Wp',value:'550',step:'5'})}
-      ${input('sunArrayBearing','Orientação da matriz simulada',{suffix:'°',value:'0',step:'1',help:'A matriz pode ser girada independentemente do telhado para testar alternativas.'})}
-    </div>
-    <hr class="sep">
-    <h3 class="subhead">🗺️ Print do Google Maps / imagem do telhado</h3>
-    <div class="field full"><label for="sunMapImage">Imagem</label><input id="sunMapImage" type="file" accept="image/*"><small>Use uma captura com o Norte claramente identificável. A imagem fica no seu navegador até ser enviada para análise por IA.</small></div>
-    <div class="actions"><button class="btn" id="solarAiImageBtn" type="button">✨ Analisar imagem com IA</button><button class="btn" id="solarAutoArrayBtn" type="button">▣ Posicionar matriz</button></div>
-    <div id="solarImageStatus" class="notice">Nenhuma imagem carregada.</div>
-    <div id="solarImageStage" class="solar-image-stage"><img id="solarMapPreview" alt="Print do mapa/telhado"><canvas id="solarOverlay"></canvas></div>
-    <div class="notice"><strong>Interação:</strong> clique sobre a imagem para mover a matriz. Altere o azimute da matriz e a quantidade de módulos para testar alternativas visualmente.</div>
-  </section>
-  <section id="result"><div class="result-box"><div class="result-label">Estudo solar</div><div class="result-main">—</div><p>Informe a localização e clique em “Gerar estudo solar”.</p></div></section></div>
-  <section class="card panel solar-path-section"><h2>☀️ Trajetória aparente do Sol</h2><canvas id="solarPathCanvas" width="900" height="340"></canvas><div id="solarPathNote" class="note">O gráfico é uma visualização aproximada da trajetória solar. O estudo detalhado deve considerar horizonte, obstáculos e dados locais.</div></section>`;
+  return solarCalculatorUI();
 }
 
 function solarConfigFromDOM(){
@@ -594,6 +621,7 @@ function solarConfigFromDOM(){
     phase:document.getElementById('solarPhase')?.value||'bifasico',
   };
 }
+
 function calcSolarLocal(){
   const c=solarConfigFromDOM();
   const panelKW=c.panelW/1000;
@@ -811,7 +839,7 @@ function toolUI(id){
     case 'piscina': return panel(input('length','Comprimento',{suffix:'m',value:'5'})+input('width','Largura',{suffix:'m',value:'3'})+input('depth','Profundidade média',{suffix:'m',value:'1.3'}));
     case 'cobertura': return panel(input('span','Vão horizontal considerado',{suffix:'m',value:'5'})+input('slope','Inclinação',{suffix:'%',value:'30'}));
     case 'placas-solares': return solarCalculatorUI();
-    case 'posicao-solar': return positionSolarUI();
+    case 'posicao-solar': return solarCalculatorUI();
     case 'area-retangulo': return panel(input('length','Comprimento',{suffix:'m',value:'5'})+input('width','Largura',{suffix:'m',value:'4'}));
     case 'area-triangulo': return panel(input('base','Base',{suffix:'m',value:'5'})+input('height','Altura',{suffix:'m',value:'3'}));
     case 'area-circulo': return panel(input('radius','Raio',{suffix:'m',value:'2'}));
@@ -881,8 +909,8 @@ function calculate(id){
     case 'caixa-dagua': {const liters=val('people')*val('perperson')*val('days');main=`${num(liters)} L`;label='Capacidade estimada';row('m³',`${num(liters/1000)} m³`);break;}
     case 'piscina': {const v=val('length')*val('width')*val('depth');main=`${num(v*1000)} L`;label='Volume aproximado';row('Volume',`${num(v)} m³`);break;}
     case 'cobertura': {const h=val('span')*val('slope')/100;main=`${num(h)} m`;label='Desnível';row('Inclinação',pct(val('slope')));break;}
-    case 'placas-solares': {const r=calcSolarLocal(); out.innerHTML=solarResultHTML(r, 'cálculo local'); return;}
-    case 'posicao-solar': {runSolarPositionStudy(); return;}
+    case 'placas-solares':
+    case 'posicao-solar': {const r=calcSolarLocal(); out.innerHTML=solarResultHTML(r, 'cálculo local'); solarAutoLayout(); return;}
     case 'area-retangulo': main=`${num(val('length')*val('width'))} m²`;label='Área';break;
     case 'area-triangulo': main=`${num(val('base')*val('height')/2)} m²`;label='Área';break;
     case 'area-circulo': main=`${num(Math.PI*val('radius')**2)} m²`;label='Área';break;
@@ -1015,7 +1043,7 @@ function bind(){
   const gs=document.getElementById('globalSearch'); if(gs){gs.addEventListener('keydown',e=>{if(e.key==='Enter'){const q=gs.value.trim(); if(q){location.hash='#/ferramentas?q='+encodeURIComponent(q)}}});}
   document.querySelectorAll('[data-search]').forEach(b=>b.addEventListener('click',()=>{location.hash='#/ferramentas?q='+encodeURIComponent(b.dataset.search)}));
   const ls=document.getElementById('listSearch'); if(ls){const q=new URLSearchParams((location.search||'').replace(/^\?/,'') || location.hash.split('?')[1] || '').get('q')||'';ls.value=q; const grid=document.getElementById('toolGrid'); if(q)grid.innerHTML=smartSearch(q).replace(/^<div class="notice">/, '<div class="notice">'); ls.addEventListener('input',()=>{const r=smartSearch(ls.value);grid.innerHTML=r;document.querySelectorAll('[data-fav]').forEach(b=>b.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();toggleFav(b.dataset.fav)}));});}
-  const calc=document.getElementById('calcBtn'); const rid=location.pathname.match(/ferramenta\/([^/]+)/)?.[1] || location.hash.match(/ferramenta\/([^?]+)/)?.[1]; if(calc&&rid&&rid!=='posicao-solar')calc.addEventListener('click',()=>calculate(rid));
+  const calc=document.getElementById('calcBtn'); const rid=location.pathname.match(/ferramenta\/([^/]+)/)?.[1] || location.hash.match(/ferramenta\/([^?]+)/)?.[1]; if(calc&&rid)calc.addEventListener('click',()=>calculate(rid));
   if(rid==='conversor-arquivos')bindFileConverter();
   if(['jpg-png-webp','heic-jpg','imagem-pdf','pdf-imagens-zip','mp4-mp3','mp4-gif','csv-xlsx','zip-arquivos','mov-mp4','jpg-heic','imagem-comprimir'].includes(rid))bindUniversalFileConverter(rid);
   if(rid==='por-quanto-vender'){
@@ -1081,8 +1109,7 @@ function bind(){
   }
   if(rid==='custo-receita'){const box=document.getElementById('recipeItems');if(box&&!box.children.length){addRecipeItemRow({name:'',qty:1,unit:'g',price:0});addRecipeItemRow({name:'',qty:1,unit:'g',price:0});addRecipeItemRow({name:'',qty:1,unit:'g',price:0});} const ar=document.getElementById('addRecipeItem');if(ar)ar.addEventListener('click',()=>addRecipeItemRow()); const ai=document.getElementById('analyzeRecipeBtn');if(ai)ai.addEventListener('click',analyzeRecipeAI);}
   if(rid==='churrasco'){/* sugestões são renderizadas junto da ferramenta */}
-  if(rid==='placas-solares'){const btn=document.getElementById('solarResourceBtn');if(btn)btn.addEventListener('click',updateSolarResource);const pb=document.getElementById('solarPricesBtn');if(pb)pb.addEventListener('click',updateSolarPrices);}
-  if(rid==='posicao-solar'){bindSolarPositionInteractions();}
+  if(['placas-solares','posicao-solar'].includes(rid)){bindSolarCalculatorInteractions();}
   if(rid==='festa'){const type=document.getElementById('partyType');if(type)type.addEventListener('change',()=>{const a=document.getElementById('age'); if(a)a.closest('.field').style.display=type.value.startsWith('aniversario-')?'':'none';}); if(type&&!type.value.startsWith('aniversario-')){const a=document.getElementById('age');if(a)a.closest('.field').style.display='none';} const ai=document.getElementById('aiPartyBtn');if(ai)ai.addEventListener('click',refinePartyAI); }
   const reset=document.getElementById('resetBtn'); if(reset)reset.addEventListener('click',()=>{location.reload();});
   const add=document.getElementById('addItem');if(add)add.addEventListener('click',addShoppingItem);
