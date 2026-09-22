@@ -13,3 +13,5 @@ pillow-heif>=0.18,<1
 python-docx>=1.1,<2
 reportlab>=4.0,<5
 cairosvg>=2.7,<3
+firebase-admin>=6.5,<7
+cryptography>=43,<46
