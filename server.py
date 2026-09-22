@@ -578,8 +578,11 @@ def _nominatim_search(query: str) -> dict[str, Any]:
 
 def geocode_solar(req: SolarResourceRequest) -> dict[str, Any]:
     cep_data: dict[str, Any] | None = None
-    if req.cep and len(re.sub(r"\D", "", req.cep)) == 8:
-        cep_data = _lookup_cep(req.cep)
+    if req.cep:
+        cep_digits = re.sub(r"\D", "", req.cep)
+        if len(cep_digits) != 8:
+            raise HTTPException(status_code=400, detail="CEP deve conter 8 dígitos.")
+        cep_data = _lookup_cep(cep_digits)
 
     street = (req.street or "").strip() or ((cep_data or {}).get("logradouro") or "").strip()
     neighborhood = (req.neighborhood or "").strip() or ((cep_data or {}).get("bairro") or "").strip()
