@@ -81,7 +81,7 @@ async function riskFillConfigInputs(){
   });
 }
 
-function riskCloudGet(){
+async function riskCloudGet(){
   const user=riskLoggedInUser();
   if(!user) return {exists:false,state:null};
   const token=await resolveiToken();
