@@ -35,6 +35,8 @@ load_dotenv()
 BASE_DIR = Path(__file__).resolve().parent
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "").strip()
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-5.6-luna").strip() or "gpt-5.6-luna"
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash").strip() or "gemini-2.5-flash"
 SERPAPI_KEY = os.getenv("SERPAPI_KEY", "").strip()
 FIREBASE_PROJECT_ID = os.getenv("FIREBASE_PROJECT_ID", "").strip()
 FIREBASE_CLIENT_EMAIL = os.getenv("FIREBASE_CLIENT_EMAIL", "").strip()
@@ -303,6 +305,27 @@ def _decrypt_secret(value: str) -> str:
     raw=base64.urlsafe_b64decode(value.encode())
     return AESGCM(_credential_key()).decrypt(raw[:12],raw[12:],None).decode()
 
+def _resolve_ai_credentials(authorization: str | None, provider: str = ""):
+    token=_verify_firebase_token(authorization)
+    from firebase_admin import firestore as firebase_firestore
+    docs=firebase_firestore.client().collection("users").document(token["uid"]).collection("aiConnections").stream()
+    conns={d.id:d.to_dict() or {} for d in docs}
+    wanted=(provider or "").lower().strip()
+    if wanted:
+        conn=conns.get(wanted,{})
+        if conn.get("secret"):
+            return wanted,_decrypt_secret(conn["secret"]),str(conn.get("model") or "")
+        if wanted=="gemini" and GEMINI_API_KEY:
+            return "gemini",GEMINI_API_KEY,GEMINI_MODEL
+        raise HTTPException(status_code=400,detail=f"Nenhuma conexão de IA para {wanted}.")
+    for candidate in ("gemini","openai","anthropic","openrouter"):
+        conn=conns.get(candidate,{})
+        if conn.get("secret"):
+            return candidate,_decrypt_secret(conn["secret"]),str(conn.get("model") or "")
+    if GEMINI_API_KEY:
+        return "gemini",GEMINI_API_KEY,GEMINI_MODEL
+    raise HTTPException(status_code=400,detail="Nenhuma IA conectada e o Gemini do Resolvei não está configurado.")
+
 def _provider_call(provider: str, api_key: str, model: str, message: str) -> str:
     provider=provider.lower()
     if provider=="openai":
@@ -361,12 +384,19 @@ def ai_chat(req: AIChatRequest, authorization: str | None = None):
     docs=firebase_firestore.client().collection("users").document(user["uid"]).collection("aiConnections").stream()
     conns={d.id:d.to_dict() or {} for d in docs}
     provider=req.provider.lower().strip()
-    if not provider:
-        provider=next((x for x in ("gemini","openai","anthropic","openrouter") if conns.get(x,{}).get("connected")), "")
-    if not provider or not conns.get(provider,{}).get("secret"):
-        raise HTTPException(status_code=400,detail="Nenhuma IA conectada. Acesse Conectar API.")
-    key=_decrypt_secret(conns[provider]["secret"])
-    model=req.model.strip() or conns[provider].get("model","")
+    key=""
+    model=req.model.strip()
+    if provider and conns.get(provider,{}).get("secret"):
+        key=_decrypt_secret(conns[provider]["secret"])
+        model=model or conns[provider].get("model","")
+    elif not provider:
+        provider,key,stored_model=_resolve_ai_credentials(authorization,"")
+        model=model or stored_model
+    elif provider=="gemini" and GEMINI_API_KEY:
+        key=GEMINI_API_KEY
+        model=model or GEMINI_MODEL
+    else:
+        raise HTTPException(status_code=400,detail="Nenhuma conexão de IA disponível para este provedor.")
     try:
         answer=_provider_call(provider,key,model,req.message)
         return {"provider":provider,"model":model,"answer":answer}
@@ -1061,11 +1091,11 @@ async def convert_plus(files: list[UploadFile] = File(...), output_format: str =
 
 @app.get("/api/health")
 def health() -> dict[str, Any]:
-    return {"ok": True, "ai_configured": bool(OPENAI_API_KEY), "prices_configured": bool(SERPAPI_KEY), "model": OPENAI_MODEL}
+    return {"ok": True, "ai_configured": bool(OPENAI_API_KEY or GEMINI_API_KEY), "gemini_configured": bool(GEMINI_API_KEY), "prices_configured": bool(SERPAPI_KEY), "model": OPENAI_MODEL, "gemini_model": GEMINI_MODEL}
 
 
 @app.post("/api/recipe/analyze")
-def analyze_recipe(req: RecipeRequest) -> dict[str, Any]:
+def analyze_recipe(req: RecipeRequest, authorization: str | None = None) -> dict[str, Any]:
     url = safe_url(req.url)
     html = fetch_html(url)
     soup = BeautifulSoup(html, "html.parser")
@@ -1074,12 +1104,21 @@ def analyze_recipe(req: RecipeRequest) -> dict[str, Any]:
     if not raw:
         raise HTTPException(status_code=422, detail="Não encontrei ingredientes estruturados nessa página. Tente outra URL ou insira os ingredientes manualmente.")
     ingredients = normalize_ingredients(raw, title)
-    # Quando o usuário fornece sua própria IA, ela também estima o custo dos ingredientes
-    # para a cidade/UF informadas. A chave não é persistida.
-    if req.api_key.strip():
+    # Usuários autenticados podem usar uma conexão pessoal ou o Gemini do Resolvei.
+    # A chave nunca é devolvida ao navegador.
+    price_api_key=req.api_key.strip()
+    price_provider=req.provider.strip().lower()
+    price_model=req.model.strip()
+    if not price_api_key and authorization:
+        try:
+            price_provider,price_api_key,stored_model=_resolve_ai_credentials(authorization,price_provider)
+            price_model=price_model or stored_model
+        except HTTPException:
+            price_api_key=""
+    if price_api_key:
         price_prompt = f"""Você é um estimador de preços de supermercado no Brasil. Analise os ingredientes abaixo para a receita "{title}". Para cada ingrediente, estime o preço do PRODUTO/QUANTIDADE efetivamente usada na receita, em reais, considerando preços típicos e atuais para {req.city}, {req.state.upper()}. Não confunda preço da embalagem inteira com custo proporcional à quantidade usada. Seja conservador quando houver variação regional. Retorne JSON exatamente no formato {{"items":[{{"name":"...","price":0.0,"source":"estimativa IA"}}]}}. Nunca invente links ou lojas. Ingredientes: """ + json.dumps([{"name":x.get("name",""),"quantity":x.get("quantity",1),"unit":x.get("unit","un.")} for x in ingredients], ensure_ascii=False)
         try:
-            raw_prices = _provider_call(req.provider or "gemini", req.api_key.strip(), req.model.strip(), price_prompt)
+            raw_prices = _provider_call(price_provider or "gemini", price_api_key, price_model, price_prompt)
             match = re.search(r"\{.*\}", raw_prices, re.S)
             if match:
                 estimated = json.loads(match.group(0)).get("items", [])
@@ -1161,7 +1200,7 @@ def sales_price(req: SalesPriceRequest) -> dict[str, Any]:
     }
 
 @app.post("/api/party/suggest")
-def party_suggest(req: PartyRequest) -> dict[str, Any]:
+def party_suggest(req: PartyRequest, authorization: str | None = None) -> dict[str, Any]:
     req.drinkers = min(req.drinkers, req.adults + req.kids)
     schema = {
         "type":"object","additionalProperties":False,
@@ -1175,6 +1214,18 @@ def party_suggest(req: PartyRequest) -> dict[str, Any]:
     }
     labels={"aniversario-infantil":"aniversário infantil","aniversario-adulto":"aniversário adulto","casamento":"casamento","firma":"festa da firma","cha-bebe":"chá de bebê","cha-revelacao":"chá revelação","noivado":"noivado","formatura":"formatura","bodas":"bodas","familiar":"comemoração familiar","junina":"festa junina","happy-hour":"happy hour","outro":"outra comemoração"}
     prompt=f"""Você é um planejador de festas para o Brasil. Monte um plano prático para: tipo={labels.get(req.type,req.type)}, idade do aniversariante={req.age}, adultos={req.adults}, crianças={req.kids}, duração={req.hours} horas, bebedores de álcool={req.drinkers}, bebida={req.alcohol}, orçamento por pessoa={req.budgetPerPerson}. Sugira comidas, bebidas alcoólicas e não alcoólicas, drinks quando apropriado, gelo, utensílios, copos, pratos, talheres, guardanapos, cadeiras e infraestrutura. Adapte o foco ao tipo e, em aniversário, considere a idade. Não invente preços. Dê quantidades em linguagem prática e explique brevemente o motivo de cada item. Para menores, não sugira consumo de álcool."""
+    if authorization:
+        try:
+            provider,api_key,model=_resolve_ai_credentials(authorization,"")
+            raw=_provider_call(provider,api_key,model,prompt)
+            match=re.search(r"\{.*\}",raw,re.S)
+            if match:
+                data=json.loads(match.group(0))
+                if isinstance(data,dict):
+                    data["source"]=provider
+                    return data
+        except Exception:
+            pass
     if OPENAI_API_KEY:
         try:
             data=openai_json(prompt,"resolvei_party",schema)
