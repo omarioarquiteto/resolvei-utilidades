@@ -32,6 +32,7 @@ const tools = [
   {id:'emprestimo',cat:'dinheiro',icon:'💳',title:'Custo de empréstimo',desc:'Estime quanto um empréstimo custa ao longo do tempo.',tags:'emprestimo crédito parcela juros'},
   {id:'meta-poupanca',cat:'dinheiro',icon:'🎯',title:'Meta de economia',desc:'Descubra quanto guardar por mês para chegar a uma meta.',tags:'guardar economizar poupar meta dinheiro'},
   {id:'poder-compra',cat:'dinheiro',icon:'🛒',title:'Poder de compra',desc:'Compare o valor nominal com uma inflação estimada.',tags:'inflação poder de compra dinheiro'},
+  {id:'analise-opcoes',cat:'dinheiro',icon:'⏱️',title:'Análise de opções binárias',desc:'Estude pares de moedas para entradas com expiração de 1, 5 ou 15 minutos.',tags:'opções binárias binary options call put compra venda expiração 1 5 15 moedas'},
   {id:'combustivel-viagem',cat:'carro',icon:'⛽',title:'Combustível da viagem',desc:'Estime litros necessários e custo da viagem.',tags:'gasolina etanol combustível viagem litros km'},
   {id:'custo-km',cat:'carro',icon:'🛣️',title:'Custo por km',desc:'Descubra quanto seu carro custa a cada quilômetro.',tags:'custo km carro combustível consumo'},
   {id:'gasolina-etanol',cat:'carro',icon:'⚖️',title:'Gasolina × etanol',desc:'Compare preços pela eficiência energética do combustível.',tags:'gasolina etanol álcool abastecer'},
