@@ -349,7 +349,7 @@ def _provider_call(provider: str, api_key: str, model: str, message: str) -> str
         return getattr(resp,"output_text","") or ""
     if provider=="gemini":
         url="https://generativelanguage.googleapis.com/v1beta/models/"+(model or "gemini-3.8-flash")+":generateContent"
-        resp=requests.post(url,headers={"x-goog-api-key":api_key,"Content-Type":"application/json"},json={"contents":[{"parts":[{"text":message}]}]},timeout=60)
+        resp=requests.post(url,headers={"x-goog-api-key":api_key,"Content-Type":"application/json"},json={"contents":[{"parts":[{"text":message}]}],"generationConfig":{"responseMimeType":"application/json"}},timeout=60)
         resp.raise_for_status()
         data=resp.json()
         return data["candidates"][0]["content"]["parts"][0]["text"]
@@ -1129,20 +1129,25 @@ def analyze_recipe(req: RecipeRequest, authorization: str | None = Header(defaul
             price_model=price_model or stored_model
         except HTTPException:
             price_api_key=""
+    ai_price_error = ""
+    ai_price_count = 0
     if price_api_key:
-        price_prompt = f"""Você é um estimador de preços de supermercado no Brasil. Analise os ingredientes abaixo para a receita "{title}". Para cada ingrediente, estime o preço do PRODUTO/QUANTIDADE efetivamente usada na receita, em reais, considerando preços típicos e atuais para {req.city}, {req.state.upper()}. Não confunda preço da embalagem inteira com custo proporcional à quantidade usada. Seja conservador quando houver variação regional. Retorne JSON exatamente no formato {{"items":[{{"name":"...","price":0.0,"source":"estimativa IA"}}]}}. Nunca invente links ou lojas. Ingredientes: """ + json.dumps([{"name":x.get("name",""),"quantity":x.get("quantity",1),"unit":x.get("unit","un.")} for x in ingredients], ensure_ascii=False)
+        price_prompt = f"""Você é um estimador de preços de supermercado no Brasil. Analise os ingredientes abaixo para a receita "{title}". Para cada ingrediente, estime o preço em reais da quantidade efetivamente usada na receita, considerando preços típicos e atuais para {req.city}, {req.state.upper()}. Não confunda o preço da embalagem inteira com o custo proporcional à quantidade usada. Seja conservador quando houver variação regional. Retorne somente JSON válido no formato {{"items":[{{"name":"...","price":0.0,"source":"estimativa IA"}}]}}. Inclua todos os ingredientes. Nunca invente links ou lojas. Ingredientes: """ + json.dumps([{"name":x.get("name",""),"quantity":x.get("quantity",1),"unit":x.get("unit","un.")} for x in ingredients], ensure_ascii=False)
         try:
             raw_prices = _provider_call(price_provider or "gemini", price_api_key, price_model, price_prompt)
-            match = re.search(r"\{.*\}", raw_prices, re.S)
-            if match:
-                estimated = json.loads(match.group(0)).get("items", [])
-                by_name={str(x.get("name","")).strip().lower():x for x in estimated if isinstance(x,dict)}
-                for ing in ingredients:
-                    p=by_name.get(str(ing.get("name","")).strip().lower())
-                    if p and isinstance(p.get("price"),(int,float)):
-                        ing["recipe_price"]=float(p["price"])
-        except Exception:
-            pass
+            raw_prices = re.sub(r"^\`\`\`(?:json)?\s*|\s*\`\`\`$", "", raw_prices.strip(), flags=re.I)
+            parsed = json.loads(raw_prices)
+            estimated = parsed.get("items", []) if isinstance(parsed, dict) else []
+            by_name={str(x.get("name","")).strip().lower():x for x in estimated if isinstance(x,dict)}
+            for ing in ingredients:
+                p=by_name.get(str(ing.get("name","")).strip().lower())
+                if p and isinstance(p.get("price"),(int,float)):
+                    ing["recipe_price"]=float(p["price"])
+                    ai_price_count += 1
+            if ai_price_count == 0:
+                ai_price_error = "A IA respondeu, mas não retornou preços em formato válido."
+        except Exception as exc:
+            ai_price_error = f"Não foi possível estimar os preços pela IA: {str(exc)[:180]}"
     price_items: list[dict[str, Any]] = []
     basket_total = 0.0
     if SERPAPI_KEY:
@@ -1160,6 +1165,8 @@ def analyze_recipe(req: RecipeRequest, authorization: str | None = Header(defaul
         "ingredients": ingredients,
         "price_summary": {"total": basket_total, "items": price_items} if SERPAPI_KEY else None,
         "price_note": price_note,
+        "ai_price_count": ai_price_count,
+        "ai_price_error": ai_price_error,
         "city": req.city,
         "state": req.state,
     }
