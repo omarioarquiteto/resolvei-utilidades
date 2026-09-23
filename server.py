@@ -74,7 +74,7 @@ app = FastAPI(title="Resolvei API", version="3.0.0")
 # O frontend atualmente é servido pelo próprio FastAPI, portanto as requisições
 # são same-origin. Mantemos CORS configurável para o domínio próprio e futuros
 # clientes externos sem expor credenciais.
-_default_origins = "https://resolvei-utilidades.onrender.com,https://resolvei.com.br,https://www.resolvei.com.br,http://localhost:8000,http://localhost:8080"
+_default_origins = "https://resolvei.onrender.com,https://resolvei-utilidades.onrender.com,https://resolvei.com.br,https://www.resolvei.com.br,http://localhost:8000,http://localhost:8080"
 CORS_ORIGINS = [x.strip() for x in os.getenv("CORS_ORIGINS", _default_origins).split(",") if x.strip()]
 app.add_middleware(
     CORSMiddleware,
