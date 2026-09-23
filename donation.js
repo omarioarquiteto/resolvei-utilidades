@@ -1,6 +1,15 @@
 (() => {
   const PIX_KEY = "74bda51d-f08c-46ee-9dbb-464d79f8a344";
-  const PIX_PAYLOAD = "00020126360014BR.GOV.BCB.PIX0114" + PIX_KEY + "5204000053039865802BR5910RESOLVEI6006CUIABA62070503***6304";
+  function crc16(str){
+    let crc=0xFFFF;
+    for(let i=0;i<str.length;i++){
+      crc ^= str.charCodeAt(i)<<8;
+      for(let j=0;j<8;j++) crc=(crc&0x8000)?((crc<<1)^0x1021)&0xFFFF:(crc<<1)&0xFFFF;
+    }
+    return crc.toString(16).toUpperCase().padStart(4,"0");
+  }
+  const pixWithoutCrc = "00020126580014BR.GOV.BCB.PIX0136" + PIX_KEY + "5204000053039865802BR5910RESOLVEI6006CUIABA62070503***6304";
+  const PIX_PAYLOAD = pixWithoutCrc + crc16(pixWithoutCrc);
   // QR rendering is provided by the public QR image endpoint; the Pix key itself remains visible/copyable.
   const qrUrl = "https://api.qrserver.com/v1/create-qr-code/?size=320x320&margin=12&data=" + encodeURIComponent(PIX_PAYLOAD);
 
