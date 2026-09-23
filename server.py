@@ -149,6 +149,10 @@ class AIChatRequest(BaseModel):
     provider: str = ""
     model: str = ""
 
+class RiskProgressRequest(BaseModel):
+    state: dict[str, Any] = Field(default_factory=dict)
+
+
 class SolarImageRequest(BaseModel):
     imageData: str
     terrainWidth: float = 0
@@ -1325,6 +1329,51 @@ def party_suggest(req: PartyRequest, authorization: str | None = Header(default=
     result=fallback_party(req)
     result["ai_note"]="A IA não está configurada/indisponível; o Resolvei usou o plano-base inteligente." if not OPENAI_API_KEY else "A IA ficou indisponível; o Resolvei usou o plano-base inteligente."
     return result
+
+
+@app.get("/api/risk/state")
+def risk_state_get(authorization: str | None = Header(default=None)) -> dict[str, Any]:
+    user = _verify_firebase_token(authorization)
+    if not _firebase_admin:
+        raise HTTPException(status_code=503, detail="Firebase indisponível.")
+    from firebase_admin import firestore as firebase_firestore
+    ref = (
+        firebase_firestore.client()
+        .collection("users").document(user["uid"])
+        .collection("riskProgress").document("capitalEvolution")
+    )
+    snap = ref.get()
+    if not snap.exists:
+        return {"exists": False, "state": None}
+    data = snap.to_dict() or {}
+    state = data.get("state")
+    return {"exists": isinstance(state, dict), "state": state if isinstance(state, dict) else None}
+
+
+@app.put("/api/risk/state")
+def risk_state_save(req: RiskProgressRequest, authorization: str | None = Header(default=None)) -> dict[str, Any]:
+    user = _verify_firebase_token(authorization)
+    if not _firebase_admin:
+        raise HTTPException(status_code=503, detail="Firebase indisponível.")
+    state = req.state if isinstance(req.state, dict) else {}
+    try:
+        encoded = json.dumps(state, ensure_ascii=False, separators=(",", ":"))
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail="Estado do plano inválido.") from exc
+    if len(encoded) > 500_000:
+        raise HTTPException(status_code=413, detail="O histórico do plano está muito grande.")
+    from firebase_admin import firestore as firebase_firestore
+    ref = (
+        firebase_firestore.client()
+        .collection("users").document(user["uid"])
+        .collection("riskProgress").document("capitalEvolution")
+    )
+    ref.set({
+        "state": state,
+        "schemaVersion": 1,
+        "updatedAt": firebase_firestore.SERVER_TIMESTAMP
+    }, merge=True)
+    return {"ok": True, "saved": True}
 
 
 @app.post("/api/prices/search")
