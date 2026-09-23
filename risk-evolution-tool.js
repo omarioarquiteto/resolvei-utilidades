@@ -56,6 +56,97 @@ function riskSave(){
   try{ localStorage.setItem(RISK_STORAGE_KEY, JSON.stringify(resolveiRiskState)); }catch{}
 }
 
+let resolveiRiskCloudUid = null;
+let resolveiRiskHydratingUid = null;
+let resolveiRiskCloudSaveTimer = null;
+
+function riskLoggedInUser(){
+  return (typeof resolveiUser !== 'undefined' && resolveiUser) ? resolveiUser : null;
+}
+
+async function riskCloudGet(){
+  const user=riskLoggedInUser();
+  if(!user) return {exists:false,state:null};
+  const token=await resolveiToken();
+  const response=await fetch('/api/risk/state',{headers:{Authorization:'Bearer '+token}});
+  let data={};
+  try{data=await response.json();}catch{}
+  if(!response.ok) throw new Error(data.detail||'Não foi possível carregar seu progresso.');
+  return data;
+}
+
+async function riskCloudPut(showStatus=false){
+  const user=riskLoggedInUser();
+  if(!user) return false;
+  try{
+    const token=await resolveiToken();
+    const response=await fetch('/api/risk/state',{
+      method:'PUT',
+      headers:{'Content-Type':'application/json',Authorization:'Bearer '+token},
+      body:JSON.stringify({state:resolveiRiskState})
+    });
+    let data={};
+    try{data=await response.json();}catch{}
+    if(!response.ok) throw new Error(data.detail||'Não foi possível salvar seu progresso.');
+    resolveiRiskCloudUid=user.uid;
+    const status=document.getElementById('riskCloudStatus');
+    if(status) status.textContent='☁️ Salvo na sua conta';
+    return !!data.saved;
+  }catch(error){
+    const status=document.getElementById('riskCloudStatus');
+    if(status) status.textContent='⚠️ Salvo localmente; sincronização pendente';
+    if(showStatus) console.warn('Resolvei risk cloud save:',error);
+    return false;
+  }
+}
+
+function riskCloudScheduleSave(){
+  const user=riskLoggedInUser();
+  if(!user) return;
+  clearTimeout(resolveiRiskCloudSaveTimer);
+  resolveiRiskCloudSaveTimer=setTimeout(()=>riskCloudPut(false),250);
+}
+
+async function riskHydrateFromCloud(){
+  const user=riskLoggedInUser();
+  if(!user || resolveiRiskHydratingUid===user.uid) return;
+  resolveiRiskHydratingUid=user.uid;
+  const status=document.getElementById('riskCloudStatus');
+  if(status) status.textContent='☁️ Sincronizando…';
+  try{
+    const data=await riskCloudGet();
+    const localOwner=localStorage.getItem(RISK_STORAGE_KEY+'_owner');
+    if(data.exists && data.state && typeof data.state==='object'){
+      resolveiRiskState={
+        config:{...riskDefaults().config,...(data.state.config||{})},
+        session:{...riskDefaults().session,...(data.state.session||{})},
+        history:Array.isArray(data.state.history)?data.state.history.slice(-80):[]
+      };
+      localStorage.setItem(RISK_STORAGE_KEY,JSON.stringify(resolveiRiskState));
+      localStorage.setItem(RISK_STORAGE_KEY+'_owner',user.uid);
+    }else if(!localOwner || localOwner===user.uid){
+      localStorage.setItem(RISK_STORAGE_KEY+'_owner',user.uid);
+      await riskCloudPut(true);
+    }else{
+      resolveiRiskState=riskDefaults();
+      localStorage.setItem(RISK_STORAGE_KEY,JSON.stringify(resolveiRiskState));
+      localStorage.setItem(RISK_STORAGE_KEY+'_owner',user.uid);
+      await riskCloudPut(true);
+    }
+  }catch(error){
+    if(status) status.textContent='⚠️ Não foi possível sincronizar; usando cópia local';
+    console.warn('Resolvei risk cloud hydrate:',error);
+  }finally{
+    riskHydratingDone();
+  }
+}
+
+function riskHydratingDone(){
+  riskRender();
+  const status=document.getElementById('riskCloudStatus');
+  if(status && riskLoggedInUser() && resolveiRiskCloudUid===riskLoggedInUser().uid) status.textContent='☁️ Sincronizado com sua conta';
+}
+
 function riskConfigFromDOM(){
   const initial = Math.max(0.01, riskRead('riskInitialCapital') || 500);
   const entryPct = Math.min(50, Math.max(0.001, riskRead('riskEntryPct') || 0.5));
@@ -195,12 +286,14 @@ function riskRegister(result){
   }
   state.history=state.history.slice(-80);
   riskSave();
+  riskCloudScheduleSave();
   riskRender();
 }
 
 function riskResetAll(){
   resolveiRiskState=riskDefaults();
   riskSave();
+  riskCloudScheduleSave();
   riskRender();
 }
 
@@ -213,6 +306,7 @@ function riskRestartFromRemaining(){
     baseCapital:c,accumulatedLoss:0,status:'active'
   };
   riskSave();
+  riskCloudScheduleSave();
   riskRender();
 }
 
@@ -338,7 +432,8 @@ function riskEvolutionUI(){
         <button class="btn" id="riskLossBtn" type="button">❌ Registrar LOSS</button>
         <button class="btn ghost" id="riskRestartBtn" type="button">↻ Recomeçar com capital restante</button>
       </div>
-      <div class="risk-note">O registro é salvo somente neste navegador. Ele serve para acompanhamento do plano; não envia dados para o servidor.</div>
+      <div class="risk-note">O histórico funciona no navegador e, quando você está logado, o mesmo progresso é sincronizado com sua conta do Resolvei.</div>
+      <div class="notice" id="riskCloudStatus">💾 Aguardando sincronização</div>
     </section>
 
     <section class="risk-section-card card">
@@ -415,6 +510,7 @@ function riskApplyConfig(){
 function riskClearHistory(){
   resolveiRiskState.history=[];
   riskSave();
+  riskCloudScheduleSave();
   riskRender();
 }
 
@@ -446,4 +542,5 @@ function bindRiskEvolutionTool(){
   const exportBtn=document.getElementById('riskExportBtn');
   if(exportBtn) exportBtn.addEventListener('click',riskExportCsv);
   riskRender();
+  riskHydrateFromCloud();
 }
