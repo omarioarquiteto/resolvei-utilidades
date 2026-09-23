@@ -27,6 +27,7 @@ except Exception:
     pass
 
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, Response
 from pydantic import BaseModel, Field
 
@@ -69,6 +70,19 @@ if FIREBASE_PROJECT_ID and FIREBASE_CLIENT_EMAIL and FIREBASE_PRIVATE_KEY:
         _firebase_admin = None
 
 app = FastAPI(title="Resolvei API", version="3.0.0")
+
+# O frontend atualmente é servido pelo próprio FastAPI, portanto as requisições
+# são same-origin. Mantemos CORS configurável para o domínio próprio e futuros
+# clientes externos sem expor credenciais.
+_default_origins = "https://resolvei-utilidades.onrender.com,https://resolvei.com.br,https://www.resolvei.com.br,http://localhost:8000,http://localhost:8080"
+CORS_ORIGINS = [x.strip() for x in os.getenv("CORS_ORIGINS", _default_origins).split(",") if x.strip()]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=CORS_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 ALLOWED_HOSTS = {"resolvei.com.br", "www.resolvei.com.br", "localhost", "127.0.0.1"}
 
@@ -1091,7 +1105,7 @@ async def convert_plus(files: list[UploadFile] = File(...), output_format: str =
 
 @app.get("/api/health")
 def health() -> dict[str, Any]:
-    return {"ok": True, "ai_configured": bool(OPENAI_API_KEY or GEMINI_API_KEY), "gemini_configured": bool(GEMINI_API_KEY), "prices_configured": bool(SERPAPI_KEY), "model": OPENAI_MODEL, "gemini_model": GEMINI_MODEL}
+    return {"ok": True, "ai_configured": bool(OPENAI_API_KEY or GEMINI_API_KEY), "gemini_configured": bool(GEMINI_API_KEY), "prices_configured": bool(SERPAPI_KEY), "firebase_admin_configured": bool(_firebase_admin), "encryption_configured": bool(RESOLVEI_CREDENTIAL_ENCRYPTION_KEY), "model": OPENAI_MODEL, "gemini_model": GEMINI_MODEL}
 
 
 @app.post("/api/recipe/analyze")
