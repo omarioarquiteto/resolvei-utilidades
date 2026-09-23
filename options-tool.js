@@ -71,7 +71,7 @@ function loadChart(){
 }
 async function getData(entryIndex){
   var symbol=document.getElementById("optSymbol").value,expiry=document.getElementById("optExpiry").value;
-  var output=5000;
+  var output=1200;
   var url="/api/options/analyze?symbol="+encodeURIComponent(symbol)+"&expiry="+encodeURIComponent(expiry)+"&outputsize="+output;
   if(Number.isInteger(entryIndex)&&entryIndex>=0)url+="&entry_index="+entryIndex;
   var r=await fetch(url),d=await r.json();if(!r.ok)throw new Error(d.detail||"Falha ao consultar o mercado.");return d;
@@ -140,7 +140,7 @@ function route(){
 }
 var oldRender=window.render;
 window.render=function(){if(!route()&&oldRender)oldRender();};
-if((location.hash||"").indexOf("analise-opcoes")>=0)route();
+window.addEventListener("hashchange",route);if((location.hash||"").indexOf("analise-opcoes")>=0)route();
 var nav=document.querySelector(".nav-links");
 if(nav&&!document.getElementById("binaryOptionsNav")){
   var link=document.createElement("a");link.id="binaryOptionsNav";link.href="#/ferramenta/analise-opcoes";link.textContent="📊 Opções binárias";nav.insertBefore(link,nav.firstChild);
