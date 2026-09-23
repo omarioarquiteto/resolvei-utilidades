@@ -354,7 +354,9 @@ def _provider_call(provider: str, api_key: str, model: str, message: str) -> str
         requested_model = model or "gemini-3.8-flash"
         models_to_try = [requested_model]
         if requested_model == "gemini-3.8-flash":
-            models_to_try.extend(["gemini-3.7-flash", "gemini-3.6-flash"])
+            # Em caso de 503 persistente na família Gemini 3.x, usar uma família
+            # mais antiga/estável como fallback evita que a ferramenta fique parada.
+            models_to_try.extend(["gemini-2.5-flash", "gemini-3.5-flash-lite"])
         last_exc = None
         for candidate_model in dict.fromkeys(models_to_try):
             url="https://generativelanguage.googleapis.com/v1beta/models/"+candidate_model+":generateContent"
