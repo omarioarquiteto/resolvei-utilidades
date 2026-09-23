@@ -1,19 +1,21 @@
 {
-  "$schema": "https://openapi.vercel.sh/vercel.json",
-  "version": 2,
-  "builds": [
-    { "src": "server.py", "use": "@vercel/python" },
-    { "src": "*.html", "use": "@vercel/static" },
-    { "src": "*.js", "use": "@vercel/static" },
-    { "src": "*.css", "use": "@vercel/static" },
-    { "src": "*.svg", "use": "@vercel/static" },
-    { "src": "*.webmanifest", "use": "@vercel/static" },
-    { "src": "*.json", "use": "@vercel/static" }
+  "$schema":"https://openapi.vercel.sh/vercel.json",
+  "version":2,
+  "builds":[
+    {"src":"server.py","use":"@vercel/python"},
+    {"src":"api/options.py","use":"@vercel/python"},
+    {"src":"*.html","use":"@vercel/static"},
+    {"src":"*.js","use":"@vercel/static"},
+    {"src":"*.css","use":"@vercel/static"},
+    {"src":"*.svg","use":"@vercel/static"},
+    {"src":"*.webmanifest","use":"@vercel/static"},
+    {"src":"*.json","use":"@vercel/static"}
   ],
-  "routes": [
-    { "src": "/api/(.*)", "dest": "/server.py" },
-    { "src": "/(.*\\.(html|js|css|svg|webmanifest|json|png|jpg|jpeg|webp|ico))", "dest": "/$1" },
-    { "src": "/", "dest": "/index.html" },
-    { "src": "/(.*)", "dest": "/index.html" }
+  "routes":[
+    {"src":"/api/options/(.*)","dest":"/api/options.py"},
+    {"src":"/api/(.*)","dest":"/server.py"},
+    {"src":"/(.*\\.(html|js|css|svg|webmanifest|json|png|jpg|jpeg|webp|ico))","dest":"/$1"},
+    {"src":"/","dest":"/index.html"},
+    {"src":"/(.*)","dest":"/index.html"}
   ]
 }
