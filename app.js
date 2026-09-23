@@ -1113,7 +1113,7 @@ const RESOLVEI_FIREBASE_CONFIG = {
   projectId:"resolvei-c95d1",storageBucket:"resolvei-c95d1.firebasestorage.app",
   messagingSenderId:"671425023175",appId:"1:671425023175:web:deb8ce2174b07e6c16c2e2"
 };
-let resolveiAuth=null,resolveiDb=null,resolveiUser=null;
+let resolveiAuth=null,resolveiDb=null,resolveiUser=null,resolveiFirebaseError="";
 function resolveiAuthMessage(error){
   const code=error?.code||"";
   const map={
@@ -1135,14 +1135,14 @@ function resolveiFirebaseInit(){
   try{
     if(!window.firebase)throw new Error("O SDK do Firebase não foi carregado.");
     if(!firebase.apps.length)firebase.initializeApp(RESOLVEI_FIREBASE_CONFIG);
-    resolveiAuth=firebase.auth();resolveiDb=firebase.firestore();
+    resolveiAuth=firebase.auth();try{resolveiDb=firebase.firestore();}catch(e){console.warn("Firestore indisponível; autenticação continuará funcionando:",e);resolveiDb=null;}resolveiFirebaseError="";
     resolveiAuth.onAuthStateChanged(user=>{
       resolveiUser=user||null;
       const n=document.getElementById("accountNav");if(n)n.textContent=user?"👤 Minha conta":"👤 Entrar";
       if((location.hash||"").includes("conta")||(location.hash||"").includes("conectar-api")){render();setTimeout(resolveiBindAuth,0);}
     });
     setTimeout(resolveiBindAuth,0);
-  }catch(e){console.error("Firebase init:",e);resolveiFirebaseError=resolveiAuthMessage(e);}
+  }catch(e){console.error("Firebase init:",e);resolveiFirebaseError=resolveiAuthMessage(e);setTimeout(()=>{const m=document.getElementById("authMsg");if(m){m.hidden=false;m.textContent="⚠️ Firebase não foi inicializado: "+resolveiFirebaseError;}},0);}
 }
 async function resolveiToken(){if(!resolveiUser)throw new Error("Faça login no Resolvei.");return resolveiUser.getIdToken();}
 function resolveiAccountPage(){
@@ -1159,7 +1159,8 @@ async function resolveiRefreshStatuses(){
  catch(e){document.querySelectorAll(".provider-status").forEach(x=>x.textContent="⚠️ Servidor não configurado");}
 }
 function resolveiBindAuth(){
- if(!resolveiAuth)return;
+ const authMsg=document.getElementById("authMsg");
+ if(!resolveiAuth){if(authMsg){authMsg.hidden=false;authMsg.textContent="⚠️ O serviço de login ainda não foi inicializado. Recarregue a página e tente novamente.";}return;}
  const google=document.getElementById("googleLogin");if(google&&!google.dataset.bound){google.dataset.bound="1";google.addEventListener("click",async()=>{google.disabled=true;google.textContent="Abrindo Google…";try{const p=new firebase.auth.GoogleAuthProvider();p.setCustomParameters({prompt:"select_account"});await resolveiAuth.signInWithPopup(p);location.hash="#/conta";}catch(e){console.error("Google login:",e);resolveiShowAuthError(resolveiAuthMessage(e));google.disabled=false;google.textContent="Continuar com Google";}});}
  const email=()=>document.getElementById("authEmail")?.value.trim(),pass=()=>document.getElementById("authPassword")?.value||"";
  const login=document.getElementById("emailLogin");if(login&&!login.dataset.bound){login.dataset.bound="1";login.addEventListener("click",async()=>{if(!email()||!pass()){resolveiShowAuthError("Informe e-mail e senha.");return;}login.disabled=true;login.textContent="Entrando…";try{await resolveiAuth.signInWithEmailAndPassword(email(),pass());location.hash="#/conta";}catch(e){console.error("Email login:",e);resolveiShowAuthError(resolveiAuthMessage(e));}finally{login.disabled=false;login.textContent="Entrar";}});}
