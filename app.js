@@ -1006,6 +1006,7 @@ function bindUniversalFileConverter(id){
 }
 
 function bind(){
+  resolveiBindAccountSections();
   document.querySelectorAll('[data-fav]').forEach(b=>b.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();toggleFav(b.dataset.fav)}));
   const gs=document.getElementById('globalSearch'); if(gs){gs.addEventListener('keydown',e=>{if(e.key==='Enter'){const q=gs.value.trim(); if(q){location.hash='#/ferramentas?q='+encodeURIComponent(q)}}});}
   document.querySelectorAll('[data-search]').forEach(b=>b.addEventListener('click',()=>{location.hash='#/ferramentas?q='+encodeURIComponent(b.dataset.search)}));
@@ -1149,9 +1150,79 @@ function resolveiFirebaseInit(){
 }
 async function resolveiToken(){if(!resolveiUser)throw new Error("Faça login no Resolvei.");return resolveiUser.getIdToken();}
 function resolveiAccountPage(){
- if(!resolveiUser)return `<div class="tool-layout"><section class="card panel auth-card"><span class="eyebrow">CONTA RESOLVEI</span><h1>Entre para usar as funções de IA</h1><p>Use Google ou seu e-mail e senha. Ao entrar com Google, o Gemini do Resolvei fica disponível sem você precisar colar uma chave pessoal.</p><button class="btn primary full" id="googleLogin">Continuar com Google</button><div class="auth-divider"><span>ou</span></div><div class="form-grid"><div class="field"><label for="authEmail">E-mail</label><input id="authEmail" type="email"></div><div class="field"><label for="authPassword">Senha</label><input id="authPassword" type="password" autocomplete="current-password"></div></div><div class="row-actions"><button type="button" class="btn primary" id="emailLogin">Entrar</button><button type="button" class="btn" id="emailSignup">Criar conta</button></div><div id="authMsg" class="notice" hidden></div></section></div>`;
- return `<div class="account-page"><aside class="account-sidebar"><div class="account-profile"><div class="account-avatar">👤</div><div><strong>${esc(resolveiUser.displayName||"Minha conta")}</strong><span>${esc(resolveiUser.email||"")}</span></div></div><div class="account-menu"><button class="active">🤖 Minha IA</button><button>👤 Perfil</button><button>⚙️ Preferências</button></div><button class="btn account-logout" id="logoutBtn">Sair da conta</button></aside><section class="account-main"><div class="account-heading"><div><span class="eyebrow">MINHA CONTA</span><h1>Configuração da IA</h1><p>Gerencie seus provedores e modelos de inteligência artificial.</p></div><div class="account-status">🟢 Conta ativa</div></div><div class="account-ai-settings">${resolveiApiPage()}</div></section></div>`;
+ if(!resolveiUser)return \`<div class="tool-layout"><section class="card panel auth-card"><span class="eyebrow">CONTA RESOLVEI</span><h1>Entre para usar as funções de IA</h1><p>Use Google ou seu e-mail e senha. Ao entrar com Google, o Gemini do Resolvei fica disponível sem você precisar colar uma chave pessoal.</p><button class="btn primary full" id="googleLogin">Continuar com Google</button><div class="auth-divider"><span>ou</span></div><div class="form-grid"><div class="field"><label for="authEmail">E-mail</label><input id="authEmail" type="email"></div><div class="field"><label for="authPassword">Senha</label><input id="authPassword" type="password" autocomplete="current-password"></div></div><div class="row-actions"><button type="button" class="btn primary" id="emailLogin">Entrar</button><button type="button" class="btn" id="emailSignup">Criar conta</button></div><div id="authMsg" class="notice" hidden></div></section></div>\`;
+ const savedTheme=localStorage.getItem("resolvei_theme")||"light";
+ return \`<div class="account-page">
+  <aside class="account-sidebar">
+   <div class="account-profile"><div class="account-avatar">👤</div><div><strong>\${esc(resolveiUser.displayName||"Minha conta")}</strong><span>\${esc(resolveiUser.email||"")}</span></div></div>
+   <div class="account-menu">
+    <button type="button" class="active" data-account-section="ia">🤖 Minha IA</button>
+    <button type="button" data-account-section="perfil">👤 Perfil</button>
+    <button type="button" data-account-section="preferencias">⚙️ Preferências</button>
+   </div>
+   <button class="btn account-logout" id="logoutBtn">Sair da conta</button>
+  </aside>
+  <section class="account-main">
+   <div class="account-heading"><div><span class="eyebrow">MINHA CONTA</span><h1 id="accountSectionTitle">Configuração da IA</h1><p id="accountSectionDesc">Gerencie seus provedores e modelos de inteligência artificial.</p></div><div class="account-status">🟢 Conta ativa</div></div>
+   <div class="account-section" data-account-content="ia"><div class="account-ai-settings">\${resolveiApiPage()}</div></div>
+   <div class="account-section" data-account-content="perfil" hidden>
+    <section class="card panel account-inner-card">
+     <h2>Meu perfil</h2><p class="muted">Atualize as informações básicas da sua conta do Resolvei.</p>
+     <div class="form-grid account-profile-form">
+      <div class="field"><label for="profileName">Nome</label><input id="profileName" type="text" value="\${esc(resolveiUser.displayName||"")}" placeholder="Como você quer ser chamado?"></div>
+      <div class="field"><label for="profileEmail">E-mail</label><input id="profileEmail" type="email" value="\${esc(resolveiUser.email||"")}" disabled></div>
+     </div>
+     <div class="row-actions"><button class="btn primary" id="saveProfileBtn">Salvar perfil</button></div>
+     <div id="profileMsg" class="notice" hidden></div>
+    </section>
+   </div>
+   <div class="account-section" data-account-content="preferencias" hidden>
+    <section class="card panel account-inner-card">
+     <h2>Preferências</h2><p class="muted">Escolha como o Resolvei deve aparecer para você neste navegador.</p>
+     <div class="preference-list">
+      <label class="preference-option"><span><strong>Tema escuro</strong><small>Ative o modo escuro do Resolvei.</small></span><input id="preferenceDark" type="checkbox" \${savedTheme==="dark"?"checked":""}></label>
+     </div>
+     <div class="row-actions"><button class="btn primary" id="savePreferencesBtn">Salvar preferências</button></div>
+     <div id="preferencesMsg" class="notice" hidden></div>
+    </section>
+   </div>
+  </section>
+ </div>\`;
 }
+function resolveiBindAccountSections(){
+ const root=document.querySelector(".account-page"); if(!root || root.dataset.accountBound==="1")return;
+ root.dataset.accountBound="1";
+ const titles={ia:["Configuração da IA","Gerencie seus provedores e modelos de inteligência artificial."],perfil:["Meu perfil","Atualize seus dados básicos da conta."],preferencias:["Preferências","Personalize a aparência e o comportamento do Resolvei."]};
+ const buttons=root.querySelectorAll("[data-account-section]");
+ const sections=root.querySelectorAll("[data-account-content]");
+ const show=(name)=>{
+   buttons.forEach(b=>b.classList.toggle("active",b.dataset.accountSection===name));
+   sections.forEach(s=>s.hidden=s.dataset.accountContent!==name);
+   const t=titles[name]||titles.ia;
+   const h=root.querySelector("#accountSectionTitle"),p=root.querySelector("#accountSectionDesc");
+   if(h)h.textContent=t[0]; if(p)p.textContent=t[1];
+   if(name==="ia"){resolveiRefreshStatuses();setTimeout(()=>resolveiBindAiButtons(),0);}
+ };
+ buttons.forEach(b=>b.addEventListener("click",()=>show(b.dataset.accountSection)));
+ const saveProfile=root.querySelector("#saveProfileBtn");
+ if(saveProfile)saveProfile.addEventListener("click",async()=>{
+   const msg=root.querySelector("#profileMsg"),name=root.querySelector("#profileName")?.value.trim();
+   if(!name){if(msg){msg.hidden=false;msg.textContent="Informe seu nome.";};return;}
+   saveProfile.disabled=true;saveProfile.textContent="Salvando…";
+   try{await resolveiUser.updateProfile({displayName:name});const profileName=root.querySelector(".account-profile strong");if(profileName)profileName.textContent=name;if(msg){msg.hidden=false;msg.textContent="✅ Perfil atualizado com sucesso.";}}
+   catch(e){if(msg){msg.hidden=false;msg.textContent="⚠️ Não foi possível atualizar o perfil: "+(e.message||"Erro desconhecido.");}}
+   finally{saveProfile.disabled=false;saveProfile.textContent="Salvar perfil";}
+ });
+ const savePrefs=root.querySelector("#savePreferencesBtn");
+ if(savePrefs)savePrefs.addEventListener("click",()=>{
+   const dark=!!root.querySelector("#preferenceDark")?.checked;
+   document.documentElement.dataset.theme=dark?"dark":"";
+   localStorage.setItem("resolvei_theme",dark?"dark":"light");
+   const msg=root.querySelector("#preferencesMsg"); if(msg){msg.hidden=false;msg.textContent="✅ Preferências salvas.";setTimeout(()=>{msg.hidden=true;},2200);}
+ });
+ show("ia");
+}
+
 const RESOLVEI_PROVIDERS={gemini:{name:"Google Gemini",icon:"✨",defaultModel:"gemini-3.8-flash"},openai:{name:"OpenAI",icon:"◉",defaultModel:"gpt-4.1-mini"},anthropic:{name:"Anthropic Claude",icon:"◆",defaultModel:"claude-3-5-haiku-latest"},openrouter:{name:"OpenRouter",icon:"↗",defaultModel:"openai/gpt-4.1-mini"}};
 function resolveiApiPage(){
  if(!resolveiUser)return `<div class="tool-layout"><section class="card panel"><h1>🔌 Conectar API</h1><p>Entre no Resolvei para conectar uma IA.</p><a class="btn primary" href="#/conta">Entrar / Criar conta</a></section></div>`;
