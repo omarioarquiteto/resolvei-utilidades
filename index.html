@@ -14,15 +14,28 @@
 <body>
   <header class="site-header"><div class="container nav-wrap">
     <a href="#/" class="brand" aria-label="Resolvei, início"><span class="brand-mark">✓</span><span>Resolvei</span></a>
-    <nav class="nav-links" aria-label="Principal"><a href="#/">Início</a><a href="#/ferramentas">Ferramentas</a><a href="#/categorias">Categorias</a><a href="#/favoritos">Favoritos <span id="favCount" class="nav-badge">0</span></a><a href="#/conta" id="accountNav">👤 Entrar</a><a href="#/conectar-api">✨ Minha IA</a></nav>
+    <nav class="nav-links" aria-label="Principal"><a href="#/">Início</a><a href="#/ferramentas">Ferramentas</a><a href="#/categorias">Categorias</a><a href="#/favoritos">Favoritos <span id="favCount" class="nav-badge">0</span></a><a href="#/conta" id="accountNav">👤 Entrar</a><a href="#/conectar-api">✨ Minha IA</a><a href="#" class="donation-nav-link" data-donation-open>💚 Valeu!</a></nav>
     <button id="themeToggle" class="icon-btn" type="button" aria-label="Alternar tema">☼</button>
   </div></header>
   <main id="app" class="container app-shell"></main>
-  <footer class="site-footer"><div class="container footer-grid"><div><div class="brand footer-brand"><span class="brand-mark">✓</span><span>Resolvei</span></div><p>Pequenas ferramentas para resolver grandes dúvidas do dia a dia.</p></div><div><strong>Explorar</strong><a href="#/ferramentas">Todas as ferramentas</a><a href="#/categorias">Categorias</a></div><div><strong>Projeto</strong><a href="#/sobre">Sobre o Resolvei</a><a href="#/privacidade">Privacidade</a></div></div><div class="container footer-bottom">© <span id="year"></span> Resolvei. Resultados são estimativas e não substituem orientação profissional.</div></footer>
+  <footer class="site-footer"><div class="container footer-grid"><div><div class="brand footer-brand"><span class="brand-mark">✓</span><span>Resolvei</span></div><p>Pequenas ferramentas para resolver grandes dúvidas do dia a dia.</p><div class="donation-footer-box"><strong>💚 O Resolvei é grátis e sempre continuará sendo.</strong><span>Se puder, deixe o seu <b>VALEU!</b> doando algum valor para ajudar o projeto a evoluir ainda mais.</span><button class="btn btn-primary donation-btn" type="button" data-donation-open>Quero deixar meu VALEU!</button></div></div><div><strong>Explorar</strong><a href="#/ferramentas">Todas as ferramentas</a><a href="#/categorias">Categorias</a></div><div><strong>Projeto</strong><a href="#/sobre">Sobre o Resolvei</a><a href="#/privacidade">Privacidade</a></div></div><div class="container footer-bottom">© <span id="year"></span> Resolvei. Resultados são estimativas e não substituem orientação profissional.</div></footer>
+  <div id="donationModal" class="donation-modal" aria-hidden="true">
+    <div class="donation-dialog" role="dialog" aria-modal="true" aria-labelledby="donationTitle">
+      <button class="donation-close" type="button" aria-label="Fechar" data-donation-close>×</button>
+      <div class="donation-icon">💚</div>
+      <h2 id="donationTitle">Deixe seu VALEU!</h2>
+      <p>O Resolvei é grátis e sempre continuará sendo. Se o projeto já te ajudou, você pode contribuir com qualquer valor para ajudar a manter e evoluir as ferramentas.</p>
+      <div class="donation-qr-wrap"><img id="donationQr" alt="QR Code para doação via Pix"></div>
+      <div class="donation-pix-label">Chave Pix</div>
+      <div class="donation-pix-row"><code id="donationPixKey">74bda51d-f08c-46ee-9dbb-464d79f8a344</code><button id="copyPixBtn" class="btn btn-secondary" type="button">Copiar</button></div>
+      <small>Abra o app do seu banco, escolha Pix → QR Code e escaneie a imagem acima.</small>
+    </div>
+  </div>
   <script src="https://www.gstatic.com/firebasejs/11.0.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/11.0.2/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore-compat.js"></script>
   <script src="risk-evolution-tool.js" defer></script>
+  <script src="donation.js" defer></script>
   <script src="app.js" defer></script>
   <script src="options-tool.js" defer></script>
 </body>
