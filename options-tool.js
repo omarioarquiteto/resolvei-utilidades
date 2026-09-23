@@ -11,7 +11,7 @@ var ui='<div class="tool-layout options-binary-layout">'+
     '<h2>📊 Análise de opções binárias</h2>'+
     '<div class="notice"><strong>Como funciona:</strong> selecione o par, escolha a expiração e clique no gráfico para definir o ponto de entrada. O valor investido e o payout servem para simular o resultado financeiro. O Resolvei não envia ordens para corretoras.</div>'+
     '<div class="form-grid">'+
-      '<div class="field"><label for="optSymbol">Par de moedas</label><select id="optSymbol">'+SYMBOLS.map(function(x){return "<option value=\\""+x[0]+"\\">"+x[1]+"</option>";}).join("")+'</select></div>'+
+      '<div class="field"><label for="optSymbol">Par de moedas</label><select id="optSymbol">'+SYMBOLS.map(function(x){return "<option value=\""+x[0]+"\">"+x[1]+"</option>";}).join("")+'</select></div>'+
       '<div class="field"><label for="optExpiry">Tempo de expiração</label><select id="optExpiry">'+EXPIRIES.map(function(x){return "<option value=\\""+x[0]+"\\">"+x[1]+"</option>";}).join("")+'</select></div>'+
       '<div class="field"><label for="optInvestment">Valor da entrada</label><div class="input-wrap"><span class="prefix">R$</span><input id="optInvestment" type="number" min="1" step="0.01" value="100"></div></div>'+
       '<div class="field"><label for="optPayout">Payout da operação</label><div class="input-wrap"><input id="optPayout" type="number" min="1" max="100" step="0.1" value="80"><span class="suffix">%</span></div><small>Informe o payout oferecido pela sua corretora.</small></div>'+
