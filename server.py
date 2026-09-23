@@ -407,6 +407,31 @@ def _provider_call(provider: str, api_key: str, model: str, message: str) -> str
         return resp.json()["choices"][0]["message"]["content"]
     raise HTTPException(status_code=400,detail="Provedor de IA não suportado.")
 
+@app.get("/api/ai/diagnose")
+def ai_diagnose(authorization: str | None = Header(default=None)) -> dict[str, Any]:
+    _verify_firebase_token(authorization)
+    provider, api_key, stored_model = _resolve_ai_credentials(authorization, "gemini")
+    result = {"provider": provider, "configured_model": stored_model or GEMINI_MODEL, "models": [], "test": None}
+    try:
+        models = _gemini_available_models(api_key, stored_model or GEMINI_MODEL)
+        result["models"] = models[:12]
+        if not models:
+            result["test"] = {"ok": False, "error": "Nenhum modelo com generateContent disponível para esta chave."}
+            return result
+        test_errors = []
+        for candidate in models[:5]:
+            try:
+                answer = _gemini_generate(api_key, candidate, "Responda somente: OK")
+                result["test"] = {"ok": True, "model": candidate, "answer": answer[:50]}
+                return result
+            except Exception as exc:
+                test_errors.append(str(exc))
+        result["test"] = {"ok": False, "error": " | ".join(test_errors[:4])}
+        return result
+    except Exception as exc:
+        result["test"] = {"ok": False, "error": str(exc)}
+        return result
+
 @app.get("/api/ai/connections")
 def ai_connections(authorization: str | None = Header(default=None)):
     user=_verify_firebase_token(authorization)
