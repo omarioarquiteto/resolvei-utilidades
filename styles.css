@@ -266,3 +266,6 @@ button, input, select { font: inherit; }
   .solar-legend{gap:8px}
   .solar-layout-result .result-main{font-size:32px}
 }
+
+/* Resolvei 3.3 — Gestão de risco: ajustes visuais adicionais */
+.risk-kpi small{line-height:1.35}.risk-live-box .result-label{font-size:11px}.risk-history-row strong{font-weight:800}.risk-form-grid .field small{line-height:1.35}
