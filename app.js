@@ -33,6 +33,7 @@ const tools = [
   {id:'meta-poupanca',cat:'dinheiro',icon:'🎯',title:'Meta de economia',desc:'Descubra quanto guardar por mês para chegar a uma meta.',tags:'guardar economizar poupar meta dinheiro'},
   {id:'poder-compra',cat:'dinheiro',icon:'🛒',title:'Poder de compra',desc:'Compare o valor nominal com uma inflação estimada.',tags:'inflação poder de compra dinheiro'},
   {id:'analise-opcoes',cat:'dinheiro',icon:'⏱️',title:'Análise de opções binárias',desc:'Estude pares de moedas para entradas com expiração de 1, 5 ou 15 minutos.',tags:'opções binárias binary options call put compra venda expiração 1 5 15 moedas'},
+  {id:'gerenciamento-risco',cat:'dinheiro',icon:'🛡️',title:'Gerenciamento de risco e evolução de capital',desc:'Modele entradas progressivas por seção, exposição a perdas, evolução do patrimônio e acompanhe resultados.',tags:'gerenciamento risco gestão de banca capital patrimonio evolução capital entrada payout perdas chances seção progressão risco financeiro'},
   {id:'combustivel-viagem',cat:'carro',icon:'⛽',title:'Combustível da viagem',desc:'Estime litros necessários e custo da viagem.',tags:'gasolina etanol combustível viagem litros km'},
   {id:'custo-km',cat:'carro',icon:'🛣️',title:'Custo por km',desc:'Descubra quanto seu carro custa a cada quilômetro.',tags:'custo km carro combustível consumo'},
   {id:'gasolina-etanol',cat:'carro',icon:'⚖️',title:'Gasolina × etanol',desc:'Compare preços pela eficiência energética do combustível.',tags:'gasolina etanol álcool abastecer'},
@@ -805,6 +806,7 @@ function toolUI(id){
     case 'cobertura': return panel(input('span','Vão horizontal considerado',{suffix:'m',value:'5'})+input('slope','Inclinação',{suffix:'%',value:'30'}));
     case 'placas-solares': return solarCalculatorUI();
     case 'posicao-solar': return solarCalculatorUI();
+    case 'gerenciamento-risco': return riskEvolutionUI();
     case 'area-retangulo': return panel(input('length','Comprimento',{suffix:'m',value:'5'})+input('width','Largura',{suffix:'m',value:'4'}));
     case 'area-triangulo': return panel(input('base','Base',{suffix:'m',value:'5'})+input('height','Altura',{suffix:'m',value:'3'}));
     case 'area-circulo': return panel(input('radius','Raio',{suffix:'m',value:'2'}));
@@ -1075,6 +1077,7 @@ function bind(){
   if(rid==='custo-receita'){const box=document.getElementById('recipeItems');if(box&&!box.children.length){addRecipeItemRow({name:'',qty:1,unit:'g',price:0});addRecipeItemRow({name:'',qty:1,unit:'g',price:0});addRecipeItemRow({name:'',qty:1,unit:'g',price:0});} const ar=document.getElementById('addRecipeItem');if(ar)ar.addEventListener('click',()=>addRecipeItemRow()); const ai=document.getElementById('analyzeRecipeBtn');if(ai)ai.addEventListener('click',analyzeRecipeAI);}
   if(rid==='churrasco'){/* sugestões são renderizadas junto da ferramenta */}
   if(['placas-solares','posicao-solar'].includes(rid)){bindSolarCalculatorInteractions();}
+  if(rid==='gerenciamento-risco'){bindRiskEvolutionTool();}
   if(rid==='festa'){const type=document.getElementById('partyType');if(type)type.addEventListener('change',()=>{const a=document.getElementById('age'); if(a)a.closest('.field').style.display=type.value.startsWith('aniversario-')?'':'none';}); if(type&&!type.value.startsWith('aniversario-')){const a=document.getElementById('age');if(a)a.closest('.field').style.display='none';} const ai=document.getElementById('aiPartyBtn');if(ai)ai.addEventListener('click',refinePartyAI); }
   const reset=document.getElementById('resetBtn'); if(reset)reset.addEventListener('click',()=>{location.reload();});
   const add=document.getElementById('addItem');if(add)add.addEventListener('click',addShoppingItem);
