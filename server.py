@@ -348,11 +348,49 @@ def _provider_call(provider: str, api_key: str, model: str, message: str) -> str
         resp=client.responses.create(model=model or "gpt-4.1-mini",input=message)
         return getattr(resp,"output_text","") or ""
     if provider=="gemini":
-        url="https://generativelanguage.googleapis.com/v1beta/models/"+(model or "gemini-3.8-flash")+":generateContent"
-        resp=requests.post(url,headers={"x-goog-api-key":api_key,"Content-Type":"application/json"},json={"contents":[{"parts":[{"text":message}]}],"generationConfig":{"responseMimeType":"application/json"}},timeout=60)
-        resp.raise_for_status()
-        data=resp.json()
-        return data["candidates"][0]["content"]["parts"][0]["text"]
+        # A API Gemini pode devolver 503 temporariamente mesmo com chave e modelo válidos.
+        # Para o Resolvei não transformar uma indisponibilidade momentânea em falha da ferramenta,
+        # tentamos novamente e, em 503, usamos modelos estáveis alternativos da mesma família.
+        requested_model = model or "gemini-3.8-flash"
+        models_to_try = [requested_model]
+        if requested_model == "gemini-3.8-flash":
+            models_to_try.extend(["gemini-3.7-flash", "gemini-3.6-flash"])
+        last_exc = None
+        for candidate_model in dict.fromkeys(models_to_try):
+            url="https://generativelanguage.googleapis.com/v1beta/models/"+candidate_model+":generateContent"
+            payload={"contents":[{"parts":[{"text":message}]}],"generationConfig":{"responseMimeType":"application/json"}}
+            for attempt in range(3):
+                try:
+                    resp=requests.post(
+                        url,
+                        headers={"x-goog-api-key":api_key,"Content-Type":"application/json"},
+                        json=payload,
+                        timeout=60
+                    )
+                    if resp.status_code == 503:
+                        last_exc = requests.HTTPError(
+                            f"503 Server Error: Service Unavailable (modelo {candidate_model})",
+                            response=resp
+                        )
+                        if attempt < 2:
+                            time.sleep(1.5 * (attempt + 1))
+                            continue
+                        break
+                    resp.raise_for_status()
+                    data=resp.json()
+                    return data["candidates"][0]["content"]["parts"][0]["text"]
+                except requests.RequestException as exc:
+                    last_exc = exc
+                    status = getattr(getattr(exc, "response", None), "status_code", None)
+                    if status in {500, 502, 503, 504} and attempt < 2:
+                        time.sleep(1.5 * (attempt + 1))
+                        continue
+                    if status not in {500, 502, 503, 504}:
+                        raise
+                    break
+        if last_exc:
+            raise last_exc
+        raise RuntimeError("Gemini não retornou uma resposta válida.")
     if provider=="anthropic":
         model=model or "claude-3-5-haiku-latest"
         resp=requests.post("https://api.anthropic.com/v1/messages",headers={"x-api-key":api_key,"anthropic-version":"2023-06-01","content-type":"application/json"},json={"model":model,"max_tokens":1200,"messages":[{"role":"user","content":message}]},timeout=60)
