@@ -955,7 +955,7 @@ function render(){
   else if(parts[0]==='ferramenta') html=toolPage(parts[1]);
   else if(parts[0]==='favoritos') html=favoritesPage();
   else if(parts[0]==='conta') html=resolveiAccountPage();
-  else if(parts[0]==='conectar-api') html=resolveiApiPage();
+  else if(parts[0]==='conectar-api') { location.hash='#/conta'; return; }
   else if(parts[0]==='sobre') html=aboutPage();
   else if(parts[0]==='privacidade') html=privacyPage();
   else html=home();
