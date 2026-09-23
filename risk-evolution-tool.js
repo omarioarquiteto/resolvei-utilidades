@@ -64,7 +64,24 @@ function riskLoggedInUser(){
   return (typeof resolveiUser !== 'undefined' && resolveiUser) ? resolveiUser : null;
 }
 
-async function riskCloudGet(){
+async function riskFillConfigInputs(){
+  const cfg=resolveiRiskState.config || riskDefaults().config;
+  const values={
+    riskInitialCapital:cfg.initialCapital,
+    riskEntryPct:cfg.entryPct,
+    riskPayout:cfg.payout,
+    riskChances:cfg.chances,
+    riskGoal:cfg.goal,
+    riskWinRate:cfg.winRate,
+    riskMaxExposurePct:cfg.maxExposurePct
+  };
+  Object.entries(values).forEach(([id,value])=>{
+    const el=document.getElementById(id);
+    if(el && value!==undefined && value!==null) el.value=value;
+  });
+}
+
+function riskCloudGet(){
   const user=riskLoggedInUser();
   if(!user) return {exists:false,state:null};
   const token=await resolveiToken();
@@ -124,6 +141,7 @@ async function riskHydrateFromCloud(){
       };
       localStorage.setItem(RISK_STORAGE_KEY,JSON.stringify(resolveiRiskState));
       localStorage.setItem(RISK_STORAGE_KEY+'_owner',user.uid);
+      riskFillConfigInputs();
     }else if(!localOwner || localOwner===user.uid){
       localStorage.setItem(RISK_STORAGE_KEY+'_owner',user.uid);
       await riskCloudPut(true);
@@ -131,6 +149,7 @@ async function riskHydrateFromCloud(){
       resolveiRiskState=riskDefaults();
       localStorage.setItem(RISK_STORAGE_KEY,JSON.stringify(resolveiRiskState));
       localStorage.setItem(RISK_STORAGE_KEY+'_owner',user.uid);
+      riskFillConfigInputs();
       await riskCloudPut(true);
     }
   }catch(error){
@@ -294,6 +313,7 @@ function riskResetAll(){
   resolveiRiskState=riskDefaults();
   riskSave();
   riskCloudScheduleSave();
+  riskFillConfigInputs();
   riskRender();
 }
 
@@ -504,6 +524,7 @@ function statusActive(){return resolveiRiskState.session.status==='active';}
 function riskApplyConfig(){
   const cfg=riskConfigFromDOM();
   riskSyncSessionToConfig(cfg,false);
+  riskCloudScheduleSave();
   riskRender();
 }
 
