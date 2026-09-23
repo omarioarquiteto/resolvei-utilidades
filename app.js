@@ -1105,59 +1105,50 @@ document.getElementById('themeToggle').addEventListener('click',()=>{const dark=
 window.addEventListener('hashchange',render); render();
 
 /* =========================
-   Resolvei — IA do usuário (sem login)
+   Resolvei — Firebase Auth + Minhas IAs
    ========================= */
-const RESOLVEI_PROVIDERS={
-  gemini:{name:"Google Gemini",icon:"✨",defaultModel:"gemini-2.5-flash"},
-  openai:{name:"OpenAI",icon:"◉",defaultModel:"gpt-4.1-mini"},
-  anthropic:{name:"Anthropic Claude",icon:"◆",defaultModel:"claude-3-5-haiku-latest"},
-  openrouter:{name:"OpenRouter",icon:"↗",defaultModel:"openai/gpt-4.1-mini"}
+const RESOLVEI_FIREBASE_CONFIG = {
+  apiKey:"AIzaSyBox8tior0HX5T6ox2ZNNo9fbzUkHxw8go",authDomain:"resolvei-c95d1.firebaseapp.com",
+  projectId:"resolvei-c95d1",storageBucket:"resolvei-c95d1.firebasestorage.app",
+  messagingSenderId:"671425023175",appId:"1:671425023175:web:deb8ce2174b07e6c16c2e2"
 };
+let resolveiAuth=null,resolveiDb=null,resolveiUser=null;
+function resolveiFirebaseInit(){
+  if(!window.firebase||resolveiAuth)return;
+  if(!firebase.apps.length)firebase.initializeApp(RESOLVEI_FIREBASE_CONFIG);
+  resolveiAuth=firebase.auth();resolveiDb=firebase.firestore();
+  resolveiAuth.onAuthStateChanged(user=>{resolveiUser=user||null;const n=document.getElementById("accountNav");if(n)n.textContent=user?"👤 Minha conta":"👤 Entrar";if((location.hash||"").includes("conta")||(location.hash||"").includes("conectar-api"))render();});
+}
+async function resolveiToken(){if(!resolveiUser)throw new Error("Faça login no Resolvei.");return resolveiUser.getIdToken();}
+function resolveiAccountPage(){
+ if(!resolveiUser)return `<div class="tool-layout"><section class="card panel auth-card"><span class="eyebrow">CONTA RESOLVEI</span><h1>Entre para usar as funções de IA</h1><p>Use Google ou seu e-mail e senha. Ao entrar com Google, o Gemini do Resolvei fica disponível sem você precisar colar uma chave pessoal.</p><button class="btn primary full" id="googleLogin">Continuar com Google</button><div class="auth-divider"><span>ou</span></div><div class="form-grid"><div class="field"><label for="authEmail">E-mail</label><input id="authEmail" type="email"></div><div class="field"><label for="authPassword">Senha</label><input id="authPassword" type="password" autocomplete="current-password"></div></div><div class="row-actions"><button class="btn primary" id="emailLogin">Entrar</button><button class="btn" id="emailSignup">Criar conta</button></div><div id="authMsg" class="notice" hidden></div></section></div>`;
+ return `<div class="tool-layout"><section class="card panel"><span class="eyebrow">MINHA CONTA</span><h1>${esc(resolveiUser.displayName||"Minha conta")}</h1><p>${esc(resolveiUser.email||"")}</p><div class="account-grid"><a class="card account-card" href="#/conectar-api"><strong>🔌 Conectar API</strong><span>Gerencie suas conexões de IA.</span></a></div><div class="row-actions"><button class="btn" id="logoutBtn">Sair</button></div></section></div>`;
+}
+const RESOLVEI_PROVIDERS={gemini:{name:"Google Gemini",icon:"✨",defaultModel:"gemini-2.5-flash"},openai:{name:"OpenAI",icon:"◉",defaultModel:"gpt-4.1-mini"},anthropic:{name:"Anthropic Claude",icon:"◆",defaultModel:"claude-3-5-haiku-latest"},openrouter:{name:"OpenRouter",icon:"↗",defaultModel:"openai/gpt-4.1-mini"}};
 function resolveiApiPage(){
-  return `<div class="tool-layout"><section class="card panel">
-    <span class="eyebrow">IA NO RESOLVEI</span>
-    <h1>✨ Use sua própria IA</h1>
-    <p>Informe sua chave de API para usar recursos de inteligência artificial junto com as ferramentas do Resolvei. A chave é usada somente nesta sessão e não é salva no Resolvei.</p>
-    <div class="notice"><strong>Privacidade:</strong> sua chave fica apenas na memória desta página e é enviada ao servidor somente quando você fizer uma consulta. Ao fechar ou atualizar a página, ela é apagada.</div>
-    <div class="form-grid">
-      <div class="field"><label for="resolveiAiProvider">Provedor</label><select id="resolveiAiProvider">${Object.entries(RESOLVEI_PROVIDERS).map(([id,p])=>`<option value="${id}">${p.icon} ${p.name}</option>`).join("")}</select></div>
-      <div class="field"><label for="resolveiAiModel">Modelo</label><input id="resolveiAiModel" value="gemini-2.5-flash"></div>
-      <div class="field full"><label for="resolveiAiKey">Sua API Key</label><input id="resolveiAiKey" type="password" autocomplete="off" placeholder="Cole sua chave aqui"></div>
-      <div class="field full"><label for="resolveiAiPrompt">O que você quer resolver?</label><textarea id="resolveiAiPrompt" rows="6" placeholder="Ex.: Analise este problema de arquitetura e proponha soluções práticas..."></textarea></div>
-    </div>
-    <div class="actions"><button class="btn primary" id="resolveiAiRun">✨ Consultar IA</button><button class="btn ghost" id="resolveiAiClear">Limpar</button></div>
-    <div id="resolveiAiStatus" class="notice" hidden></div>
-    <section id="resolveiAiResult" class="result-box" style="margin-top:18px"><div class="result-label">Resposta da IA</div><div class="result-main">—</div><p>A resposta aparecerá aqui.</p></section>
-  </section></div>`;
+ if(!resolveiUser)return `<div class="tool-layout"><section class="card panel"><h1>🔌 Conectar API</h1><p>Entre no Resolvei para conectar uma IA.</p><a class="btn primary" href="#/conta">Entrar / Criar conta</a></section></div>`;
+ return `<div class="tool-layout"><section class="card panel"><span class="eyebrow">MINHAS IAS</span><h1>🔌 Conectar API</h1><p>Suas chaves são enviadas ao servidor por HTTPS e armazenadas criptografadas. Elas não ficam no código do site.</p><div class="notice"><strong>Gemini:</strong> usuários autenticados podem usar o Gemini do Resolvei sem cadastrar uma chave própria.</div><div class="provider-grid">${Object.entries(RESOLVEI_PROVIDERS).map(([id,p])=>`<div class="provider-card"><div class="provider-title"><span class="provider-icon">${p.icon}</span><strong>${p.name}</strong><span class="provider-status" id="status-${id}">Verificando…</span></div><label class="field"><span>API Key</span><input id="key-${id}" type="password" autocomplete="off" placeholder="Cole sua chave (opcional no Gemini)"></label><label class="field"><span>Modelo (opcional)</span><input id="model-${id}" value="${p.defaultModel}"></label><div class="row-actions"><button class="btn primary" data-connect-ai="${id}">Conectar</button><button class="btn" data-remove-ai="${id}">Desconectar</button></div></div>`).join("")}</div><div id="aiMsg" class="notice" hidden></div></section></div>`;
 }
-function resolveiBindPublicAI(){
-  const provider=document.getElementById("resolveiAiProvider");
-  const model=document.getElementById("resolveiAiModel");
-  const key=document.getElementById("resolveiAiKey");
-  const prompt=document.getElementById("resolveiAiPrompt");
-  const status=document.getElementById("resolveiAiStatus");
-  const result=document.getElementById("resolveiAiResult");
-  if(!provider)return;
-  provider.addEventListener("change",()=>{model.value=RESOLVEI_PROVIDERS[provider.value]?.defaultModel||"";});
-  document.getElementById("resolveiAiRun")?.addEventListener("click",async()=>{
-    const apiKey=key.value.trim(), message=prompt.value.trim();
-    window.resolveiAiSession={provider:provider.value,apiKey,model:model.value.trim()};
-    if(!apiKey){status.hidden=false;status.textContent="Informe sua API Key.";return;}
-    if(!message){status.hidden=false;status.textContent="Escreva o que você quer resolver.";return;}
-    status.hidden=false;status.textContent="✨ Consultando a IA...";
-    result.innerHTML='<div class="result-label">Resposta da IA</div><div class="result-main">Processando…</div>';
-    try{
-      const r=await fetch("/api/ai/chat-public",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({provider:provider.value,api_key:apiKey,model:model.value.trim(),message})});
-      const data=await r.json();
-      if(!r.ok)throw new Error(data.detail||"Não foi possível consultar a IA.");
-      result.innerHTML=`<div class="result-label">${esc(data.provider||provider.value)} · ${esc(data.model||model.value)}</div><div class="ai-answer">${esc(data.answer||"A IA não retornou texto.").replace(/\\n/g,"<br>")}</div>`;
-      status.textContent="✅ Resposta recebida.";
-    }catch(e){status.textContent="⚠️ "+e.message;result.innerHTML='<div class="result-label">Resposta da IA</div><div class="result-main">—</div>';}
-  });
-  document.getElementById("resolveiAiClear")?.addEventListener("click",()=>{key.value="";prompt.value="";result.innerHTML='<div class="result-label">Resposta da IA</div><div class="result-main">—</div><p>A resposta aparecerá aqui.</p>';status.hidden=true;});
+async function resolveiRefreshStatuses(){
+ try{const token=await resolveiToken();const r=await fetch("/api/ai/connections",{headers:{Authorization:"Bearer "+token}});if(!r.ok)throw new Error("Backend Firebase não configurado no servidor.");const d=await r.json();const map={};d.connections.forEach(x=>map[x.provider]=x);Object.keys(RESOLVEI_PROVIDERS).forEach(id=>{const e=document.getElementById("status-"+id);if(e)e.textContent=map[id]?.connected?"🟢 Conectada":"Não conectada";});}
+ catch(e){document.querySelectorAll(".provider-status").forEach(x=>x.textContent="⚠️ Servidor não configurado");}
 }
+function resolveiBindAuth(){
+ if(!resolveiAuth)return;
+ document.getElementById("googleLogin")?.addEventListener("click",async()=>{try{await resolveiAuth.signInWithPopup(new firebase.auth.GoogleAuthProvider());location.hash="#/conta";}catch(e){const m=document.getElementById("authMsg");if(m){m.hidden=false;m.textContent=e.message;}}});
+ const email=()=>document.getElementById("authEmail")?.value.trim(),pass=()=>document.getElementById("authPassword")?.value||"";
+ document.getElementById("emailLogin")?.addEventListener("click",async()=>{try{await resolveiAuth.signInWithEmailAndPassword(email(),pass());location.hash="#/conta";}catch(e){const m=document.getElementById("authMsg");if(m){m.hidden=false;m.textContent=e.message;}}});
+ document.getElementById("emailSignup")?.addEventListener("click",async()=>{try{await resolveiAuth.createUserWithEmailAndPassword(email(),pass());location.hash="#/conta";}catch(e){const m=document.getElementById("authMsg");if(m){m.hidden=false;m.textContent=e.message;}}});
+ document.getElementById("logoutBtn")?.addEventListener("click",async()=>{await resolveiAuth.signOut();location.hash="#/conta";});
+ document.querySelectorAll("[data-connect-ai]").forEach(b=>b.addEventListener("click",async()=>{try{const provider=b.dataset.connectAi,key=document.getElementById("key-"+provider)?.value.trim(),model=document.getElementById("model-"+provider)?.value.trim();const token=await resolveiToken();const r=await fetch("/api/ai/connections",{method:"POST",headers:{"Content-Type":"application/json",Authorization:"Bearer "+token},body:JSON.stringify({provider,api_key:key,model})});const d=await r.json();if(!r.ok)throw new Error(d.detail||"Não foi possível conectar.");document.getElementById("aiMsg").hidden=false;document.getElementById("aiMsg").textContent="IA conectada com segurança.";await resolveiRefreshStatuses();}catch(e){const m=document.getElementById("aiMsg");m.hidden=false;m.textContent=e.message;}}));
+ document.querySelectorAll("[data-remove-ai]").forEach(b=>b.addEventListener("click",async()=>{try{const token=await resolveiToken(),r=await fetch("/api/ai/connections/"+b.dataset.removeAi,{method:"DELETE",headers:{Authorization:"Bearer "+token}});if(!r.ok)throw new Error("Não foi possível desconectar.");await resolveiRefreshStatuses();}catch(e){const m=document.getElementById("aiMsg");m.hidden=false;m.textContent=e.message;}}));
+}
+
 const resolveiOldRender=render;
 render=function(){
   resolveiOldRender();
-  if((location.hash||"").includes("conectar-api")) resolveiBindPublicAI();
+  if(resolveiUser && ((location.hash||'').includes('conta')||(location.hash||'').includes('conectar-api'))) {
+    resolveiBindAuth(); resolveiRefreshStatuses();
+  } else if(!resolveiUser && (location.hash||'').includes('conta')) resolveiBindAuth();
 };
+resolveiFirebaseInit();
