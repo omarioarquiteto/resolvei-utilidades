@@ -36,7 +36,7 @@ BASE_DIR = Path(__file__).resolve().parent
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "").strip()
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-5.6-luna").strip() or "gpt-5.6-luna"
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash").strip() or "gemini-2.5-flash"
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.8-flash").strip() or "gemini-3.8-flash"
 SERPAPI_KEY = os.getenv("SERPAPI_KEY", "").strip()
 FIREBASE_PROJECT_ID = os.getenv("FIREBASE_PROJECT_ID", "").strip()
 FIREBASE_CLIENT_EMAIL = os.getenv("FIREBASE_CLIENT_EMAIL", "").strip()
@@ -334,7 +334,7 @@ def _provider_call(provider: str, api_key: str, model: str, message: str) -> str
         resp=client.responses.create(model=model or "gpt-4.1-mini",input=message)
         return getattr(resp,"output_text","") or ""
     if provider=="gemini":
-        url="https://generativelanguage.googleapis.com/v1beta/models/"+(model or "gemini-2.5-flash")+":generateContent"
+        url="https://generativelanguage.googleapis.com/v1beta/models/"+(model or "gemini-3.8-flash")+":generateContent"
         resp=requests.post(url,headers={"x-goog-api-key":api_key,"Content-Type":"application/json"},json={"contents":[{"parts":[{"text":message}]}]},timeout=60)
         resp.raise_for_status()
         data=resp.json()
