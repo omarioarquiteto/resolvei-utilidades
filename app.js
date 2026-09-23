@@ -1201,7 +1201,7 @@ function resolveiBindAccountSections(){
    const t=titles[name]||titles.ia;
    const h=root.querySelector("#accountSectionTitle"),p=root.querySelector("#accountSectionDesc");
    if(h)h.textContent=t[0]; if(p)p.textContent=t[1];
-   if(name==="ia"){resolveiRefreshStatuses();setTimeout(()=>resolveiBindAiButtons(),0);}
+   if(name==="ia"){resolveiRefreshStatuses();setTimeout(()=>resolveiBindAuth(),0);}
  };
  buttons.forEach(b=>b.addEventListener("click",()=>show(b.dataset.accountSection)));
  const saveProfile=root.querySelector("#saveProfileBtn");
