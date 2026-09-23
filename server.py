@@ -335,7 +335,7 @@ def _provider_call(provider: str, api_key: str, model: str, message: str) -> str
         return getattr(resp,"output_text","") or ""
     if provider=="gemini":
         url="https://generativelanguage.googleapis.com/v1beta/models/"+(model or "gemini-2.5-flash")+":generateContent"
-        resp=requests.post(url,params={"key":api_key},json={"contents":[{"parts":[{"text":message}]}]},timeout=60)
+        resp=requests.post(url,headers={"x-goog-api-key":api_key,"Content-Type":"application/json"},json={"contents":[{"parts":[{"text":message}]}]},timeout=60)
         resp.raise_for_status()
         data=resp.json()
         return data["candidates"][0]["content"]["parts"][0]["text"]
