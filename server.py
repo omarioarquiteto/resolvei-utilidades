@@ -26,7 +26,7 @@ try:
 except Exception:
     pass
 
-from fastapi import FastAPI, HTTPException, UploadFile, File, Form
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, Response
 from pydantic import BaseModel, Field
@@ -365,7 +365,7 @@ def _provider_call(provider: str, api_key: str, model: str, message: str) -> str
     raise HTTPException(status_code=400,detail="Provedor de IA não suportado.")
 
 @app.get("/api/ai/connections")
-def ai_connections(authorization: str | None = None):
+def ai_connections(authorization: str | None = Header(default=None)):
     user=_verify_firebase_token(authorization)
     if not _firebase_admin: raise HTTPException(status_code=503,detail="Firebase indisponível.")
     from firebase_admin import firestore as firebase_firestore
@@ -373,7 +373,7 @@ def ai_connections(authorization: str | None = None):
     return {"connections":[{"provider":d.id,"connected":bool((d.to_dict() or {}).get("connected")),"model":(d.to_dict() or {}).get("model","")} for d in docs]}
 
 @app.post("/api/ai/connections")
-def ai_save_connection(req: AIConnectionRequest, authorization: str | None = None):
+def ai_save_connection(req: AIConnectionRequest, authorization: str | None = Header(default=None)):
     user=_verify_firebase_token(authorization)
     if req.provider not in {"gemini","openai","anthropic","openrouter"}: raise HTTPException(status_code=400,detail="Provedor não suportado.")
     if not req.api_key.strip(): raise HTTPException(status_code=400,detail="Informe a API Key.")
@@ -385,14 +385,14 @@ def ai_save_connection(req: AIConnectionRequest, authorization: str | None = Non
     return {"ok":True,"provider":req.provider,"connected":True,"model":req.model.strip()}
 
 @app.delete("/api/ai/connections/{provider}")
-def ai_delete_connection(provider: str, authorization: str | None = None):
+def ai_delete_connection(provider: str, authorization: str | None = Header(default=None)):
     user=_verify_firebase_token(authorization)
     from firebase_admin import firestore as firebase_firestore
     firebase_firestore.client().collection("users").document(user["uid"]).collection("aiConnections").document(provider).delete()
     return {"ok":True}
 
 @app.post("/api/ai/chat")
-def ai_chat(req: AIChatRequest, authorization: str | None = None):
+def ai_chat(req: AIChatRequest, authorization: str | None = Header(default=None)):
     user=_verify_firebase_token(authorization)
     from firebase_admin import firestore as firebase_firestore
     docs=firebase_firestore.client().collection("users").document(user["uid"]).collection("aiConnections").stream()
@@ -1109,7 +1109,7 @@ def health() -> dict[str, Any]:
 
 
 @app.post("/api/recipe/analyze")
-def analyze_recipe(req: RecipeRequest, authorization: str | None = None) -> dict[str, Any]:
+def analyze_recipe(req: RecipeRequest, authorization: str | None = Header(default=None)) -> dict[str, Any]:
     url = safe_url(req.url)
     html = fetch_html(url)
     soup = BeautifulSoup(html, "html.parser")
@@ -1214,7 +1214,7 @@ def sales_price(req: SalesPriceRequest) -> dict[str, Any]:
     }
 
 @app.post("/api/party/suggest")
-def party_suggest(req: PartyRequest, authorization: str | None = None) -> dict[str, Any]:
+def party_suggest(req: PartyRequest, authorization: str | None = Header(default=None)) -> dict[str, Any]:
     req.drinkers = min(req.drinkers, req.adults + req.kids)
     schema = {
         "type":"object","additionalProperties":False,
