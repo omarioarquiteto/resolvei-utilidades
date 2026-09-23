@@ -1,4 +1,4 @@
-# Resolvei — pacote 2.2
+# Resolvei
 
 Portal de utilidades para o dia a dia. O projeto pode funcionar localmente sem banco de dados e, quando configuradas as chaves de API no arquivo `.env`, ativa recursos de IA e cotações regionais.
 
