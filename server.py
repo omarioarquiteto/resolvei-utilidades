@@ -340,6 +340,43 @@ def _resolve_ai_credentials(authorization: str | None, provider: str = ""):
         return "gemini",GEMINI_API_KEY,GEMINI_MODEL
     raise HTTPException(status_code=400,detail="Nenhuma IA conectada e o Gemini do Resolvei não está configurado.")
 
+def _gemini_error_detail(resp) -> str:
+    try:
+        data=resp.json()
+        err=data.get("error",{}) if isinstance(data,dict) else {}
+        return f"{err.get('code',resp.status_code)} {err.get('status','')}: {err.get('message',resp.text[:300])}"
+    except Exception:
+        return f"{resp.status_code}: {resp.text[:300]}"
+
+def _gemini_available_models(api_key: str, preferred: str = "") -> list[str]:
+    resp=requests.get("https://generativelanguage.googleapis.com/v1beta/models",headers={"x-goog-api-key":api_key},params={"pageSize":1000},timeout=30)
+    resp.raise_for_status()
+    data=resp.json()
+    models=data.get("models",[]) if isinstance(data,dict) else []
+    available=[]
+    for item in models:
+        name=str(item.get("name","")).strip()
+        methods=item.get("supportedGenerationMethods",[]) or []
+        if name.startswith("models/"): name=name[7:]
+        if name and "generateContent" in methods: available.append(name)
+    priority=[preferred.strip(),"gemini-3.8-flash","gemini-3.5-flash","gemini-3.1-flash-lite"]
+    return list(dict.fromkeys([x for x in priority+available if x and x in available]))
+
+def _gemini_generate(api_key: str, model: str, message: str) -> str:
+    url="https://generativelanguage.googleapis.com/v1beta/models/"+model+":generateContent"
+    payload={"contents":[{"parts":[{"text":message}]}],"generationConfig":{"responseMimeType":"application/json"}}
+    last=None
+    for attempt in range(3):
+        resp=requests.post(url,headers={"x-goog-api-key":api_key,"Content-Type":"application/json"},json=payload,timeout=60)
+        if resp.ok:
+            data=resp.json()
+            return data["candidates"][0]["content"]["parts"][0]["text"]
+        last=RuntimeError("Gemini "+model+": "+_gemini_error_detail(resp))
+        if resp.status_code in {429,500,502,503,504} and attempt<2:
+            time.sleep(1.5*(attempt+1)); continue
+        raise last
+    raise last or RuntimeError("Gemini não retornou resposta.")
+
 def _provider_call(provider: str, api_key: str, model: str, message: str) -> str:
     provider=provider.lower()
     if provider=="openai":
@@ -348,51 +385,17 @@ def _provider_call(provider: str, api_key: str, model: str, message: str) -> str
         resp=client.responses.create(model=model or "gpt-4.1-mini",input=message)
         return getattr(resp,"output_text","") or ""
     if provider=="gemini":
-        # A API Gemini pode devolver 503 temporariamente mesmo com chave e modelo válidos.
-        # Para o Resolvei não transformar uma indisponibilidade momentânea em falha da ferramenta,
-        # tentamos novamente e, em 503, usamos modelos estáveis alternativos da mesma família.
-        requested_model = model or "gemini-3.8-flash"
-        models_to_try = [requested_model]
-        if requested_model == "gemini-3.8-flash":
-            # Em caso de 503 persistente na família Gemini 3.x, usar uma família
-            # mais antiga/estável como fallback evita que a ferramenta fique parada.
-            models_to_try.extend(["gemini-2.5-flash", "gemini-3.5-flash-lite"])
-        last_exc = None
-        for candidate_model in dict.fromkeys(models_to_try):
-            url="https://generativelanguage.googleapis.com/v1beta/models/"+candidate_model+":generateContent"
-            payload={"contents":[{"parts":[{"text":message}]}],"generationConfig":{"responseMimeType":"application/json"}}
-            for attempt in range(3):
-                try:
-                    resp=requests.post(
-                        url,
-                        headers={"x-goog-api-key":api_key,"Content-Type":"application/json"},
-                        json=payload,
-                        timeout=60
-                    )
-                    if resp.status_code == 503:
-                        last_exc = requests.HTTPError(
-                            f"503 Server Error: Service Unavailable (modelo {candidate_model})",
-                            response=resp
-                        )
-                        if attempt < 2:
-                            time.sleep(1.5 * (attempt + 1))
-                            continue
-                        break
-                    resp.raise_for_status()
-                    data=resp.json()
-                    return data["candidates"][0]["content"]["parts"][0]["text"]
-                except requests.RequestException as exc:
-                    last_exc = exc
-                    status = getattr(getattr(exc, "response", None), "status_code", None)
-                    if status in {500, 502, 503, 504} and attempt < 2:
-                        time.sleep(1.5 * (attempt + 1))
-                        continue
-                    if status not in {500, 502, 503, 504}:
-                        raise
-                    break
-        if last_exc:
-            raise last_exc
-        raise RuntimeError("Gemini não retornou uma resposta válida.")
+        available = _gemini_available_models(api_key, model)
+        if not available:
+            raise RuntimeError("A chave Gemini não possui nenhum modelo com generateContent disponível.")
+        errors=[]
+        for candidate in available[:8]:
+            try:
+                return _gemini_generate(api_key, candidate, message)
+            except Exception as exc:
+                errors.append(str(exc))
+        raise RuntimeError("Nenhum modelo Gemini disponível respondeu. " + " | ".join(errors[:4]))
+
     if provider=="anthropic":
         model=model or "claude-3-5-haiku-latest"
         resp=requests.post("https://api.anthropic.com/v1/messages",headers={"x-api-key":api_key,"anthropic-version":"2023-06-01","content-type":"application/json"},json={"model":model,"max_tokens":1200,"messages":[{"role":"user","content":message}]},timeout=60)
