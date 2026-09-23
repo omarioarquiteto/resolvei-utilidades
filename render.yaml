@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: resolvei-utilidades
+    name: resolvei
     runtime: docker
     dockerfilePath: ./Dockerfile
     dockerContext: .
