@@ -166,7 +166,7 @@ function receitaCustoUI(){
     <hr class="sep">
     <h2>Receita pela internet</h2>
     <div class="form-grid"><div class="field full"><label for="recipeUrl">Endereço da receita</label><input id="recipeUrl" type="url" placeholder="https://exemplo.com/receita/bolo-de-chocolate"><small>A IA pode localizar e organizar os ingredientes da página.</small></div><div class="field"><label for="recipeCity">Cidade</label><input id="recipeCity" value="Cuiabá"></div><div class="field"><label for="recipeState">UF</label><input id="recipeState" value="MT" maxlength="2"></div></div>
-    <div class="notice"><strong>Preços com IA:</strong> para estimar o custo dos ingredientes conforme cidade e UF, conecte sua própria API Key em <a href="#/conectar-api">✨ Usar minha IA</a>. Sem chave, o Resolvei ainda encontra e organiza os ingredientes.</div>
+    <div class="notice"><strong>Preços com IA:</strong> para estimar o custo dos ingredientes conforme cidade e UF, conecte sua própria API Key em <a href="#/conta">✨ Configurar minha IA</a>. Sem chave, o Resolvei ainda encontra e organiza os ingredientes.</div>
     <div class="actions"><button class="btn primary" type="button" id="analyzeRecipeBtn">✨ Analisar receita com IA</button></div>
     <div id="recipeAiStatus" class="notice">Sem análise ainda.</div>
   </section><section id="result"><div class="result-box"><div class="result-label">Resultado</div><div class="result-main">—</div><p>Adicione ingredientes e clique em calcular.</p></div></section></div>`;
@@ -1142,7 +1142,7 @@ function resolveiFirebaseInit(){
     resolveiAuth.onAuthStateChanged(user=>{
       resolveiUser=user||null;
       const n=document.getElementById("accountNav");if(n)n.textContent=user?"👤 Minha conta":"👤 Entrar";
-      if((location.hash||"").includes("conta")||(location.hash||"").includes("conectar-api")){render();setTimeout(resolveiBindAuth,0);}
+      if((location.hash||"").includes("conta")){render();setTimeout(resolveiBindAuth,0);}
     });
     setTimeout(resolveiBindAuth,0);
   }catch(e){console.error("Firebase init:",e);resolveiFirebaseError=resolveiAuthMessage(e);setTimeout(()=>{const m=document.getElementById("authMsg");if(m){m.hidden=false;m.textContent="⚠️ Firebase não foi inicializado: "+resolveiFirebaseError;}},0);}
@@ -1150,7 +1150,7 @@ function resolveiFirebaseInit(){
 async function resolveiToken(){if(!resolveiUser)throw new Error("Faça login no Resolvei.");return resolveiUser.getIdToken();}
 function resolveiAccountPage(){
  if(!resolveiUser)return `<div class="tool-layout"><section class="card panel auth-card"><span class="eyebrow">CONTA RESOLVEI</span><h1>Entre para usar as funções de IA</h1><p>Use Google ou seu e-mail e senha. Ao entrar com Google, o Gemini do Resolvei fica disponível sem você precisar colar uma chave pessoal.</p><button class="btn primary full" id="googleLogin">Continuar com Google</button><div class="auth-divider"><span>ou</span></div><div class="form-grid"><div class="field"><label for="authEmail">E-mail</label><input id="authEmail" type="email"></div><div class="field"><label for="authPassword">Senha</label><input id="authPassword" type="password" autocomplete="current-password"></div></div><div class="row-actions"><button type="button" class="btn primary" id="emailLogin">Entrar</button><button type="button" class="btn" id="emailSignup">Criar conta</button></div><div id="authMsg" class="notice" hidden></div></section></div>`;
- return `<div class="tool-layout"><section class="card panel"><span class="eyebrow">MINHA CONTA</span><h1>${esc(resolveiUser.displayName||"Minha conta")}</h1><p>${esc(resolveiUser.email||"")}</p><div class="account-grid"><a class="card account-card" href="#/conectar-api"><strong>🔌 Conectar API</strong><span>Gerencie suas conexões de IA.</span></a></div><div class="row-actions"><button class="btn" id="logoutBtn">Sair</button></div></section></div>`;
+ return `<div class="tool-layout"><section class="card panel"><span class="eyebrow">MINHA CONTA</span><h1>${esc(resolveiUser.displayName||"Minha conta")}</h1><p>${esc(resolveiUser.email||"")}</p><div class="account-grid"><div class="card account-card"><strong>👤 Perfil</strong><span>Conta autenticada no Resolvei.</span></div><div class="card account-card"><strong>🤖 Minha IA</strong><span>As configurações de IA ficam nesta mesma página.</span></div></div><hr class="sep"><h2>🤖 Configuração da IA</h2><p>Gerencie suas conexões de inteligência artificial sem sair da sua conta.</p><div class="account-ai-settings">${resolveiApiPage()}</div><div class="row-actions"><button class="btn" id="logoutBtn">Sair</button></div></section></div>`;
 }
 const RESOLVEI_PROVIDERS={gemini:{name:"Google Gemini",icon:"✨",defaultModel:"gemini-3.8-flash"},openai:{name:"OpenAI",icon:"◉",defaultModel:"gpt-4.1-mini"},anthropic:{name:"Anthropic Claude",icon:"◆",defaultModel:"claude-3-5-haiku-latest"},openrouter:{name:"OpenRouter",icon:"↗",defaultModel:"openai/gpt-4.1-mini"}};
 function resolveiApiPage(){
@@ -1184,7 +1184,7 @@ function resolveiBindAuth(){
 const resolveiOldRender=render;
 render=function(){
   resolveiOldRender();
-  if(resolveiUser && ((location.hash||'').includes('conta')||(location.hash||'').includes('conectar-api'))) {
+  if(resolveiUser && (location.hash||'').includes('conta')) {
     resolveiBindAuth(); resolveiRefreshStatuses();
   } else if(!resolveiUser && (location.hash||'').includes('conta')) resolveiBindAuth();
 };
