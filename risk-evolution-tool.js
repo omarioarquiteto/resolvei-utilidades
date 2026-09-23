@@ -62,7 +62,9 @@ function riskConfigFromDOM(){
   const payout = Math.min(100, Math.max(0.01, riskRead('riskPayout') || 85));
   const chances = Math.min(30, Math.max(1, Math.round(riskRead('riskChances') || 7)));
   const goal = Math.max(initial, riskRead('riskGoal') || initial);
-  return {initialCapital:initial,entryPct,payout,chances,goal};
+  const winRate = Math.min(100, Math.max(0, riskRead('riskWinRate') || 80));
+  const maxExposurePct = Math.min(100, Math.max(0.1, riskRead('riskMaxExposurePct') || 20));
+  return {initialCapital:initial,entryPct,payout,chances,goal,winRate,maxExposurePct};
 }
 
 function riskMakeSection(baseCapital, cfg){
@@ -243,8 +245,8 @@ function riskEvolutionRowsHtml(plan){
       arr=arr.concat([null,current]);
     }
   }
-  return arr.map((s,i)=>s ? `<div class="risk-section-row${s.baseCapital && Math.round(i)===0?'':''}">
-    <div><strong>Seção ${i+1}</strong>${s===plan.sections[currentSec-1]?'<span class="risk-tag">Atual</span>':''}</div>
+  return arr.map((s)=>s ? `<div class="risk-section-row">
+    <div><strong>Seção ${plan.sections.indexOf(s)+1}</strong>${s===plan.sections[currentSec-1]?'<span class="risk-tag">Atual</span>':''}</div>
     <div>${riskMoney(s.baseCapital)}</div>
     <div>+${riskMoney(s.growth)}</div>
     <div>${riskMoney(s.target)}</div>
@@ -276,21 +278,24 @@ function riskSummaryHtml(plan,current){
   const growthPct=plan.cfg.entryPct/100*(plan.cfg.payout/100)*100;
   const target=plan.sections[Math.max(0,resolveiRiskState.session.section-1)] || current;
   const status=resolveiRiskState.session.status;
+  const pLossAll=Math.pow(Math.max(0,Math.min(1,1-plan.cfg.winRate/100)),plan.cfg.chances);
+  const pAdvance=1-pLossAll;
+  const exposureFlag=worstPct>plan.cfg.maxExposurePct;
   return `<div class="risk-kpis">
     <div class="risk-kpi"><span>Capital atual</span><strong>${riskMoney(resolveiRiskState.session.capital)}</strong><small>Seção ${resolveiRiskState.session.section} · chance ${status==='busted'?'encerrada':resolveiRiskState.session.chance}</small></div>
     <div class="risk-kpi"><span>Próximo alvo</span><strong>${riskMoney(current.target)}</strong><small>Lucro-alvo da seção: ${riskMoney(current.growth)}</small></div>
     <div class="risk-kpi"><span>Exposição em ${plan.cfg.chances} perdas</span><strong>${riskPct(worstPct)}</strong><small>Sobra: ${riskMoney(worst)}</small></div>
   </div>
-  <div class="risk-alert ${worstPct>=80?'risk-alert-high':worstPct>=50?'risk-alert-mid':'risk-alert-low'}">
-    <strong>${worstPct>=80?'⚠️ Exposição elevada no modelo':worstPct>=50?'⚠️ Exposição relevante':'ℹ️ Exposição modelada'}</strong>
-    <span>Se todas as ${plan.cfg.chances} entradas da seção resultarem em perda, o cálculo consome ${riskPct(worstPct)} do capital-base e deixa ${riskMoney(worst)}.</span>
+  <div class="risk-alert ${exposureFlag?'risk-alert-high':'risk-alert-low'}">
+    <strong>${exposureFlag?'⚠️ Acima do limite de exposição':'✓ Dentro do limite configurado'}</strong>
+    <span>O plano pode expor até ${riskPct(worstPct)} do capital-base nesta seção. Seu limite de referência está em ${riskPct(plan.cfg.maxExposurePct)}.</span>
   </div>
   <div class="risk-mini-grid">
     <div><span>Crescimento por seção</span><strong>+${riskPct(growthPct)}</strong></div>
-    <div><span>Seções até a meta</span><strong>${riskNum(plan.sectionsNeeded)}</strong></div>
-    <div><span>Meta de patrimônio</span><strong>${riskMoney(plan.cfg.goal)}</strong></div>
+    <div><span>Chance estimada de avançar</span><strong>${riskPct(pAdvance*100)}</strong><small>Com taxa de acerto de ${riskPct(plan.cfg.winRate)}</small></div>
+    <div><span>7 perdas consecutivas</span><strong>${riskPct(pLossAll*100)}</strong><small>Modelo probabilístico, não previsão</small></div>
   </div>
-  <div class="risk-note"><strong>Como a planilha trabalha:</strong> a vitória em qualquer chance leva o capital da seção ao mesmo próximo alvo. Isso não significa que a estratégia tenha taxa de acerto garantida; a ferramenta apenas calcula a matemática do plano informado.</div>`;
+  <div class="risk-note"><strong>Como a planilha trabalha:</strong> a vitória em qualquer chance leva o capital da seção ao mesmo próximo alvo. As probabilidades acima são apenas aritmética baseada na taxa de acerto que você informou; elas não estimam desempenho futuro nem garantem resultados.</div>`;
 }
 
 function riskEvolutionUI(){
@@ -304,6 +309,8 @@ function riskEvolutionUI(){
         <div class="field"><label for="riskEntryPct">Entrada-base</label><div class="input-wrap"><input id="riskEntryPct" type="number" step="0.01" min="0.001" max="50" value="${cfg.entryPct}"><span class="suffix">%</span></div></div>
         <div class="field"><label for="riskPayout">Payout / retorno líquido da vitória</label><div class="input-wrap"><input id="riskPayout" type="number" step="0.1" min="0.1" max="100" value="${cfg.payout}"><span class="suffix">%</span></div><small>85% significa lucro de R$ 0,85 para cada R$ 1,00 de entrada vencedora.</small></div>
         <div class="field"><label for="riskChances">Chances por seção</label><div class="input-wrap"><input id="riskChances" type="number" step="1" min="1" max="30" value="${cfg.chances}"></div><small>O padrão da sua planilha é 7.</small></div>
+        <div class="field"><label for="riskWinRate">Taxa de acerto para simulação</label><div class="input-wrap"><input id="riskWinRate" type="number" step="0.1" min="0" max="100" value="${cfg.winRate}"><span class="suffix">%</span></div><small>Usada somente para calcular probabilidades matemáticas da seção.</small></div>
+        <div class="field"><label for="riskMaxExposurePct">Limite de exposição de referência</label><div class="input-wrap"><input id="riskMaxExposurePct" type="number" step="1" min="0.1" max="100" value="${cfg.maxExposurePct}"><span class="suffix">%</span></div><small>Não altera as entradas; serve para sinalizar quando o modelo ultrapassa seu limite.</small></div>
         <div class="field full"><label for="riskGoal">Meta de patrimônio</label><div class="input-wrap"><span class="prefix">R$</span><input id="riskGoal" type="number" step="0.01" min="0.01" value="${cfg.goal}"></div></div>
       </div>
       <div class="actions">
@@ -415,7 +422,7 @@ function riskExportCsv(){
   const rows=[['Data','Seção','Chance','Resultado','Entrada','Capital antes','Capital depois']];
   resolveiRiskState.history.forEach(x=>rows.push([x.at,x.section,x.chance,x.result,x.stake,x.before,x.after]));
   const csv=rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(';')).join('\n');
-  const blob=new Blob(['\\ufeff'+csv],{type:'text/csv;charset=utf-8'});
+  const blob=new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8'});
   const a=document.createElement('a');
   a.href=URL.createObjectURL(blob);
   a.download='resolvei-gerenciamento-risco.csv';
