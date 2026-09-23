@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: resolvei-utilidades
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /api/health
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12"
+      - key: CORS_ORIGINS
+        value: "https://resolvei-utilidades.onrender.com,https://resolvei.com.br,https://www.resolvei.com.br"
