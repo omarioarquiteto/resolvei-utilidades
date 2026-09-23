@@ -1,0 +1,17 @@
+[build]
+  publish = "."
+
+# Netlify hosts the static Resolvei frontend.
+# The Python/FastAPI API is proxied behind the same /api/* path.
+command = "sed -i \"s|BACKEND_URL_PLACEHOLDER|${RESOLVEI_BACKEND_URL}|g\" netlify.toml"
+
+[[redirects]]
+  from = "/api/*"
+  to = "BACKEND_URL_PLACEHOLDER/api/:splat"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
