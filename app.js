@@ -1150,9 +1150,9 @@ function resolveiFirebaseInit(){
 }
 async function resolveiToken(){if(!resolveiUser)throw new Error("Faça login no Resolvei.");return resolveiUser.getIdToken();}
 function resolveiAccountPage(){
- if(!resolveiUser)return \`<div class="tool-layout"><section class="card panel auth-card"><span class="eyebrow">CONTA RESOLVEI</span><h1>Entre para usar as funções de IA</h1><p>Use Google ou seu e-mail e senha. Ao entrar com Google, o Gemini do Resolvei fica disponível sem você precisar colar uma chave pessoal.</p><button class="btn primary full" id="googleLogin">Continuar com Google</button><div class="auth-divider"><span>ou</span></div><div class="form-grid"><div class="field"><label for="authEmail">E-mail</label><input id="authEmail" type="email"></div><div class="field"><label for="authPassword">Senha</label><input id="authPassword" type="password" autocomplete="current-password"></div></div><div class="row-actions"><button type="button" class="btn primary" id="emailLogin">Entrar</button><button type="button" class="btn" id="emailSignup">Criar conta</button></div><div id="authMsg" class="notice" hidden></div></section></div>\`;
+ if(!resolveiUser)return `<div class="tool-layout"><section class="card panel auth-card"><span class="eyebrow">CONTA RESOLVEI</span><h1>Entre para usar as funções de IA</h1><p>Use Google ou seu e-mail e senha. Ao entrar com Google, o Gemini do Resolvei fica disponível sem você precisar colar uma chave pessoal.</p><button class="btn primary full" id="googleLogin">Continuar com Google</button><div class="auth-divider"><span>ou</span></div><div class="form-grid"><div class="field"><label for="authEmail">E-mail</label><input id="authEmail" type="email"></div><div class="field"><label for="authPassword">Senha</label><input id="authPassword" type="password" autocomplete="current-password"></div></div><div class="row-actions"><button type="button" class="btn primary" id="emailLogin">Entrar</button><button type="button" class="btn" id="emailSignup">Criar conta</button></div><div id="authMsg" class="notice" hidden></div></section></div>`;
  const savedTheme=localStorage.getItem("resolvei_theme")||"light";
- return \`<div class="account-page">
+ return `<div class="account-page">
   <aside class="account-sidebar">
    <div class="account-profile"><div class="account-avatar">👤</div><div><strong>\${esc(resolveiUser.displayName||"Minha conta")}</strong><span>\${esc(resolveiUser.email||"")}</span></div></div>
    <div class="account-menu">
@@ -1187,7 +1187,7 @@ function resolveiAccountPage(){
     </section>
    </div>
   </section>
- </div>\`;
+ </div>`;
 }
 function resolveiBindAccountSections(){
  const root=document.querySelector(".account-page"); if(!root || root.dataset.accountBound==="1")return;
