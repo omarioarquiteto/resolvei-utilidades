@@ -490,6 +490,54 @@
   font-size:11px;
   font-weight:700;
 }
+.binary-thermometer{
+  display:block;
+  width:100%;
+  margin-top:18px;
+}
+.binary-thermometer-head{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  margin-bottom:8px;
+  color:#687972;
+  font-size:10px;
+  font-weight:850;
+  letter-spacing:.06em;
+}
+.binary-thermometer-head strong{
+  color:#168a65;
+  font-size:20px;
+  font-variant-numeric:tabular-nums;
+  letter-spacing:0;
+}
+.binary-analysis-thermometer-fill{
+  min-width:18%;
+  background:linear-gradient(90deg,#b9cfc5 0%,#9fc7b7 35%,#4db58c 72%,#16b67c 100%);
+  background-size:200% 100%;
+  animation:binaryThermometerPulse 1.8s ease-in-out infinite;
+}
+@keyframes binaryThermometerPulse{
+  0%,100%{filter:saturate(.9);opacity:.82}
+  50%{filter:saturate(1.15);opacity:1}
+}
+.binary-analyzing-card .binary-signal-actions{
+  margin-top:18px;
+}
+.binary-analyzing-card .binary-analyzing-label{
+  min-height:16px;
+}
+.binary-signal-card.is-call .binary-proximity-head strong{
+  color:#0aae70;
+}
+.binary-signal-card.is-put .binary-proximity-head strong{
+  color:#e23e49;
+}
+.binary-signal-card.is-wait .binary-proximity-head strong{
+  color:#7a8983;
+}
+
 .binary-analysis-progress{
   display:flex;
   align-items:center;
