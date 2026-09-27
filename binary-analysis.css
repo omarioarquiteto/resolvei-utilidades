@@ -446,3 +446,172 @@
     max-height:calc(100vh - 20px);
   }
 }
+
+
+/* Estados da ferramenta: configuração x tela de sinal */
+.binary-analysis-page.settings-mode #binaryCardHost{
+  display:none;
+}
+.binary-analysis-page.signal-mode #binarySettingsHost{
+  display:none;
+}
+.binary-analysis-page.signal-mode{
+  min-height:420px;
+  justify-content:flex-start;
+}
+
+/* Tela visível imediatamente enquanto a análise está sendo processada */
+.binary-analyzing-card{
+  text-align:center;
+  border-color:#b7c6c0;
+}
+.binary-analyzing-icon{
+  margin-top:28px;
+  font-size:42px;
+  line-height:1;
+  color:#13ad78;
+  animation:binarySpin 1s linear infinite;
+}
+.binary-analyzing-title{
+  margin-top:14px;
+  font-size:20px;
+  font-weight:900;
+  color:#25332e;
+}
+.binary-analyzing-subtitle{
+  margin-top:7px;
+  color:#71817a;
+  font-size:12px;
+  line-height:1.5;
+}
+.binary-analyzing-label{
+  margin-top:10px;
+  color:#60716a;
+  font-size:11px;
+  font-weight:700;
+}
+.binary-analysis-progress{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  margin-top:18px;
+}
+.binary-analysis-progress-track{
+  flex:1;
+  height:9px;
+  overflow:hidden;
+  border-radius:999px;
+  background:#e7eeeb;
+}
+.binary-analysis-progress-fill{
+  width:38%;
+  height:100%;
+  border-radius:999px;
+  background:linear-gradient(90deg,#0eab74,#43c69a,#0eab74);
+  background-size:200% 100%;
+  animation:binaryProgress 1.35s ease-in-out infinite;
+}
+@keyframes binaryProgress{
+  0%{transform:translateX(-105%);width:34%}
+  50%{transform:translateX(95%);width:46%}
+  100%{transform:translateX(210%);width:34%}
+}
+@keyframes binarySpin{
+  to{transform:rotate(360deg)}
+}
+
+/* Proximidade técnica do sinal */
+.binary-proximity-block{
+  margin-top:15px;
+  padding:11px 12px;
+  border:1px solid #dbe5e1;
+  border-radius:10px;
+  background:#f7faf9;
+}
+.binary-proximity-head{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:12px;
+  color:#687972;
+  font-size:10px;
+  font-weight:850;
+  letter-spacing:.06em;
+}
+.binary-proximity-head strong{
+  color:#168a65;
+  font-size:18px;
+  letter-spacing:0;
+}
+.binary-proximity-track{
+  height:9px;
+  margin-top:8px;
+  overflow:hidden;
+  border-radius:999px;
+  background:#e3ebe7;
+}
+.binary-proximity-fill{
+  height:100%;
+  border-radius:999px;
+  background:linear-gradient(90deg,#b9cfc5,#16b67c);
+  transition:width .3s ease;
+}
+.binary-proximity-label{
+  margin-top:6px;
+  color:#7b8984;
+  font-size:10px;
+  line-height:1.35;
+}
+
+/* Ações da tela de sinal */
+.binary-signal-actions{
+  display:grid;
+  grid-template-columns:1fr 1.2fr;
+  gap:8px;
+  margin-top:14px;
+}
+.binary-error-card .binary-reason{
+  margin-top:12px;
+  padding:10px;
+  border-radius:9px;
+  background:#fff6f6;
+  color:#b33a42;
+}
+
+/* Alça fixa para arraste com botão esquerdo */
+.binary-floating-grip{
+  display:none;
+}
+.binary-analysis-page.floating .binary-floating-grip{
+  display:block;
+  width:100%;
+  min-height:24px;
+  padding:3px 8px 7px;
+  text-align:center;
+  color:#788984;
+  font-size:10px;
+  font-weight:850;
+  letter-spacing:.06em;
+  cursor:grab;
+  user-select:none;
+  touch-action:none;
+}
+.binary-analysis-page.floating .binary-floating-grip:hover{
+  color:#28765f;
+}
+.binary-analysis-page.floating.is-dragging .binary-floating-grip{
+  cursor:grabbing;
+}
+.binary-analysis-page.floating.is-dragging{
+  user-select:none;
+  cursor:grabbing;
+}
+.binary-analysis-page.floating .binary-signal-card{
+  cursor:default;
+}
+
+@media(max-width:700px){
+  .binary-signal-actions{
+    grid-template-columns:1fr;
+  }
+}
