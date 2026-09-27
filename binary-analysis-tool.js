@@ -1,7 +1,6 @@
 (function () {
   const API = "/api/iq";
   const SESSION_KEY = "resolvei_iq_session";
-  const ASSETS_KEY = "resolvei_binary_assets";
   const CURRENT_ASSET_KEY = "resolvei_binary_current_asset";
   const STRATEGY_KEY = "resolvei_binary_strategy";
   const EXPIRY_KEY = "resolvei_binary_expiry";
@@ -11,7 +10,6 @@
   let session = sessionStorage.getItem(SESSION_KEY) || "";
   let assets = [];
   let strategies = {};
-  let monitoredAssets = [];
   let currentAsset = localStorage.getItem(CURRENT_ASSET_KEY) || "EURUSD";
   let currentStrategy = localStorage.getItem(STRATEGY_KEY) || "trend_pullback";
   let currentExpiry = localStorage.getItem(EXPIRY_KEY) || "1min";
@@ -69,16 +67,6 @@
     localStorage.setItem(STRATEGY_KEY, currentStrategy);
     localStorage.setItem(EXPIRY_KEY, currentExpiry);
     localStorage.setItem(MARKET_KEY, currentMarket);
-    localStorage.setItem(ASSETS_KEY, JSON.stringify(monitoredAssets));
-  }
-
-  function loadSavedAssets() {
-    try {
-      const parsed = JSON.parse(localStorage.getItem(ASSETS_KEY) || "[]");
-      monitoredAssets = Array.isArray(parsed) ? normalizeAssets(parsed) : [];
-    } catch (_) {
-      monitoredAssets = [];
-    }
   }
 
   function loginMarkup(message = "") {
@@ -109,13 +97,6 @@
       `<option value="${esc(key)}">${esc(value.name)}</option>`
     ).join("");
 
-    const chips = monitoredAssets.length
-      ? monitoredAssets.map((asset) => `
-          <button class="binary-pair-chip ${asset === currentAsset ? "active" : ""}" type="button" data-pair-chip="${esc(asset)}">
-            ${esc(asset)} <span class="binary-pair-remove" data-remove-pair="1" role="button" tabindex="0" aria-label="Remover ${esc(asset)}" title="Remover par">×</span>
-          </button>`).join("")
-      : '<span class="binary-no-pairs">Nenhum par adicionado. O par atual será usado.</span>';
-
     return `
       <section class="binary-controls">
         <div class="binary-controls-header">
@@ -134,9 +115,6 @@
               <button type="button" class="${currentMarket === "OTC" ? "active" : ""}" data-market="OTC">OTC</button>
             </div>
             <label>Par atual<select id="binAsset">${options}</select></label>
-            <button class="binary-add-pair" id="binAddPair" type="button">＋ Adicionar aos pares monitorados</button>
-            <div class="binary-pairs-label">Pares monitorados</div>
-            <div class="binary-pairs">${chips}</div>
           </div>
 
           <div class="binary-control-card">
@@ -367,7 +345,6 @@
       if (!response.ok) throw new Error(data.detail || "Não foi possível conectar.");
       session = data.session_id;
       sessionStorage.setItem(SESSION_KEY, session);
-      loadSavedAssets();
       await startConnected();
     } catch (error) {
       msg.textContent = "🔴 " + error.message;
@@ -398,14 +375,16 @@
     assets = normalizeAssets(assetData.assets);
     strategies = strategyData.strategies || {};
 
-    if (!assets.includes(currentAsset)) currentAsset = assets[0] || "EURUSD";
-    monitoredAssets = monitoredAssets.filter((item) => assets.includes(item));
-    if (!monitoredAssets.length && currentAsset) monitoredAssets = [currentAsset];
+    const marketAssets = assets.filter((item) =>
+      currentMarket === "OTC" ? item.endsWith("-OTC") : !item.endsWith("-OTC")
+    );
+    if (!marketAssets.includes(currentAsset)) {
+      currentAsset = marketAssets[0] || assets[0] || "EURUSD";
+    }
     if (!strategies[currentStrategy]) currentStrategy = Object.keys(strategies)[0] || "trend_pullback";
     if (!["1min", "5min"].includes(currentExpiry)) currentExpiry = "1min";
     saveState();
   }
-
   function selectedSignalFromData(data) {
     return data?.signals?.[currentExpiry] || {};
   }
@@ -619,6 +598,7 @@
       button.addEventListener("click", () => {
         currentMarket = button.dataset.market === "OTC" ? "OTC" : "REGULAR";
         const marketAssets = assets.filter((item) => currentMarket === "OTC" ? item.endsWith("-OTC") : !item.endsWith("-OTC"));
+        resetSignalState();
         currentAsset = marketAssets[0] || currentAsset;
         saveState();
         setSettingsScreen("Mercado " + currentMarket + " selecionado. Clique em “Analisar agora” para gerar o sinal.");
@@ -638,39 +618,6 @@
       currentStrategy = strategy.value;
       saveState();
       setSettingsScreen("Estratégia alterada. Clique em “Analisar agora” para recalcular.");
-    });
-
-    document.getElementById("binAddPair")?.addEventListener("click", () => {
-      if (!monitoredAssets.includes(currentAsset)) monitoredAssets.push(currentAsset);
-      saveState();
-      setSettingsScreen("Par adicionado aos monitorados. Nenhuma análise foi executada.");
-      renderSettings();
-    });
-
-    document.querySelectorAll("[data-pair-chip]").forEach((button) => {
-      const pair = button.dataset.pairChip;
-      if (!pair) return;
-
-      button.addEventListener("click", () => {
-        currentAsset = pair;
-        currentMarket = pair.endsWith("-OTC") ? "OTC" : "REGULAR";
-        saveState();
-        setSettingsScreen("Par selecionado. Clique em “Analisar agora” para calcular o sinal.");
-        renderSettings();
-      });
-
-      const removeButton = button.querySelector("[data-remove-pair]");
-      removeButton?.addEventListener("click", (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        monitoredAssets = monitoredAssets.filter((item) => item !== pair);
-        if (!monitoredAssets.length) monitoredAssets = [currentAsset];
-        if (!monitoredAssets.includes(currentAsset)) currentAsset = monitoredAssets[0];
-        currentMarket = currentAsset.endsWith("-OTC") ? "OTC" : "REGULAR";
-        saveState();
-        setSettingsScreen("Par monitorado removido. Nenhuma análise foi executada.");
-        renderSettings();
-      });
     });
 
     document.querySelectorAll("[data-expiry]").forEach((button) => {
