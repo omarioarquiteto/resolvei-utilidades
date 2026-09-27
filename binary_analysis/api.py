@@ -110,9 +110,11 @@ def iq_analyze(
         result["selected_confidence"] = selected.get("confidence")
         result["selected_score"] = selected.get("score")
         result["selected_reason"] = selected.get("reason")
+        result["selected_data_ready"] = selected.get("data_ready", False)
+        result["selected_candle_count"] = selected.get("candle_count", 0)
 
-        result["market"] = get_market_status(x_iq_session, asset)
-        result["payout"] = get_payout(x_iq_session, asset)
+        result["market"] = result.get("market") or get_market_status(x_iq_session, asset)
+        result["payout"] = None if result["market"] == "fechado" else get_payout(x_iq_session, asset)
         for signal in (result.get("signals") or {}).values():
             if isinstance(signal, dict):
                 signal["payout"] = result["payout"]
