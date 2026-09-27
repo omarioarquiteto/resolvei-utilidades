@@ -162,6 +162,25 @@
     return localStorage.getItem(FLOATING_KEY) === "1";
   }
 
+  function setScreen(mode) {
+    const page = document.querySelector(".binary-analysis-page");
+    if (!page) return;
+    page.classList.toggle("settings-mode", mode === "settings");
+    page.classList.toggle("signal-mode", mode === "signal");
+  }
+
+  function setSignalScreen(statusText = "") {
+    setScreen("signal");
+    const status = document.getElementById("binaryStatus");
+    if (status) status.textContent = statusText;
+  }
+
+  function setSettingsScreen(statusText = "") {
+    setScreen("settings");
+    const status = document.getElementById("binaryStatus");
+    if (status) status.textContent = statusText;
+  }
+
   function setFloating(value) {
     localStorage.setItem(FLOATING_KEY, value ? "1" : "0");
     const page = document.querySelector(".binary-analysis-page");
@@ -198,6 +217,9 @@
     const action = direction === "CALL" ? "COMPRA" : direction === "PUT" ? "VENDA" : "AGUARDAR";
     const actionClass = direction === "CALL" ? "buy" : direction === "PUT" ? "sell" : "wait";
     const newsWarning = signal.news_warning || data.warning || "";
+    const proximity = signal.proximity || {};
+    const proximityPercent = Math.max(0, Math.min(100, Number(proximity.percent ?? 0)));
+    const proximityLabel = proximity.label || (proximityPercent >= 100 ? "LIMIAR TÉCNICO ATINGIDO" : "APROXIMAÇÃO");
 
     const badges = [
       ["rsi", "RSI (14)"], ["stoch", "Stochastic"], ["stochrsi", "Stoch RSI"],
@@ -253,6 +275,17 @@
         ${newsWarning ? "<div class=\"binary-news-warning\">⚠ " + esc(newsWarning) + "</div>" : ""}
         <div class="binary-history-row">${historyMarks}</div>
 
+        <div class="binary-proximity-block">
+          <div class="binary-proximity-head">
+            <span>PROXIMIDADE DO SINAL</span>
+            <strong>${proximityPercent.toFixed(0)}%</strong>
+          </div>
+          <div class="binary-proximity-track">
+            <div class="binary-proximity-fill" style="width:${proximityPercent}%"></div>
+          </div>
+          <div class="binary-proximity-label">${esc(proximityLabel)} · baseada no score técnico, não é probabilidade de acerto.</div>
+        </div>
+
         <div class="binary-divider"></div>
 
         <div class="binary-votes-row">
@@ -261,9 +294,27 @@
         </div>
 
         <div class="binary-indicators">${badges}</div>
+
+        <div class="binary-signal-actions">
+          <button class="binary-secondary-btn" id="binSignalSettings" type="button">⚙ Configurar</button>
+          <button class="binary-primary-btn" id="binSignalAnalyze" type="button">🔎 Analisar novamente</button>
+        </div>
       </article>`;
 
+    setScreen("signal");
     updateTimer();
+
+    document.getElementById("binSignalSettings")?.addEventListener("click", () => {
+      setSettingsScreen("Configuração carregada. Nenhuma nova análise foi executada.");
+      renderSettings();
+      applyFloatingPosition();
+      enableFloatingDrag();
+    });
+
+    document.getElementById("binSignalAnalyze")?.addEventListener("click", () => {
+      currentExpiresAt = 0;
+      analyze();
+    });
   }
 
   function updateTimer() {
@@ -274,7 +325,8 @@
     if (seconds <= 0) {
       clearInterval(countdownTimer);
       countdownTimer = null;
-      analyze(true);
+      const status = document.getElementById("binaryStatus");
+      if (status) status.textContent = "⏱️ Expiração encerrada. Clique em “Analisar novamente” para gerar um novo sinal.";
     }
   }
 
