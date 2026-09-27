@@ -67,10 +67,14 @@ def _resample_ohlcv(df: pd.DataFrame, minutes: int) -> pd.DataFrame:
         return pd.DataFrame()
     rule = f"{int(minutes)}min"
     out = df[["Open","High","Low","Close","Volume"]].resample(
-        rule, label="right", closed="right"
+        rule, label="right", closed="left"
     ).agg({
         "Open":"first","High":"max","Low":"min","Close":"last","Volume":"sum"
     }).dropna()
+    # O rótulo representa o fim da barra. Nunca usamos uma barra maior
+    # que ainda esteja em formação.
+    current_bucket = int(time.time()) // (minutes * 60) * (minutes * 60)
+    out = out.loc[out.index <= pd.to_datetime(current_bucket, unit="s", utc=True)]
     return out
 
 
@@ -248,6 +252,13 @@ def analyze_asset(
         if news.get("blocked"):
             decision["news_blocked"]=True
             decision["news_warning"]="Evento econômico de alto impacto detectado no intervalo monitorado."
+            # Em expirações de 1m/5m, o evento pode dominar o movimento e
+            # invalidar uma leitura puramente técnica. Preferimos não publicar.
+            if decision.get("signal") in ("CALL","PUT"):
+                decision["signal_before_news_gate"]=decision["signal"]
+                decision["signal"]="AGUARDAR"
+                decision["confirmed"]=False
+                decision["reason"]="Sinal técnico bloqueado por evento econômico de alto impacto."
         else:
             decision["news_blocked"]=False
             decision["news_warning"]=None if news.get("available") else "Calendário econômico indisponível."
