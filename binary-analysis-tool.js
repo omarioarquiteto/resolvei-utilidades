@@ -395,6 +395,10 @@
     inFlight = true;
     currentExpiresAt = 0;
     setSignalScreen("🔎 Iniciando análise...");
+    const loadingHost = document.getElementById("binaryCardHost");
+    if (loadingHost) {
+      loadingHost.innerHTML = `<article class="binary-signal-card is-wait binary-analyzing-card"><div class="binary-card-top binary-drag-handle"><span>ANÁLISE EM ANDAMENTO</span><span>AGUARDE</span></div><div class="binary-analyzing-icon">◌</div><div class="binary-analyzing-title">Calculando o sinal</div><div class="binary-analyzing-subtitle">Coletando candles, calculando indicadores e verificando a proximidade do sinal.</div><div class="binary-analysis-progress"><div class="binary-analysis-progress-track"><div class="binary-analysis-progress-fill"></div></div></div><div class="binary-analyzing-label">Processando dados do mercado...</div></article>`;
+    }
     const manualButton = document.getElementById("binAnalyzeNow");
     if (manualButton) {
       manualButton.disabled = true;
