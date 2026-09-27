@@ -5,7 +5,7 @@ import time
 from dataclasses import dataclass
 from typing import Any
 
-from iqair.client import IQOptionClient
+from iqoptionapi.stable_api import IQ_Option
 
 DEFAULT_ASSETS = [
     "EURUSD","GBPUSD","USDJPY","USDCHF","USDCAD","AUDUSD","NZDUSD",
@@ -43,7 +43,7 @@ def connect_session(session_id: str, email: str, password: str, account: str):
     with _LOCK:
         _cleanup()
         try:
-            client=IQOptionClient(email.strip(), password)
+            client=IQ_Option(email.strip(), password)
             ok, reason=client.connect()
             if not ok:
                 _close_client(client)
