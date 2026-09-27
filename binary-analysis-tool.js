@@ -1,14 +1,23 @@
 (function () {
   const API = "/api/iq";
   const SESSION_KEY = "resolvei_iq_session";
+  const ASSETS_KEY = "resolvei_binary_assets";
+  const CURRENT_ASSET_KEY = "resolvei_binary_current_asset";
+  const STRATEGY_KEY = "resolvei_binary_strategy";
+  const EXPIRY_KEY = "resolvei_binary_expiry";
+  const FLOATING_KEY = "resolvei_binary_floating";
+
   let session = sessionStorage.getItem(SESSION_KEY) || "";
   let assets = [];
   let strategies = {};
-  let currentAsset = localStorage.getItem("resolvei_binary_asset") || "EURUSD";
-  let currentStrategy = localStorage.getItem("resolvei_binary_strategy") || "trend_pullback";
+  let monitoredAssets = [];
+  let currentAsset = localStorage.getItem(CURRENT_ASSET_KEY) || "EURUSD";
+  let currentStrategy = localStorage.getItem(STRATEGY_KEY) || "trend_pullback";
+  let currentExpiry = localStorage.getItem(EXPIRY_KEY) || "1min";
   let refreshTimer = null;
   let countdownTimer = null;
   let currentExpiresAt = 0;
+  let inFlight = false;
 
   const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({
     "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"
@@ -18,6 +27,11 @@
     minimumFractionDigits: 1,
     maximumFractionDigits: 1
   }) + "%";
+
+  const normalizeAssets = (list) => {
+    const unique = [...new Set((list || []).map(String).filter(Boolean))];
+    return unique;
+  };
 
   async function api(path, options = {}) {
     const headers = Object.assign({}, options.headers || {});
@@ -30,6 +44,33 @@
 
   function mount() {
     return document.getElementById("binaryAnalysisRoot");
+  }
+
+  function formatDuration(seconds) {
+    const total = Math.max(0, Math.ceil(Number(seconds || 0)));
+    const mm = Math.floor(total / 60);
+    const ss = total % 60;
+    return String(mm).padStart(2, "0") + ":" + String(ss).padStart(2, "0");
+  }
+
+  function expiryLabel(expiry) {
+    return expiry === "5min" ? "5 MINUTOS" : "1 MINUTO";
+  }
+
+  function saveState() {
+    localStorage.setItem(CURRENT_ASSET_KEY, currentAsset);
+    localStorage.setItem(STRATEGY_KEY, currentStrategy);
+    localStorage.setItem(EXPIRY_KEY, currentExpiry);
+    localStorage.setItem(ASSETS_KEY, JSON.stringify(monitoredAssets));
+  }
+
+  function loadSavedAssets() {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(ASSETS_KEY) || "[]");
+      monitoredAssets = Array.isArray(parsed) ? normalizeAssets(parsed) : [];
+    } catch (_) {
+      monitoredAssets = [];
+    }
   }
 
   function loginMarkup(message = "") {
@@ -51,43 +92,104 @@
   }
 
   function controlMarkup() {
-    const assetOptions = assets.map(a => `<option value="${esc(a)}">${esc(a)}</option>`).join("");
+    const options = assets.map((asset) =>
+      `<option value="${esc(asset)}">${esc(asset)}</option>`
+    ).join("");
+
     const strategyOptions = Object.entries(strategies).map(([key, value]) =>
-      `<option value="${esc(key)}">${esc(value.name)}</option>`).join("");
+      `<option value="${esc(key)}">${esc(value.name)}</option>`
+    ).join("");
+
+    const chips = monitoredAssets.length
+      ? monitoredAssets.map((asset) => `
+          <button class="binary-pair-chip ${asset === currentAsset ? "active" : ""}" type="button" data-pair-chip="${esc(asset)}">
+            ${esc(asset)} <span aria-hidden="true">×</span>
+          </button>`).join("")
+      : '<span class="binary-no-pairs">Nenhum par adicionado. O par atual será usado.</span>';
+
     return `
-      <details class="binary-settings">
-        <summary>⚙ Configuração da análise</summary>
-        <div class="binary-settings-grid">
-          <label>Ativo<select id="binAsset">${assetOptions}</select></label>
-          <label>Estratégia<select id="binStrategy">${strategyOptions}</select></label>
-          <button class="binary-secondary-btn" id="binRefresh">↻ Atualizar</button>
-          <button class="binary-secondary-btn" id="binLogout">Desconectar</button>
+      <section class="binary-controls">
+        <div class="binary-controls-header">
+          <div>
+            <div class="binary-controls-kicker">CONFIGURAÇÃO</div>
+            <h2>Como você quer analisar?</h2>
+          </div>
+          <button class="binary-floating-btn ${isFloating() ? "active" : ""}" id="binFloating" type="button">${isFloating() ? "↙ Voltar à página" : "↗ Janela flutuante"}</button>
         </div>
-        <div class="binary-disclaimer">Integração com a API comunitária não oficial da IQ Option. Somente análise; nenhuma ordem é enviada.</div>
-      </details>`;
+
+        <div class="binary-controls-grid">
+          <div class="binary-control-card">
+            <label>Par atual<select id="binAsset">${options}</select></label>
+            <button class="binary-add-pair" id="binAddPair" type="button">＋ Adicionar aos pares monitorados</button>
+            <div class="binary-pairs-label">Pares monitorados</div>
+            <div class="binary-pairs">${chips}</div>
+          </div>
+
+          <div class="binary-control-card">
+            <label>Estratégia<select id="binStrategy">${strategyOptions}</select></label>
+            <div class="binary-expiry-label">Tempo de expiração</div>
+            <div class="binary-expiry">
+              <button type="button" class="${currentExpiry === "1min" ? "active" : ""}" data-expiry="1min">1 minuto</button>
+              <button type="button" class="${currentExpiry === "5min" ? "active" : ""}" data-expiry="5min">5 minutos</button>
+            </div>
+          </div>
+
+          <div class="binary-control-actions">
+            <button class="binary-primary-btn" id="binAnalyzeNow" type="button">🔎 Analisar agora</button>
+            <button class="binary-secondary-btn" id="binRefresh" type="button">↻ Atualizar candles</button>
+            <button class="binary-secondary-btn" id="binLogout" type="button">Desconectar</button>
+          </div>
+        </div>
+
+        <div class="binary-disclaimer">
+          API comunitária não oficial da IQ Option. A ferramenta somente analisa dados e não envia ordens.
+          Você pode monitorar vários pares e trocar o par exibido sem perder sua configuração.
+        </div>
+      </section>`;
   }
 
   function shellMarkup() {
     return `
-      <div class="binary-analysis-page">
+      <div class="binary-analysis-page ${isFloating() ? "floating" : ""}">
         <div id="binaryCardHost"></div>
         <div id="binaryStatus" class="binary-status-line"></div>
         <div id="binarySettingsHost"></div>
       </div>`;
   }
 
+  function isFloating() {
+    return localStorage.getItem(FLOATING_KEY) === "1";
+  }
+
+  function setFloating(value) {
+    localStorage.setItem(FLOATING_KEY, value ? "1" : "0");
+    const page = document.querySelector(".binary-analysis-page");
+    if (page) page.classList.toggle("floating", value);
+    renderSettings();
+    updateFloatingButton();
+  }
+
+  function updateFloatingButton() {
+    const button = document.getElementById("binFloating");
+    if (!button) return;
+    const active = isFloating();
+    button.classList.toggle("active", active);
+    button.textContent = active ? "↙ Voltar à página" : "↗ Janela flutuante";
+  }
+
   function renderCard(data) {
-    const signal = data?.signals?.["1min"] || {};
+    const signal = data?.signals?.[currentExpiry] || {};
     const accuracy = signal.historical_accuracy || {};
     const votes = signal.resumo_votos || {};
     const direction = signal.signal || "AGUARDAR";
     const stateClass = direction === "CALL" ? "is-call" : direction === "PUT" ? "is-put" : "is-wait";
-    const locked = signal.locked || signal.seconds_remaining > 0;
+    const locked = Boolean(signal.locked);
     const reason = signal.reason || "Aguardando confirmação técnica.";
     const payout = signal.payout ?? data.payout;
     const voteConfidence = votes.confianca ?? signal.confidence ?? null;
     const history = Array.isArray(accuracy.ultimos) ? accuracy.ultimos.slice(-12) : [];
     const indicatorVotes = Array.isArray(signal.votos) ? signal.votos : [];
+    const strategyName = strategies[currentStrategy]?.name || currentStrategy;
 
     const badges = [
       ["rsi", "RSI (14)"], ["stoch", "Stochastic"], ["stochrsi", "Stoch RSI"],
@@ -104,13 +206,10 @@
       ? history.map(item => `<span class="binary-history ${item === "OK" ? "win" : "loss"}">${item === "OK" ? "✓" : "✕"}</span>`).join("")
       : '<span class="binary-history-empty">sem amostra</span>';
 
-    const countText = `▲ ${Number(votes.bulls || 0)} CALL <span class="vote-red">▼ ${Number(votes.bears || 0)} PUT</span> <span class="vote-blue">● ${Number(votes.neutros || votes.neutrals || 0)} neutros</span>`;
+    const countText = `▲ ${Number(votes.bulls || 0)} CALL <span class="vote-red">▼ ${Number(votes.bears || 0)} PUT</span> <span class="vote-blue">● ${Number(votes.neutros ?? votes.neutrals ?? 0)} neutros</span>`;
 
     const remaining = Math.max(0, Number(signal.seconds_remaining || 0));
     currentExpiresAt = Date.now() + remaining * 1000;
-
-    const formattedDirection = direction === "CALL" ? "CALL" : direction === "PUT" ? "PUT" : "AGUARDAR";
-    const lockText = locked ? "SINAL FIXADO" : "ANÁLISE";
 
     const host = document.getElementById("binaryCardHost");
     if (!host) return;
@@ -118,13 +217,18 @@
     host.innerHTML = `
       <article class="binary-signal-card ${stateClass}">
         <div class="binary-card-top">
-          <span>EXPIRAÇÃO 1 MINUTO</span>
-          <span>${lockText}</span>
+          <span>EXPIRAÇÃO ${expiryLabel(currentExpiry)}</span>
+          <span>${locked ? "SINAL FIXADO" : "ANÁLISE"}</span>
+        </div>
+
+        <div class="binary-current-meta">
+          <span class="binary-pair-name">${esc(data.asset || currentAsset)}</span>
+          <span class="binary-strategy-name">${esc(strategyName)}</span>
         </div>
 
         <div class="binary-card-main">
-          <div class="binary-direction">${formattedDirection}</div>
-          <div class="binary-timer" id="binaryTimer">${formatSeconds(remaining)}</div>
+          <div class="binary-direction">${direction}</div>
+          <div class="binary-timer" id="binaryTimer">${formatDuration(remaining)}</div>
         </div>
 
         <div class="binary-payout">Payout ${payout == null ? "—" : pct(payout)}</div>
@@ -148,16 +252,11 @@
     updateTimer();
   }
 
-  function formatSeconds(seconds) {
-    const s = Math.max(0, Math.floor(Number(seconds || 0)));
-    return `00:${String(s).padStart(2, "0")}`;
-  }
-
   function updateTimer() {
     const el = document.getElementById("binaryTimer");
     if (!el) return;
     const seconds = Math.max(0, Math.ceil((currentExpiresAt - Date.now()) / 1000));
-    el.textContent = formatSeconds(seconds);
+    el.textContent = formatDuration(seconds);
     if (seconds <= 0) {
       clearInterval(countdownTimer);
       countdownTimer = null;
@@ -185,6 +284,7 @@
       if (!response.ok) throw new Error(data.detail || "Não foi possível conectar.");
       session = data.session_id;
       sessionStorage.setItem(SESSION_KEY, session);
+      loadSavedAssets();
       await startConnected();
     } catch (error) {
       msg.textContent = "🔴 " + error.message;
@@ -197,38 +297,54 @@
     try { await api("/logout", { method: "POST" }); } catch (_) {}
     session = "";
     sessionStorage.removeItem(SESSION_KEY);
-    if (countdownTimer) clearInterval(countdownTimer);
-    if (refreshTimer) clearInterval(refreshTimer);
+    clearInterval(countdownTimer);
+    clearInterval(refreshTimer);
     renderLogin();
   }
 
   async function loadCatalog() {
-    const [assetData, strategyData] = await Promise.all([api("/assets"), api("/strategies")]);
-    assets = Array.isArray(assetData.assets) ? assetData.assets : [];
+    const [assetData, strategyData] = await Promise.all([
+      api("/assets"),
+      api("/strategies")
+    ]);
+    assets = normalizeAssets(assetData.assets);
     strategies = strategyData.strategies || {};
+
     if (!assets.includes(currentAsset)) currentAsset = assets[0] || "EURUSD";
+    monitoredAssets = monitoredAssets.filter((item) => assets.includes(item));
+    if (!monitoredAssets.length && currentAsset) monitoredAssets = [currentAsset];
     if (!strategies[currentStrategy]) currentStrategy = Object.keys(strategies)[0] || "trend_pullback";
+    if (!["1min", "5min"].includes(currentExpiry)) currentExpiry = "1min";
+    saveState();
   }
 
   async function analyze(force = false) {
-    if (!session) return;
+    if (!session || inFlight) return;
     const cardHost = document.getElementById("binaryCardHost");
     const status = document.getElementById("binaryStatus");
     if (!cardHost) return;
+
     if (!force && currentExpiresAt > Date.now() + 1000) return;
 
+    inFlight = true;
     try {
-      if (status) status.textContent = "Atualizando sinal...";
-      const data = await api("/analyze/" + encodeURIComponent(currentAsset) + "?strategy=" + encodeURIComponent(currentStrategy));
+      if (status) status.textContent = `Atualizando ${currentAsset} · ${expiryLabel(currentExpiry).toLowerCase()}...`;
+      const data = await api(
+        "/analyze/" + encodeURIComponent(currentAsset) +
+        "?strategy=" + encodeURIComponent(currentStrategy)
+      );
       renderCard(data);
       renderSettings();
-      if (status) status.textContent = `${currentAsset} · mercado ${data.market || "indisponível"}`;
-      localStorage.setItem("resolvei_binary_asset", currentAsset);
-      localStorage.setItem("resolvei_binary_strategy", currentStrategy);
-      if (countdownTimer) clearInterval(countdownTimer);
+      if (status) {
+        status.textContent = `${currentAsset} · ${expiryLabel(currentExpiry).toLowerCase()} · mercado ${data.market || "indisponível"}`;
+      }
+      saveState();
+      clearInterval(countdownTimer);
       countdownTimer = setInterval(updateTimer, 250);
     } catch (error) {
       if (status) status.textContent = "⚠️ " + error.message;
+    } finally {
+      inFlight = false;
     }
   }
 
@@ -236,14 +352,67 @@
     const host = document.getElementById("binarySettingsHost");
     if (!host) return;
     host.innerHTML = controlMarkup();
+
     const asset = document.getElementById("binAsset");
     const strategy = document.getElementById("binStrategy");
-    asset.value = currentAsset;
-    strategy.value = currentStrategy;
-    asset.onchange = () => { currentAsset = asset.value; analyze(true); };
-    strategy.onchange = () => { currentStrategy = strategy.value; analyze(true); };
-    document.getElementById("binRefresh").onclick = () => analyze(true);
-    document.getElementById("binLogout").onclick = logout;
+
+    if (asset) asset.value = currentAsset;
+    if (strategy) strategy.value = currentStrategy;
+
+    asset?.addEventListener("change", () => {
+      currentAsset = asset.value;
+      if (!monitoredAssets.includes(currentAsset)) monitoredAssets.push(currentAsset);
+      saveState();
+      analyze(true);
+      renderSettings();
+    });
+
+    strategy?.addEventListener("change", () => {
+      currentStrategy = strategy.value;
+      saveState();
+      analyze(true);
+    });
+
+    document.getElementById("binAddPair")?.addEventListener("click", () => {
+      if (!monitoredAssets.includes(currentAsset)) monitoredAssets.push(currentAsset);
+      saveState();
+      renderSettings();
+      analyze(true);
+    });
+
+    document.querySelectorAll("[data-pair-chip]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const pair = button.dataset.pairChip;
+        if (!pair) return;
+        currentAsset = pair;
+        saveState();
+        renderSettings();
+        analyze(true);
+      });
+      button.querySelector("span")?.addEventListener("click", (event) => {
+        event.stopPropagation();
+        monitoredAssets = monitoredAssets.filter((item) => item !== pair);
+        if (!monitoredAssets.length) monitoredAssets = [currentAsset];
+        if (!monitoredAssets.includes(currentAsset)) currentAsset = monitoredAssets[0];
+        saveState();
+        renderSettings();
+        analyze(true);
+      });
+    });
+
+    document.querySelectorAll("[data-expiry]").forEach((button) => {
+      button.addEventListener("click", () => {
+        currentExpiry = button.dataset.expiry === "5min" ? "5min" : "1min";
+        saveState();
+        renderSettings();
+        analyze(true);
+      });
+    });
+
+    document.getElementById("binAnalyzeNow")?.addEventListener("click", () => analyze(true));
+    document.getElementById("binRefresh")?.addEventListener("click", () => analyze(true));
+    document.getElementById("binLogout")?.addEventListener("click", logout);
+    document.getElementById("binFloating")?.addEventListener("click", () => setFloating(!isFloating()));
   }
 
   async function startConnected() {
@@ -255,12 +424,17 @@
         renderLogin();
         return;
       }
+
       const root = mount();
       if (!root) return;
+
+      loadSavedAssets();
       root.innerHTML = shellMarkup();
       await loadCatalog();
+      renderSettings();
       await analyze(true);
-      if (refreshTimer) clearInterval(refreshTimer);
+
+      clearInterval(refreshTimer);
       refreshTimer = setInterval(() => analyze(false), 1000);
     } catch (error) {
       renderLogin(error.message);
@@ -271,12 +445,13 @@
     const root = mount();
     if (!root) return;
     root.innerHTML = loginMarkup(message);
-    document.getElementById("binLogin").onclick = login;
+    document.getElementById("binLogin")?.addEventListener("click", login);
   }
 
   function init() {
     const root = mount();
     if (!root) return;
+    loadSavedAssets();
     if (session) startConnected();
     else renderLogin();
   }
