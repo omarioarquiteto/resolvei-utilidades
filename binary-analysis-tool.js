@@ -298,12 +298,10 @@
     // o próximo fechamento de vela para começar.
     const signalIsActive = direction === "CALL" || direction === "PUT";
     const timerNow = Date.now();
-    currentEntryAt = signalIsActive
-      ? timerNow
-      : timerNow + secondsToEntry * 1000;
-    currentExpiresAt = signalIsActive
-      ? timerNow + intervalSeconds * 1000
-      : currentEntryAt + intervalSeconds * 1000;
+    // Nunca inicia contador enquanto a tela estiver em ANALISANDO/sem entrada.
+    // O relógio só nasce quando CALL/PUT realmente foi emitido.
+    currentEntryAt = signalIsActive ? timerNow : 0;
+    currentExpiresAt = signalIsActive ? timerNow + intervalSeconds * 1000 : 0;
 
     const host = document.getElementById("binaryCardHost");
     if (!host) return;
@@ -385,12 +383,21 @@
     if (!el) return;
     const label = document.getElementById("binaryTimerLabel");
     const now = Date.now();
+
+    // Sem sinal não existe entrada nem expiração. Portanto, sem contador.
+    if (!currentExpiresAt || !currentEntryAt) {
+      if (label) label.textContent = "SEM ENTRADA";
+      el.textContent = "—";
+      return;
+    }
+
     if (currentEntryAt && now < currentEntryAt) {
       const seconds = Math.max(0, Math.ceil((currentEntryAt - now) / 1000));
       if (label) label.textContent = "ENTRADA EM";
       el.textContent = formatDuration(seconds);
       return;
     }
+
     const seconds = Math.max(0, Math.ceil((currentExpiresAt - now) / 1000));
     if (label) label.textContent = "EXPIRA EM";
     el.textContent = formatDuration(seconds);
@@ -621,7 +628,14 @@
       }
       saveState();
       clearInterval(countdownTimer);
-      countdownTimer = setInterval(updateTimer, 250);
+      const selected = selectedSignalFromData(data);
+      if (selected.signal === "CALL" || selected.signal === "PUT") {
+        countdownTimer = setInterval(updateTimer, 250);
+      } else {
+        countdownTimer = null;
+        currentEntryAt = 0;
+        currentExpiresAt = 0;
+      }
     } catch (error) {
       if (error?.name === "AbortError") {
         stopAnalysisStageAnimation();
