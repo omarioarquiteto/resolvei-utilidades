@@ -507,7 +507,7 @@ def estimate_historical_accuracy(df: pd.DataFrame, strategy: str, horizon: int =
     wins = sum(1 for r in resultados if r)
     ultimos = [("OK" if r else "ERRO") for r in reversed(resultados[-12:])]
     return {
-        "rate": round(wins / total * 100, 1) if sufficient_sample else None,
+        "rate": round(wins / total * 100, 1) if total else None,
         "sample_size": total,
         "wins": wins,
         "ultimos": ultimos,
@@ -1469,21 +1469,11 @@ def analyze_asset(
                 "confianca": agregado["confidence"],
             }
 
-        # Se há candles válidos, sempre publicamos uma direção técnica.
-        # "confirmed" continua indicando se o limiar mínimo da estratégia foi atingido.
+        # Não publica direção por desempate/fallback. Se a estratégia ou os
+        # indicadores não confirmarem a entrada, permanece AGUARDAR.
+        # Uma direção fraca nunca vira "sinal".
         if not df.empty:
-            raw_signal = decision.get("signal")
-            if raw_signal not in ("CALL", "PUT"):
-                fallback_signal, fallback_reason = _fallback_direction_from_data(df, votos)
-                decision["signal"] = fallback_signal
-                decision["confirmed"] = False
-                decision["directional_only"] = True
-                decision["reason"] = (
-                    f"{fallback_reason} O score da estratégia não atingiu o limiar de "
-                    f"confirmação ({decision.get('score', 0)})."
-                )
-            else:
-                decision["confirmed"] = bool(decision.get("confirmed", False))
+            decision["confirmed"] = bool(decision.get("confirmed", False))
 
         # A vela é a unidade de dados da análise; ela não define a duração
         # da entrada. O vencimento começa no instante em que o sinal técnico
@@ -1512,7 +1502,16 @@ def analyze_asset(
             f"e {win_rate if win_rate is not None else 0:.1f}% de acerto; "
             f"mínimo exigido: 20 sinais e 70%."
         )
-        if decision.get("signal") in ("CALL", "PUT") and not accuracy_ok:
+        # Gate final: histórico >=20 e >=70% + confluência técnica >=70%.
+        # A confluência técnica é um filtro interno; não representa promessa de
+        # probabilidade futura.
+        technical_confidence = float((decision.get("resumo_votos") or {}).get("confianca") or 0.0)
+        technical_ok = technical_confidence >= 70.0
+        decision["technical_gate"] = technical_ok
+        decision["technical_gate_reason"] = None if technical_ok else (
+            f"Confluência técnica insuficiente: {technical_confidence:.1f}%; mínimo: 70%."
+        )
+        if decision.get("signal") in ("CALL", "PUT") and not (accuracy_ok and technical_ok):
             decision["signal_before_accuracy_gate"] = decision["signal"]
             decision["signal"] = "AGUARDAR"
             decision["confirmed"] = False
