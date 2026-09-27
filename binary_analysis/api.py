@@ -40,6 +40,11 @@ def iq_health():
     }
 
 
+
+@router.get("/network-diagnostic")
+def iq_network_diagnostic_route():
+    return iq_network_diagnostic()
+
 @router.post("/login")
 def iq_login(request: IQLoginRequest):
     email = request.email.strip()
