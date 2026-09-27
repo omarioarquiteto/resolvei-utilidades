@@ -1485,10 +1485,12 @@ def analyze_asset(
             else:
                 decision["confirmed"] = bool(decision.get("confirmed", False))
 
-        # Alinha o vencimento ao proximo fechamento de vela da IQ Option.
-        # Os timeframes sao contados a partir do epoch Unix: 1m, 5m e 15m.
-        entry_at = ((now // interval) + 1) * interval
-        expires_at = entry_at + interval
+        # A vela é a unidade de dados da análise; ela não define a duração
+        # da entrada. O vencimento começa no instante em que o sinal técnico
+        # é emitido, inclusive se a análise for concluída no meio de uma vela.
+        # Assim, 1min = 60s e 5min = 300s a partir da emissão do sinal.
+        entry_at = now
+        expires_at = now + interval
         horizon = 1
         strategy_params = get_params_estrategia(strategy)
         decision["proximity"] = _proximity(
