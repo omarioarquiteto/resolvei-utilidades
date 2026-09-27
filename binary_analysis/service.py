@@ -69,6 +69,69 @@ def _cleanup():
         item=_PENDING_2FA.pop(k, None)
         if item: _close_client(item.get("client"))
 
+def iq_network_diagnostic():
+    """Diagnóstico seguro da rota Render -> IQ Option, sem enviar credenciais."""
+    import ssl
+
+    host = "auth.iqoption.com"
+    port = 443
+    result = {"host": host, "port": port}
+
+    try:
+        infos = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
+        ipv4 = sorted({item[4][0] for item in infos if item[0] == socket.AF_INET})
+        ipv6 = sorted({item[4][0] for item in infos if item[0] == socket.AF_INET6})
+        result["dns"] = {"ipv4": ipv4, "ipv6": ipv6}
+    except Exception as exc:
+        result["dns_error"] = type(exc).__name__ + ": " + str(exc)
+        return result
+
+    def tcp_test(address, family):
+        started = time.time()
+        try:
+            sock = socket.socket(family, socket.SOCK_STREAM)
+            sock.settimeout(8)
+            sock.connect((address, port))
+            elapsed = round(time.time() - started, 3)
+            sock.close()
+            return {"ok": True, "seconds": elapsed}
+        except Exception as exc:
+            return {"ok": False, "error": type(exc).__name__ + ": " + str(exc)}
+
+    result["tcp_ipv4"] = [tcp_test(ip, socket.AF_INET) for ip in ipv4[:3]]
+    if ipv6:
+        result["tcp_ipv6"] = [tcp_test(ip, socket.AF_INET6) for ip in ipv6[:3]]
+
+    # TLS é testado somente se uma conexão IPv4 TCP funcionar.
+    working_ipv4 = next((ip for ip, test in zip(ipv4[:3], result["tcp_ipv4"]) if test["ok"]), None)
+    if working_ipv4:
+        started = time.time()
+        try:
+            raw = socket.create_connection((working_ipv4, port), timeout=8)
+            context = ssl.create_default_context()
+            with context.wrap_socket(raw, server_hostname=host) as tls_sock:
+                result["tls_ipv4"] = {
+                    "ok": True,
+                    "seconds": round(time.time() - started, 3),
+                    "version": tls_sock.version(),
+                }
+        except Exception as exc:
+            result["tls_ipv4"] = {"ok": False, "error": type(exc).__name__ + ": " + str(exc)}
+
+    # GET sem credenciais: mede apenas se o HTTPS chega ao serviço.
+    if result.get("tls_ipv4", {}).get("ok"):
+        try:
+            response = requests.get(
+                "https://" + host + "/",
+                headers={"User-Agent": "Mozilla/5.0"},
+                timeout=10,
+            )
+            result["https_root"] = {"ok": True, "status": response.status_code}
+        except Exception as exc:
+            result["https_root"] = {"ok": False, "error": type(exc).__name__ + ": " + str(exc)}
+
+    return result
+
 def _http_login(email: str, password: str):
     url = "https://auth.iqoption.com/api/v2/login"
     headers = {"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/120 Safari/537.36"}
