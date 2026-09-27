@@ -5,6 +5,7 @@
   const CURRENT_ASSET_KEY = "resolvei_binary_current_asset";
   const STRATEGY_KEY = "resolvei_binary_strategy";
   const EXPIRY_KEY = "resolvei_binary_expiry";
+  const MARKET_KEY = "resolvei_binary_market";
   const FLOATING_KEY = "resolvei_binary_floating";
 
   let session = sessionStorage.getItem(SESSION_KEY) || "";
@@ -14,9 +15,14 @@
   let currentAsset = localStorage.getItem(CURRENT_ASSET_KEY) || "EURUSD";
   let currentStrategy = localStorage.getItem(STRATEGY_KEY) || "trend_pullback";
   let currentExpiry = localStorage.getItem(EXPIRY_KEY) || "1min";
+  let currentMarket = localStorage.getItem(MARKET_KEY) || (currentAsset.endsWith("-OTC") ? "OTC" : "REGULAR");
   let refreshTimer = null;
   let countdownTimer = null;
-  let currentExpiresAt = 0;
+  let monitoringTimer = null;
+  let signalHoldUntil = 0;
+  let currentSignalRank = -1;
+  let currentSignalDirection = "AGUARDAR";
+  let analysisController = null;
   let inFlight = false;
   let dragState = null;
 
@@ -62,6 +68,7 @@
     localStorage.setItem(CURRENT_ASSET_KEY, currentAsset);
     localStorage.setItem(STRATEGY_KEY, currentStrategy);
     localStorage.setItem(EXPIRY_KEY, currentExpiry);
+    localStorage.setItem(MARKET_KEY, currentMarket);
     localStorage.setItem(ASSETS_KEY, JSON.stringify(monitoredAssets));
   }
 
