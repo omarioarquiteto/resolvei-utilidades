@@ -3,6 +3,8 @@ from __future__ import annotations
 import threading
 import time
 import secrets
+import json
+import requests
 from dataclasses import dataclass
 from typing import Any
 
@@ -66,59 +68,84 @@ def _cleanup():
         item=_PENDING_2FA.pop(k, None)
         if item: _close_client(item.get("client"))
 
+def _http_login(email: str, password: str):
+    url = "https://auth.iqoption.com/api/v2/login"
+    headers = {"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/120 Safari/537.36"}
+    response = requests.post(url, data={"identifier": email.strip(), "password": password}, headers=headers, timeout=15)
+    try: payload = response.json()
+    except Exception: payload = None
+    if response.status_code == 200:
+        ssid = response.cookies.get("ssid")
+        if ssid: return ssid, None
+        if isinstance(payload, dict) and payload.get("code") == "verify":
+            return None, {"token": payload.get("token"), "method": payload.get("method") or "sms"}
+        return None, {"error": "A IQ Option não retornou uma sessão válida."}
+    if isinstance(payload, dict):
+        detail = payload.get("message") or payload.get("error") or payload.get("reason")
+        if detail: return None, {"error": str(detail)}
+    return None, {"error": f"HTTP {response.status_code} na autenticação."}
+
+def _http_verify_2fa(token: str, method: str, code: str):
+    url = "https://auth.iqoption.com/api/v2/verify/2fa"
+    headers = {"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/120 Safari/537.36", "Content-Type": "application/json"}
+    response = requests.post(url, json={"method": method, "token": token, "code": code.strip()}, headers=headers, timeout=15)
+    try: payload = response.json()
+    except Exception: payload = {}
+    if response.status_code == 200 and isinstance(payload, dict): return payload
+    detail = payload.get("message") or payload.get("error") or payload.get("reason")
+    return {"code": "error", "message": str(detail or f"HTTP {response.status_code}")}
+
 def connect_session(session_id: str, email: str, password: str, account: str):
     with _LOCK:
         _cleanup()
+        client = None
         try:
-            client=IQ_Option(email.strip(), password)
-            ok, reason = _call_with_timeout(client.connect, 25.0, "login IQ Option")
+            ssid, challenge = _http_login(email, password)
+            if challenge and challenge.get("token"):
+                challenge_id = secrets.token_urlsafe(32)
+                _PENDING_2FA[challenge_id] = {"client": IQ_Option(email.strip(), password), "account": account, "created_at": time.time(), "token": challenge["token"], "method": challenge.get("method") or "sms"}
+                return False, "2FA_REQUIRED", {"challenge_id": challenge_id}
+            if not ssid:
+                reason = (challenge or {}).get("error") or "A IQ Option recusou a autenticação."
+                return False, f"Falha na autenticação da IQ Option: {reason}", None
+            client = IQ_Option(email.strip(), password, set_ssid=ssid)
+            ok, reason = _call_with_timeout(client.connect, 25.0, "conexão WebSocket IQ Option")
             if not ok:
-                raw_reason = str(reason or "")
-                try:
-                    import json
-                    payload = json.loads(raw_reason)
-                except Exception:
-                    payload = None
-                if isinstance(payload, dict) and payload.get("code") == "verify":
-                    challenge_id = secrets.token_urlsafe(32)
-                    _PENDING_2FA[challenge_id] = {"client": client, "account": account, "created_at": time.time(), "token": payload.get("token")}
-                    return False, "2FA_REQUIRED", {"challenge_id": challenge_id}
-                if raw_reason.upper() == "2FA":
-                    challenge_id = secrets.token_urlsafe(32)
-                    _PENDING_2FA[challenge_id] = {"client": client, "account": account, "created_at": time.time(), "token": None}
-                    return False, "2FA_REQUIRED", {"challenge_id": challenge_id}
                 _close_client(client)
-                return False, f"Falha na autenticação da IQ Option: {raw_reason}", None
-            client.change_balance(account)
-            _SESSIONS[session_id]=IQSession(client,account,time.time(),time.time())
+                return False, f"Login aceito, mas a conexão de mercado da IQ Option falhou: {reason}", None
+            _call_with_timeout(lambda: client.change_balance(account), 10.0, f"seleção da conta {account}")
+            _SESSIONS[session_id] = IQSession(client, account, time.time(), time.time())
             return True, f"Conectado à conta {account}.", _safe_balance(client)
+        except requests.RequestException as exc:
+            _close_client(client)
+            return False, f"Não foi possível alcançar o serviço de autenticação da IQ Option: {exc}", None
         except Exception as exc:
-            return False, f"Não foi possível autenticar na IQ Option: {exc}", None
+            _close_client(client)
+            return False, f"Não foi possível autenticar/conectar à IQ Option: {exc}", None
 
 def complete_2fa(challenge_id: str, code: str, session_id: str, method: str = "sms"):
     with _LOCK:
         _cleanup()
         pending = _PENDING_2FA.get(challenge_id)
-        if not pending:
-            return False, "A solicitação de verificação expirou. Faça o login novamente.", None
+        if not pending: return False, "A solicitação de verificação expirou. Faça o login novamente.", None
         client = pending["client"]
         try:
             token = pending.get("token")
-            if not token or not hasattr(client, "TWO_FA"):
-                return False, "A IQ Option iniciou 2FA, mas a API não forneceu um token de verificação compatível.", None
-            result = client.TWO_FA(token, method, str(code).strip())
-            if not isinstance(result, dict):
-                return False, f"Resposta inesperada da verificação 2FA: {result}", None
-            verified_token = result.get("token") or result.get("ssid") or result.get("session_token") or token
-            client.setting_2FA_TOKEN(verified_token)
+            method = pending.get("method") or method or "sms"
+            if not token: return False, "A IQ Option não forneceu o token necessário para a verificação.", None
+            result = _http_verify_2fa(token, method, code)
+            if result.get("code") != "success" or not result.get("token"):
+                return False, f"Falha na verificação da IQ Option: {result.get('message') or result}", None
+            client.setting_2FA_TOKEN(result["token"])
             ok, reason = _call_with_timeout(client.connect, 25.0, "login IQ Option após 2FA")
-            if not ok:
-                return False, f"Falha na autenticação após 2FA: {reason}", None
+            if not ok: return False, f"Falha na conexão após 2FA: {reason}", None
             account = pending["account"]
-            client.change_balance(account)
+            _call_with_timeout(lambda: client.change_balance(account), 10.0, f"seleção da conta {account}")
             _PENDING_2FA.pop(challenge_id, None)
             _SESSIONS[session_id] = IQSession(client, account, time.time(), time.time())
             return True, f"Conectado à conta {account}.", _safe_balance(client)
+        except requests.RequestException as exc:
+            return False, f"Não foi possível concluir a verificação da IQ Option: {exc}", None
         except Exception as exc:
             return False, f"Não foi possível concluir a verificação 2FA: {exc}", None
 
