@@ -71,6 +71,12 @@ STRATEGIES = {
         "max_score": 3,
         "indicadores": ["RSI", "preço", "divergência"],
     },
+    "confluence": {
+        "name": "Confluência multi-estratégia",
+        "description": "Cruza as estratégias disponíveis e só libera direção quando há concordância suficiente.",
+        "max_score": 8,
+        "indicadores": ["8 estratégias", "quórum", "margem de concordância"],
+    },
 }
 
 _SIGNAL_CACHE: dict[tuple[str, str, str], dict] = {}
@@ -107,6 +113,10 @@ STRATEGY_PARAMS_DEFAULT = {
     },
     "rsi_divergencia": {
         "rsi_limite": 45, "min_score": 2,
+    },
+    "confluence": {
+        "min_score": 5,
+        "min_margin": 3,
     },
 }
 
@@ -336,6 +346,47 @@ def _strategy_signal(df: pd.DataFrame, strategy: str) -> dict:
         put = put_score >= min_score and put_score > call_score
         direction = "CALL" if call else "PUT" if put else "AGUARDAR"
         return _signal(direction, max(call_score, put_score), "Divergência de RSI favorecendo a reversão." if direction != "AGUARDAR" else "Divergência de RSI sem confirmação.", ["RSI", "preço", "divergência"], min_score=min_score)
+
+    if strategy == "confluence":
+        base_strategies = [name for name in STRATEGIES if name != "confluence"]
+        decisions = []
+        for name in base_strategies:
+            try:
+                decision = _strategy_signal(df, name)
+            except Exception:
+                continue
+            decisions.append((name, decision))
+
+        calls = [item for item in decisions if item[1].get("signal") == "CALL"]
+        puts = [item for item in decisions if item[1].get("signal") == "PUT"]
+        call_count, put_count = len(calls), len(puts)
+        min_score = int(p.get("min_score", 5))
+        min_margin = int(p.get("min_margin", 3))
+        if call_count >= min_score and call_count - put_count >= min_margin:
+            direction = "CALL"
+            agreeing = calls
+        elif put_count >= min_score and put_count - call_count >= min_margin:
+            direction = "PUT"
+            agreeing = puts
+        else:
+            direction = "AGUARDAR"
+            agreeing = calls if call_count >= put_count else puts
+
+        score = max(call_count, put_count)
+        confidences = [float(d.get("confidence", 0) or 0) for _, d in agreeing]
+        confidence = round(sum(confidences) / len(confidences), 1) if confidences else 0.0
+        if direction == "AGUARDAR":
+            reason = f"Confluência insuficiente: {call_count} estratégias em CALL, {put_count} em PUT."
+        else:
+            reason = f"Confluência confirmada: {call_count} estratégias CALL contra {put_count} PUT." if direction == "CALL" else f"Confluência confirmada: {put_count} estratégias PUT contra {call_count} CALL."
+        result = _signal(direction, score, reason, [name for name, _ in agreeing], min_score=min_score)
+        result["confidence"] = confidence
+        result["confluence_strategies"] = [
+            {"strategy": name, "signal": d.get("signal"), "confidence": d.get("confidence"), "score": d.get("score")}
+            for name, d in decisions
+        ]
+        result["confluence_counts"] = {"CALL": call_count, "PUT": put_count, "AGUARDAR": len(decisions) - call_count - put_count}
+        return result
 
     raise ValueError(f"Estratégia desconhecida: {strategy}")
 
