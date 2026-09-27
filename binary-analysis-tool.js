@@ -18,6 +18,7 @@
   let countdownTimer = null;
   let currentExpiresAt = 0;
   let inFlight = false;
+  let dragState = null;
 
   const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({
     "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"
@@ -167,6 +168,10 @@
     if (page) page.classList.toggle("floating", value);
     renderSettings();
     updateFloatingButton();
+    setTimeout(() => {
+      applyFloatingPosition();
+      enableFloatingDrag();
+    }, 0);
   }
 
   function updateFloatingButton() {
@@ -216,7 +221,7 @@
 
     host.innerHTML = `
       <article class="binary-signal-card ${stateClass}">
-        <div class="binary-card-top">
+        <div class="binary-card-top binary-drag-handle" title="Arraste por aqui para mover a janela flutuante">
           <span>EXPIRAÇÃO ${expiryLabel(currentExpiry)}</span>
           <span>${locked ? "SINAL FIXADO" : "ANÁLISE"}</span>
         </div>
@@ -327,6 +332,11 @@
     if (!force && currentExpiresAt > Date.now() + 1000) return;
 
     inFlight = true;
+    const manualButton = document.getElementById("binAnalyzeNow");
+    if (manualButton) {
+      manualButton.disabled = true;
+      manualButton.textContent = "⏳ Analisando...";
+    }
     try {
       if (status) status.textContent = `Atualizando ${currentAsset} · ${expiryLabel(currentExpiry).toLowerCase()}...`;
       const data = await api(
@@ -345,6 +355,12 @@
       if (status) status.textContent = "⚠️ " + error.message;
     } finally {
       inFlight = false;
+      const doneButton = document.getElementById("binAnalyzeNow");
+      if (doneButton) {
+        doneButton.disabled = false;
+        doneButton.textContent = "🔎 Analisar agora";
+      }
+      enableFloatingDrag();
     }
   }
 
@@ -409,11 +425,94 @@
       });
     });
 
-    document.getElementById("binAnalyzeNow")?.addEventListener("click", () => analyze(true));
+    document.getElementById("binAnalyzeNow")?.addEventListener("click", () => {
+      if (inFlight) return;
+      currentExpiresAt = 0;
+      const status = document.getElementById("binaryStatus");
+      if (status) status.textContent = "🔎 Nova análise solicitada...";
+      analyze(true);
+    });
     document.getElementById("binRefresh")?.addEventListener("click", () => analyze(true));
     document.getElementById("binLogout")?.addEventListener("click", logout);
     document.getElementById("binFloating")?.addEventListener("click", () => setFloating(!isFloating()));
   }
+
+  function applyFloatingPosition() {
+    if (!isFloating()) return;
+    const page = document.querySelector(".binary-analysis-page.floating");
+    if (!page) return;
+    const savedLeft = Number(localStorage.getItem("resolvei_binary_float_left"));
+    const savedTop = Number(localStorage.getItem("resolvei_binary_float_top"));
+    if (Number.isFinite(savedLeft) && Number.isFinite(savedTop)) {
+      const maxLeft = Math.max(10, window.innerWidth - page.offsetWidth - 10);
+      const maxTop = Math.max(10, window.innerHeight - page.offsetHeight - 10);
+      page.style.left = Math.min(Math.max(10, savedLeft), maxLeft) + "px";
+      page.style.top = Math.min(Math.max(10, savedTop), maxTop) + "px";
+      page.style.right = "auto";
+      page.style.bottom = "auto";
+    }
+  }
+
+  function enableFloatingDrag() {
+    const page = document.querySelector(".binary-analysis-page.floating");
+    const handle = page?.querySelector(".binary-drag-handle");
+    if (!page || !handle || handle.dataset.dragBound === "1") return;
+    handle.dataset.dragBound = "1";
+    applyFloatingPosition();
+
+    handle.addEventListener("pointerdown", (event) => {
+      if (!isFloating() || event.button !== 0) return;
+      const rect = page.getBoundingClientRect();
+      dragState = {
+        pointerId: event.pointerId,
+        startX: event.clientX,
+        startY: event.clientY,
+        left: rect.left,
+        top: rect.top
+      };
+      page.style.left = rect.left + "px";
+      page.style.top = rect.top + "px";
+      page.style.right = "auto";
+      page.style.bottom = "auto";
+      handle.classList.add("dragging");
+      handle.setPointerCapture?.(event.pointerId);
+      event.preventDefault();
+    });
+
+    handle.addEventListener("pointermove", (event) => {
+      if (!dragState || dragState.pointerId !== event.pointerId) return;
+      const maxLeft = Math.max(10, window.innerWidth - page.offsetWidth - 10);
+      const maxTop = Math.max(10, window.innerHeight - page.offsetHeight - 10);
+      const left = Math.min(Math.max(10, dragState.left + event.clientX - dragState.startX), maxLeft);
+      const top = Math.min(Math.max(10, dragState.top + event.clientY - dragState.startY), maxTop);
+      page.style.left = left + "px";
+      page.style.top = top + "px";
+    });
+
+    const release = (event) => {
+      if (!dragState || dragState.pointerId !== event.pointerId) return;
+      const rect = page.getBoundingClientRect();
+      localStorage.setItem("resolvei_binary_float_left", String(Math.round(rect.left)));
+      localStorage.setItem("resolvei_binary_float_top", String(Math.round(rect.top)));
+      dragState = null;
+      handle.classList.remove("dragging");
+      try { handle.releasePointerCapture?.(event.pointerId); } catch (_) {}
+    };
+
+    handle.addEventListener("pointerup", release);
+    handle.addEventListener("pointercancel", release);
+  }
+
+  window.addEventListener("resize", () => {
+    if (!isFloating()) return;
+    const page = document.querySelector(".binary-analysis-page.floating");
+    if (!page) return;
+    const rect = page.getBoundingClientRect();
+    const maxLeft = Math.max(10, window.innerWidth - page.offsetWidth - 10);
+    const maxTop = Math.max(10, window.innerHeight - page.offsetHeight - 10);
+    page.style.left = Math.min(Math.max(10, rect.left), maxLeft) + "px";
+    page.style.top = Math.min(Math.max(10, rect.top), maxTop) + "px";
+  });
 
   async function startConnected() {
     try {
@@ -433,6 +532,7 @@
       await loadCatalog();
       renderSettings();
       await analyze(true);
+      enableFloatingDrag();
 
       clearInterval(refreshTimer);
       refreshTimer = setInterval(() => analyze(false), 1000);
