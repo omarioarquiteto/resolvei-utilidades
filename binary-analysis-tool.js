@@ -341,7 +341,8 @@
       if (status) status.textContent = `Atualizando ${currentAsset} · ${expiryLabel(currentExpiry).toLowerCase()}...`;
       const data = await api(
         "/analyze/" + encodeURIComponent(currentAsset) +
-        "?strategy=" + encodeURIComponent(currentStrategy)
+        "?strategy=" + encodeURIComponent(currentStrategy) +
+        "&refresh=" + (force ? "1" : "0")
       );
       renderCard(data);
       renderSettings();
