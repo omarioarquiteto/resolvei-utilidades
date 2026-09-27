@@ -31,6 +31,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, Response
 from pydantic import BaseModel, Field
 
+from api.options import router as iq_options_router
+
 load_dotenv()
 
 BASE_DIR = Path(__file__).resolve().parent
