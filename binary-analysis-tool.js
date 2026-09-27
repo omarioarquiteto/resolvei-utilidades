@@ -374,6 +374,11 @@
   }
 
   async function logout() {
+    stopMonitoring();
+    if (analysisController) {
+      try { analysisController.abort(); } catch (_) {}
+      analysisController = null;
+    }
     try { await api("/logout", { method: "POST" }); } catch (_) {}
     session = "";
     sessionStorage.removeItem(SESSION_KEY);
@@ -492,7 +497,8 @@
     setSignalScreen("🔎 Iniciando análise...");
     const loadingHost = document.getElementById("binaryCardHost");
     if (loadingHost) {
-      loadingHost.innerHTML = `<article class="binary-signal-card is-wait binary-analyzing-card"><div class="binary-card-top binary-drag-handle"><span>ANÁLISE EM ANDAMENTO</span><span>AGUARDE</span></div><div class="binary-analyzing-icon">◌</div><div class="binary-analyzing-title">Calculando o sinal</div><div class="binary-analyzing-subtitle">Coletando candles, calculando indicadores e verificando a proximidade do sinal.</div><div class="binary-analysis-progress"><div class="binary-analysis-progress-track"><div class="binary-analysis-progress-fill"></div></div></div><div class="binary-analyzing-label">Processando dados do mercado...</div></article>`;
+      loadingHost.innerHTML = `<article class="binary-signal-card is-wait binary-analyzing-card"><div class="binary-card-top binary-drag-handle"><span>ANÁLISE EM ANDAMENTO</span><span>AGUARDE</span></div><div class="binary-analyzing-icon">◌</div><div class="binary-analyzing-title">Calculando o sinal</div><div class="binary-analyzing-subtitle">Coletando candles, calculando indicadores e verificando a proximidade do sinal.</div><div class="binary-analysis-progress"><div class="binary-analysis-progress-track"><div class="binary-analysis-progress-fill"></div></div></div><div class="binary-analyzing-label">Processando dados do mercado...</div><div class="binary-signal-actions"><button class="binary-secondary-btn" id="binCancelAnalysis" type="button">✕ Cancelar análise</button></div></article>`;
+      document.getElementById("binCancelAnalysis")?.addEventListener("click", cancelAnalysis);
     }
     const manualButton = document.getElementById("binAnalyzeNow");
     if (manualButton) {
@@ -500,13 +506,16 @@
       manualButton.textContent = "⏳ Analisando...";
     }
     try {
-      if (status) status.textContent = `Atualizando ${currentAsset} · ${expiryLabel(currentExpiry).toLowerCase()}...`;
+      if (status) status.textContent = `Verificando ${currentAsset} · ${expiryLabel(currentExpiry).toLowerCase()}...`;
+      analysisController = new AbortController();
       const data = await api(
         "/analyze/" + encodeURIComponent(currentAsset) +
         "?strategy=" + encodeURIComponent(currentStrategy) +
         "&expiry=" + encodeURIComponent(currentExpiry) +
-        "&refresh=1"
+        "&refresh=1",
+        { signal: analysisController.signal }
       );
+      analysisController = null;
       renderCard(data);
       renderSettings();
       if (status) {
@@ -516,6 +525,7 @@
       clearInterval(countdownTimer);
       countdownTimer = setInterval(updateTimer, 250);
     } catch (error) {
+      if (error?.name === "AbortError") return;
       if (loadingHost) {
         loadingHost.innerHTML = `
           <article class="binary-signal-card is-wait binary-error-card">
@@ -539,6 +549,7 @@
       }
       if (status) status.textContent = "⚠️ " + error.message;
     } finally {
+      analysisController = null;
       inFlight = false;
       const doneButton = document.getElementById("binAnalyzeNow");
       if (doneButton) {
@@ -646,7 +657,9 @@
     try {
       const data = await api("/candles/" + encodeURIComponent(currentAsset) + "?interval=60&count=120");
       const qtd = Array.isArray(data.candles) ? data.candles.length : 0;
-      if (status) status.textContent = "✓ " + qtd + " candles recebidos para " + currentAsset + ". Clique em “Analisar agora” para gerar o sinal.";
+      if (status) status.textContent = qtd > 0
+        ? "✓ " + qtd + " candles recebidos para " + currentAsset + ". A conexão de mercado está respondendo."
+        : "⚠️ Nenhum candle foi recebido para " + currentAsset + ". Verifique se o ativo está aberto (ou use OTC) e tente novamente.";
     } catch (error) {
       if (status) status.textContent = "⚠️ " + error.message;
     } finally {
