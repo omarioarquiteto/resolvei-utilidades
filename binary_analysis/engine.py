@@ -237,14 +237,76 @@ def compute_indicators(df: pd.DataFrame) -> pd.DataFrame:
 
 def _signal(direction: str, score: int, reason: str, indicators: list[str], min_score: int = 3) -> dict:
     score = int(score)
-    if score < min_score:
-        direction = "AGUARDAR"
+    # O limiar de score mede CONFIRMAÇÃO, não deve apagar uma direção técnica
+    # já determinada pelo chamador. A normalização final decide se há direção
+    # suficiente para publicar CALL/PUT.
     return {
         "signal": direction,
         "score": score,
         "reason": reason,
         "indicators": indicators,
+        "confirmed": bool(direction in ("CALL", "PUT") and score >= int(min_score)),
     }
+
+
+def _fallback_direction_from_data(df: pd.DataFrame, votes: list[dict] | None = None) -> tuple[str, str]:
+    """Gera uma direção técnica quando a estratégia não atinge o quórum mínimo.
+
+    Isso não transforma uma análise fraca em uma confirmação forte: a direção
+    publicada continua acompanhada da proximidade técnica e de confirmed=False.
+    """
+    if votes:
+        weighted_bull = sum(float(v.get("peso", 1.0)) for v in votes if int(v.get("vote", 0)) == 1)
+        weighted_bear = sum(float(v.get("peso", 1.0)) for v in votes if int(v.get("vote", 0)) == -1)
+        if weighted_bull > weighted_bear:
+            return "CALL", f"Votos ativos favorecem CALL ({weighted_bull:.1f} contra {weighted_bear:.1f})."
+        if weighted_bear > weighted_bull:
+            return "PUT", f"Votos ativos favorecem PUT ({weighted_bear:.1f} contra {weighted_bull:.1f})."
+
+    row = df.iloc[-1]
+    score_call = 0.0
+    score_put = 0.0
+
+    if np.isfinite(row.get("EMA9", np.nan)) and np.isfinite(row.get("EMA21", np.nan)):
+        if row["EMA9"] > row["EMA21"]:
+            score_call += 2.0
+        elif row["EMA9"] < row["EMA21"]:
+            score_put += 2.0
+
+    if np.isfinite(row.get("MACD", np.nan)) and np.isfinite(row.get("MACD_signal", np.nan)):
+        if row["MACD"] > row["MACD_signal"]:
+            score_call += 1.5
+        elif row["MACD"] < row["MACD_signal"]:
+            score_put += 1.5
+
+    if np.isfinite(row.get("PLUS_DI", np.nan)) and np.isfinite(row.get("MINUS_DI", np.nan)):
+        if row["PLUS_DI"] > row["MINUS_DI"]:
+            score_call += 1.5
+        elif row["MINUS_DI"] > row["PLUS_DI"]:
+            score_put += 1.5
+
+    if np.isfinite(row.get("RSI", np.nan)):
+        if row["RSI"] > 50:
+            score_call += 1.0
+        elif row["RSI"] < 50:
+            score_put += 1.0
+
+    if np.isfinite(row.get("Open", np.nan)) and np.isfinite(row.get("Close", np.nan)):
+        if row["Close"] > row["Open"]:
+            score_call += 0.5
+        elif row["Close"] < row["Open"]:
+            score_put += 0.5
+
+    if score_call > score_put:
+        return "CALL", f"Direção técnica predominante: CALL ({score_call:.1f} x {score_put:.1f})."
+    if score_put > score_call:
+        return "PUT", f"Direção técnica predominante: PUT ({score_put:.1f} x {score_call:.1f})."
+
+    ema20 = float(row.get("EMA20", np.nan))
+    close = float(row.get("Close", np.nan))
+    if np.isfinite(ema20) and np.isfinite(close) and close >= ema20:
+        return "CALL", "Desempate técnico por preço acima da EMA20."
+    return "PUT", "Desempate técnico por preço abaixo da EMA20."
 
 
 def _strategy_signal(df: pd.DataFrame, strategy: str) -> dict:
@@ -1360,12 +1422,17 @@ def analyze_asset(
                 and agregado["direction"] in ("CALL", "PUT")
                 and agregado["direction"] != decision["signal"]
             ):
-                decision = _signal(
-                    "AGUARDAR",
-                    decision["score"],
-                    f"Conflito: a estratégia sugere {decision['signal']}, mas os indicadores votam "
-                    f"{agregado['direction']} ({agregado['bulls']}x{agregado['bears']}). Aguardando alinhamento.",
-                    [v["nome"] for v in votos],
+                decision["vote_conflict"] = True
+                decision["vote_conflict_direction"] = agregado["direction"]
+                decision["vote_conflict_reason"] = (
+                    f"Conflito: a estratégia sugere {decision['signal']}, mas os indicadores "
+                    f"votam {agregado['direction']} ({agregado['bulls']}x{agregado['bears']})."
+                )
+                decision["reason"] = (
+                    str(decision.get("reason") or "").rstrip()
+                    + " "
+                    + decision["vote_conflict_reason"]
+                    + " A direção da estratégia foi mantida; consulte a proximidade e a confiança."
                 )
             decision["votos"] = [
                 {"nome": v["name"], "voto": v["vote"], "motivo": v["reason"]}
@@ -1378,6 +1445,22 @@ def analyze_asset(
                 "total": agregado["total"],
                 "confianca": agregado["confidence"],
             }
+
+        # Se há candles válidos, sempre publicamos uma direção técnica.
+        # "confirmed" continua indicando se o limiar mínimo da estratégia foi atingido.
+        if not df.empty:
+            raw_signal = decision.get("signal")
+            if raw_signal not in ("CALL", "PUT"):
+                fallback_signal, fallback_reason = _fallback_direction_from_data(df, votos)
+                decision["signal"] = fallback_signal
+                decision["confirmed"] = False
+                decision["directional_only"] = True
+                decision["reason"] = (
+                    f"{fallback_reason} O score da estratégia não atingiu o limiar de "
+                    f"confirmação ({decision.get('score', 0)})."
+                )
+            else:
+                decision["confirmed"] = bool(decision.get("confirmed", False))
 
         # Alinha o vencimento ao proximo fechamento de vela da IQ Option.
         # Os timeframes sao contados a partir do epoch Unix: 1m, 5m e 15m.
