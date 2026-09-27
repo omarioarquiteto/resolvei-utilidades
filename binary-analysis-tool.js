@@ -100,8 +100,9 @@
   }
 
   function controlMarkup() {
-    const options = assets.map((asset) =>
-      `<option value="${esc(asset)}">${esc(asset)}</option>`
+    const marketAssets = assets.filter((asset) => currentMarket === "OTC" ? asset.endsWith("-OTC") : !asset.endsWith("-OTC"));
+    const options = marketAssets.map((asset) =>
+      `<option value="${esc(asset)}">${esc(asset.replace("-OTC", ""))}${asset.endsWith("-OTC") ? " — OTC" : ""}</option>`
     ).join("");
 
     const strategyOptions = Object.entries(strategies).map(([key, value]) =>
@@ -127,6 +128,11 @@
 
         <div class="binary-controls-grid">
           <div class="binary-control-card">
+            <div class="binary-market-label">Mercado</div>
+            <div class="binary-market-switch">
+              <button type="button" class="${currentMarket === "REGULAR" ? "active" : ""}" data-market="REGULAR">Mercado normal</button>
+              <button type="button" class="${currentMarket === "OTC" ? "active" : ""}" data-market="OTC">OTC</button>
+            </div>
             <label>Par atual<select id="binAsset">${options}</select></label>
             <button class="binary-add-pair" id="binAddPair" type="button">＋ Adicionar aos pares monitorados</button>
             <div class="binary-pairs-label">Pares monitorados</div>
@@ -470,8 +476,26 @@
     const asset = document.getElementById("binAsset");
     const strategy = document.getElementById("binStrategy");
 
-    if (asset) asset.value = currentAsset;
+    if (asset) {
+      if ([...asset.options].some((option) => option.value === currentAsset)) {
+        asset.value = currentAsset;
+      } else if (asset.options.length) {
+        currentAsset = asset.options[0].value;
+        saveState();
+      }
+    }
     if (strategy) strategy.value = currentStrategy;
+
+    document.querySelectorAll("[data-market]").forEach((button) => {
+      button.addEventListener("click", () => {
+        currentMarket = button.dataset.market === "OTC" ? "OTC" : "REGULAR";
+        const marketAssets = assets.filter((item) => currentMarket === "OTC" ? item.endsWith("-OTC") : !item.endsWith("-OTC"));
+        currentAsset = marketAssets[0] || currentAsset;
+        saveState();
+        setSettingsScreen("Mercado " + currentMarket + " selecionado. Clique em “Analisar agora” para gerar o sinal.");
+        renderSettings();
+      });
+    });
 
     asset?.addEventListener("change", () => {
       currentAsset = asset.value;
