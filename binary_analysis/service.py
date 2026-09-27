@@ -4,6 +4,8 @@ import threading
 import time
 import secrets
 import requests
+import socket
+from urllib3.util import connection as urllib3_connection
 from dataclasses import dataclass
 from typing import Any
 
@@ -70,7 +72,19 @@ def _cleanup():
 def _http_login(email: str, password: str):
     url = "https://auth.iqoption.com/api/v2/login"
     headers = {"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/120 Safari/537.36"}
-    response = requests.post(url, data={"identifier": email.strip(), "password": password}, headers=headers, timeout=15)
+    # Render pode resolver auth.iqoption.com para IPv6 sem rota funcional.
+    # Forçamos IPv4 somente durante a chamada de autenticação.
+    original_family = urllib3_connection.allowed_gai_family
+    urllib3_connection.allowed_gai_family = lambda: socket.AF_INET
+    try:
+        response = requests.post(
+            url,
+            data={"identifier": email.strip(), "password": password},
+            headers=headers,
+            timeout=30,
+        )
+    finally:
+        urllib3_connection.allowed_gai_family = original_family
     try: payload = response.json()
     except Exception: payload = None
     if response.status_code == 200:
