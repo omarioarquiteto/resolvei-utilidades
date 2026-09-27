@@ -1249,6 +1249,7 @@ def analyze_asset(
     asset: str,
     strategy: str = "trend_pullback",
     force_refresh: bool = False,
+    only_expiry: str | None = None,
 ) -> dict:
     """Analisa uma estrategia e retorna os prazos de entrada.
 
@@ -1261,7 +1262,10 @@ def analyze_asset(
     now = int(time.time())
     news = news_service.get_news_risk(asset)
     signals = {}
-    for expiry in ("1min", "5min", "15min"):
+    expiries = (only_expiry,) if only_expiry else ("1min", "5min", "15min")
+    for expiry in expiries:
+        if expiry not in TIMEFRAMES:
+            raise ValueError(f"Vencimento desconhecido: {expiry}")
         cache_key = (asset, strategy, expiry)
         cached = _SIGNAL_CACHE.get(cache_key)
         market_safe = news["available"] and not news["blocked"]
