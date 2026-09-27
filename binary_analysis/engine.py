@@ -1248,7 +1248,7 @@ def analyze_asset(session_id: str, asset: str, strategy: str = "trend_pullback")
             continue
 
         interval = TIMEFRAMES[expiry]["interval"]
-        candles = _drop_incomplete_candle(iq_service.get_candles_smart(session_id, asset, interval, 240), interval)
+        candles = _drop_incomplete_candle(service.get_candles_smart(session_id, asset, interval, 240), interval)
         df = compute_indicators(candles_to_df(candles))
         decision = _strategy_signal(df, strategy) if not df.empty else _signal("AGUARDAR", 0, "Sem dados de mercado.", [])
         if not news["available"]:
@@ -1323,7 +1323,7 @@ def walkforward_asset(session_id: str, asset: str, expiry: str, count: int = 240
 
     cfg = TIMEFRAMES[expiry]
     candles = _drop_incomplete_candle(
-        iq_service.get_candles_smart(session_id, asset.upper().replace("=X", ""), cfg["interval"], count),
+        service.get_candles_smart(session_id, asset.upper().replace("=X", ""), cfg["interval"], count),
         cfg["interval"],
     )
     df = candles_to_df(candles)
@@ -1354,7 +1354,7 @@ def walkforward_asset(session_id: str, asset: str, expiry: str, count: int = 240
 
 def get_chart_data(session_id: str, asset: str, interval: int = 300, count: int = 200) -> dict:
     """Retorna candles + EMAs + Bollinger para o gráfico."""
-    candles = iq_service.get_candles_smart(session_id, asset, interval, count)
+    candles = service.get_candles_smart(session_id, asset, interval, count)
     df = candles_to_df(candles)
     if df.empty:
         return {"candles": [], "ema10": [], "ema20": [], "bb_upper": [], "bb_lower": []}
