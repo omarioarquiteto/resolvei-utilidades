@@ -1312,38 +1312,9 @@ def analyze_asset(
 
     now = int(time.time())
     expiries = (only_expiry,) if only_expiry else ("1min", "5min", "15min")
-    market_status = service.get_market_status(session_id, asset)
-    if market_status == "fechado":
-        closed_signals = {}
-        for expiry in expiries:
-            if expiry not in TIMEFRAMES:
-                raise ValueError(f"Vencimento desconhecido: {expiry}")
-            closed_signals[expiry] = {
-                "signal": "AGUARDAR",
-                "score": 0,
-                "confidence": 0,
-                "reason": "O ativo está fechado na IQ Option. Se houver a versão OTC disponível, selecione o mercado OTC.",
-                "votos": [],
-                "resumo_votos": {"bulls": 0, "bears": 0, "neutros": 0, "total": 0, "confianca": 0},
-                "proximity": {"label": "MERCADO FECHADO", "percent": 0, "score": 0, "target": 0},
-                "historical_accuracy": {"rate": None, "sample_size": 0, "wins": 0, "ultimos": []},
-                "expiry": expiry,
-                "locked": False,
-                "seconds_remaining": 0,
-                "market_closed": True,
-            }
-        return {
-            "asset": asset,
-            "strategy": strategy,
-            "strategy_name": STRATEGIES[strategy]["name"],
-            "strategy_description": STRATEGIES[strategy]["description"],
-            "signals": closed_signals,
-            "news": {"available": True, "blocked": False, "events": [], "warning": None},
-            "warning": "Mercado fechado para este ativo. Verifique o ativo equivalente com sufixo OTC.",
-            "market": "fechado",
-            "market_closed": True,
-        }
-
+    # Não consulta get_all_open_time antes dos candles: essa chamada pode atrasar
+    # o resultado e não é necessária para o cálculo técnico.
+    market_status = None
     news = news_service.get_news_risk(asset)
     signals = {}
     for expiry in expiries:
@@ -1438,7 +1409,9 @@ def analyze_asset(
         "signals": signals,
         "news": news,
         "warning": warning,
-        "market": market_status or "indisponivel",
+        "market": market_status or ("aberto" if any(
+            bool(s.get("data_ready")) for s in signals.values() if isinstance(s, dict)
+        ) else "sem_dados"),
         "market_closed": market_status == "fechado",
     }
 
