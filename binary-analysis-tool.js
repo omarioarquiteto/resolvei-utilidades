@@ -21,6 +21,7 @@
   let currentSignalRank = -1;
   let currentSignalDirection = "AGUARDAR";
   let analysisController = null;
+  let analysisStageTimer = null;
   let inFlight = false;
   let dragState = null;
 
@@ -51,6 +52,47 @@
     return document.getElementById("binaryAnalysisRoot");
   }
 
+  function stopAnalysisStageAnimation() {
+    clearInterval(analysisStageTimer);
+    analysisStageTimer = null;
+  }
+
+  function setAnalysisStage(stage, percent, label) {
+    const title = document.getElementById("binaryAnalyzingTitle");
+    const subtitle = document.getElementById("binaryAnalyzingSubtitle");
+    const value = document.getElementById("binaryAnalysisThermometerValue");
+    const fill = document.getElementById("binaryAnalysisThermometerFill");
+    const labelEl = document.getElementById("binaryAnalyzingLabel");
+    if (title) title.textContent = stage;
+    if (subtitle) subtitle.textContent = "Coletando candles, calculando indicadores e avaliando a estrutura técnica do par.";
+    if (value) value.textContent = Math.round(percent) + "%";
+    if (fill) fill.style.width = Math.max(0, Math.min(100, percent)) + "%";
+    if (labelEl) labelEl.textContent = label;
+  }
+
+  function startAnalysisStageAnimation() {
+    stopAnalysisStageAnimation();
+    const stages = [
+      ["ANALISANDO MERCADO", 18, "Lendo candles e preparando os indicadores..."],
+      ["ATENÇÃO", 48, "Conferindo tendência, momentum e volatilidade..."],
+      ["SINAL MUITO PRÓXIMO", 78, "Avaliando confluência e confirmação técnica..."]
+    ];
+    let index = 0;
+    setAnalysisStage(...stages[index]);
+    analysisStageTimer = setInterval(() => {
+      index = (index + 1) % stages.length;
+      setAnalysisStage(...stages[index]);
+    }, 2200);
+  }
+
+  function proximityStage(signal) {
+    const percent = Math.max(0, Math.min(100, Number(signal?.proximity?.percent ?? 0)));
+    if (percent >= 100 && signal?.signal === "CALL") return { percent, title: "COMPRA", label: "Limiar técnico atingido para CALL." };
+    if (percent >= 100 && signal?.signal === "PUT") return { percent, title: "VENDA", label: "Limiar técnico atingido para PUT." };
+    if (percent >= 75) return { percent, title: "SINAL MUITO PRÓXIMO", label: "A estratégia está próxima do limiar técnico configurado." };
+    if (percent >= 50) return { percent, title: "ATENÇÃO", label: "Há confluência parcial, mas ainda não atingiu o limiar técnico." };
+    return { percent, title: "ANALISANDO MERCADO", label: "Ainda falta confluência para atingir o limiar técnico." };
+  }
   function formatDuration(seconds) {
     const total = Math.max(0, Math.ceil(Number(seconds || 0)));
     const mm = Math.floor(total / 60);
@@ -269,7 +311,7 @@
 
         <div class="binary-proximity-block">
           <div class="binary-proximity-head">
-            <span>PROXIMIDADE DO SINAL</span>
+            <span>${proximityStage(signal).title}</span>
             <strong>${proximityPercent.toFixed(0)}%</strong>
           </div>
           <div class="binary-proximity-track">
@@ -494,8 +536,9 @@
     setSignalScreen("🔎 Iniciando análise...");
     const loadingHost = document.getElementById("binaryCardHost");
     if (loadingHost) {
-      loadingHost.innerHTML = `<article class="binary-signal-card is-wait binary-analyzing-card"><div class="binary-card-top binary-drag-handle"><span>ANÁLISE EM ANDAMENTO</span><span>AGUARDE</span></div><div class="binary-analyzing-icon">◌</div><div class="binary-analyzing-title">Calculando o sinal</div><div class="binary-analyzing-subtitle">Coletando candles, calculando indicadores e verificando a proximidade do sinal.</div><div class="binary-analysis-progress"><div class="binary-analysis-progress-track"><div class="binary-analysis-progress-fill"></div></div></div><div class="binary-analyzing-label">Processando dados do mercado...</div><div class="binary-signal-actions"><button class="binary-secondary-btn" id="binCancelAnalysis" type="button">✕ Cancelar análise</button></div></article>`;
+      loadingHost.innerHTML = `<article class="binary-signal-card is-wait binary-analyzing-card"><div class="binary-card-top binary-drag-handle"><span>ANÁLISE EM ANDAMENTO</span><span>MONITORANDO</span></div><div class="binary-analyzing-icon">◌</div><div class="binary-analyzing-title" id="binaryAnalyzingTitle">ANALISANDO MERCADO</div><div class="binary-analyzing-subtitle" id="binaryAnalyzingSubtitle">Coletando candles, calculando indicadores e avaliando a estrutura técnica do par.</div><div class="binary-analysis-progress binary-thermometer"><div class="binary-thermometer-head"><span>TERMÔMETRO TÉCNICO</span><strong id="binaryAnalysisThermometerValue">18%</strong></div><div class="binary-proximity-track"><div class="binary-proximity-fill binary-analysis-thermometer-fill" id="binaryAnalysisThermometerFill" style="width:18%"></div></div></div><div class="binary-analyzing-label" id="binaryAnalyzingLabel">Lendo candles e preparando os indicadores...</div><div class="binary-signal-actions"><button class="binary-secondary-btn" id="binCancelAnalysis" type="button">✕ Cancelar análise</button></div></article>`;
       document.getElementById("binCancelAnalysis")?.addEventListener("click", cancelAnalysis);
+      startAnalysisStageAnimation();
     }
     const manualButton = document.getElementById("binAnalyzeNow");
     if (manualButton) {
@@ -517,6 +560,7 @@
       );
       clearTimeout(analysisTimeout);
       analysisController = null;
+      stopAnalysisStageAnimation();
       renderCard(data);
       renderSettings();
       if (status) {
@@ -546,6 +590,7 @@
       countdownTimer = setInterval(updateTimer, 250);
     } catch (error) {
       if (error?.name === "AbortError") {
+        stopAnalysisStageAnimation();
         if (status) status.textContent = "⏱️ A análise excedeu 30 segundos ou foi cancelada. Verifique o par/mercado e tente novamente.";
         return;
       }
@@ -572,6 +617,7 @@
       }
       if (status) status.textContent = "⚠️ " + error.message;
     } finally {
+      stopAnalysisStageAnimation();
       analysisController = null;
       inFlight = false;
       const doneButton = document.getElementById("binAnalyzeNow");
