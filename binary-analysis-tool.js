@@ -151,7 +151,7 @@
 
   function shellMarkup() {
     return `
-      <div class="binary-analysis-page ${isFloating() ? "floating" : ""}">
+      <div class="binary-analysis-page ${isFloating() ? "floating " : ""}settings-mode">
         <div id="binaryCardHost"></div>
         <div id="binaryStatus" class="binary-status-line"></div>
         <div id="binarySettingsHost"></div>
