@@ -94,12 +94,13 @@ def iq_strategies():
 def iq_analyze(
     asset: str,
     strategy: str = Query("trend_pullback"),
+    refresh: bool = Query(False),
     x_iq_session: str | None = Header(default=None),
 ):
     if not x_iq_session or not is_connected(x_iq_session)["connected"]:
         raise HTTPException(401, "Conecte sua conta da IQ Option primeiro.")
     try:
-        result = analyze_asset(x_iq_session, asset, strategy)
+        result = analyze_asset(x_iq_session, asset, strategy, force_refresh=refresh)
         result["market"] = get_market_status(x_iq_session, asset)
         result["payout"] = get_payout(x_iq_session, asset)
         for signal in (result.get("signals") or {}).values():
