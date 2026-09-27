@@ -1251,7 +1251,10 @@ def analyze_asset(
         cache_key = (asset, strategy, expiry)
         cached = _SIGNAL_CACHE.get(cache_key)
         market_safe = news["available"] and not news["blocked"]
-        if (not force_refresh) and market_safe and cached and cached["expires_at"] > now and "proximity" in cached and "historical_accuracy" in cached:
+        # O sinal técnico não depende da disponibilidade do calendário econômico.
+        # O calendário atua como alerta/bloqueio contextual, mas não apaga o
+        # resultado técnico quando a fonte externa estiver indisponível.
+        if (not force_refresh) and cached and cached["expires_at"] > now and "proximity" in cached and "historical_accuracy" in cached:
             signals[expiry] = {**cached, "locked": True, "seconds_remaining": cached["expires_at"] - now}
             continue
 
@@ -1259,10 +1262,13 @@ def analyze_asset(
         candles = _drop_incomplete_candle(service.get_candles_smart(session_id, asset, interval, 240), interval)
         df = compute_indicators(candles_to_df(candles))
         decision = _strategy_signal(df, strategy) if not df.empty else _signal("AGUARDAR", 0, "Sem dados de mercado.", [])
-        if not news["available"]:
-            decision = _signal("AGUARDAR", 0, "Entrada suspensa: calendário econômico indisponível.", [])
-        elif news["blocked"]:
-            decision = _signal("AGUARDAR", 0, "Entrada bloqueada por notícia de alto impacto.", [event["title"] for event in news["events"]])
+        if news["blocked"]:
+            decision["news_blocked"] = True
+            decision["news_warning"] = "Há evento econômico de alto impacto no intervalo monitorado."
+            decision["news_events"] = [event["title"] for event in news["events"]]
+        elif not news["available"]:
+            decision["news_blocked"] = False
+            decision["news_warning"] = "Calendário econômico indisponível; sinal técnico calculado normalmente."
 
         # Votos dos indicadores ativos (fonte única: detalhamento, IA e,
         # opcionalmente, filtro do sinal quando "usar_votos" está habilitado)
@@ -1307,10 +1313,8 @@ def analyze_asset(
             "locked": False,
             "seconds_remaining": expires_at - now,
         }
-        if market_safe:
-            _SIGNAL_CACHE[cache_key] = signals[expiry]
-        else:
-            _SIGNAL_CACHE.pop(cache_key, None)
+        # O cache do sinal é válido independentemente da fonte de notícias.
+        _SIGNAL_CACHE[cache_key] = signals[expiry]
 
     warning = news["warning"] if not news["available"] else None
     return {
