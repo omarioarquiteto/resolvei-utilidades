@@ -6,7 +6,8 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Header, HTTPException, Query
 from pydantic import BaseModel
 
-from .iq_analysis import analyze_asset, get_chart_data, list_assets, strategy_catalog, walkforward_asset
+from .iq_analysis import analyze_asset, get_chart_data, strategy_catalog, walkforward_asset
+from .iq_service import list_assets
 from .iq_service import connect_session, disconnect_session, get_balance, get_market_status, is_connected, session_count
 
 router = APIRouter(prefix="/api/iq", tags=["IQ Option"])
