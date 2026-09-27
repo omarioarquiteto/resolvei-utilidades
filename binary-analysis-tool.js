@@ -471,8 +471,8 @@
         if (!pair) return;
         currentAsset = pair;
         saveState();
+        setSettingsScreen("Par selecionado. Clique em “Analisar agora” para calcular o sinal.");
         renderSettings();
-        analyze(true);
       });
       button.querySelector("span")?.addEventListener("click", (event) => {
         event.stopPropagation();
@@ -480,8 +480,8 @@
         if (!monitoredAssets.length) monitoredAssets = [currentAsset];
         if (!monitoredAssets.includes(currentAsset)) currentAsset = monitoredAssets[0];
         saveState();
+        setSettingsScreen("Par monitorado removido. Nenhuma análise foi executada.");
         renderSettings();
-        analyze(true);
       });
     });
 
@@ -489,8 +489,8 @@
       button.addEventListener("click", () => {
         currentExpiry = button.dataset.expiry === "5min" ? "5min" : "1min";
         saveState();
+        setSettingsScreen("Expiração selecionada. Clique em “Analisar agora” para calcular o sinal.");
         renderSettings();
-        analyze(true);
       });
     });
 
