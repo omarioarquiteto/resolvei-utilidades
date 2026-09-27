@@ -81,7 +81,7 @@ STRATEGIES = {
 
 _SIGNAL_CACHE: dict[tuple[str, str, str], dict] = {}
 MIN_ACCURACY_SAMPLE = 20     # amostra mínima para publicar o percentual
-ACCURACY_WINDOW = 20         # janela rolante: últimos N sinais avaliados
+ACCURACY_WINDOW = 20         # quantidade máxima de sinais históricos avaliados\nACCURACY_LOOKBACK = 200       # candles percorridos para encontrar esses sinais
 
 # Parâmetros configuráveis por estratégia (limiares usados em _strategy_signal).
 # Ex.: adx_min, tolerâncias de RSI, zonas de ATR, min_score. Sem overrides,
@@ -1502,16 +1502,14 @@ def analyze_asset(
             f"e {win_rate if win_rate is not None else 0:.1f}% de acerto; "
             f"mínimo exigido: 20 sinais e 70%."
         )
-        # Gate final: histórico >=20 e >=70% + confluência técnica >=70%.
-        # A confluência técnica é um filtro interno; não representa promessa de
-        # probabilidade futura.
-        technical_confidence = float((decision.get("resumo_votos") or {}).get("confianca") or 0.0)
-        technical_ok = technical_confidence >= 70.0
-        decision["technical_gate"] = technical_ok
-        decision["technical_gate_reason"] = None if technical_ok else (
-            f"Confluência técnica insuficiente: {technical_confidence:.1f}%; mínimo: 70%."
-        )
-        if decision.get("signal") in ("CALL", "PUT") and not (accuracy_ok and technical_ok):
+        # Gate final: somente o histórico validado libera o sinal.
+        # A confirmação técnica já é feita pela própria estratégia e, quando
+        # aplicável, pelo conjunto de indicadores ativos. Não usamos a
+        # "confiança" agregada como um segundo percentual arbitrário: ela mede
+        # concordância dos indicadores, não acurácia histórica.
+        decision["technical_gate"] = True
+        decision["technical_gate_reason"] = None
+        if decision.get("signal") in ("CALL", "PUT") and not accuracy_ok:
             decision["signal_before_accuracy_gate"] = decision["signal"]
             decision["signal"] = "AGUARDAR"
             decision["confirmed"] = False
