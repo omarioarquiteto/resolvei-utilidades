@@ -1,6 +1,6 @@
 """
 Motor de análise para opções binárias.
-Fonte: IQ Option via iq_service.
+Fonte: IQ Option via service.
 """
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ import time
 import numpy as np
 import pandas as pd
 
-from . import iq_service
+from . import service
 from . import news_service
 from . import trade_manager
 
