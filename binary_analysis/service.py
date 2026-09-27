@@ -95,24 +95,31 @@ def connect_session(session_id: str, email: str, password: str, account: str):
         except Exception as exc:
             return False, f"Não foi possível autenticar na IQ Option: {exc}", None
 
-def complete_2fa(challenge_id: str, code: str, session_id: str):
+def complete_2fa(challenge_id: str, code: str, session_id: str, method: str = "sms"):
     with _LOCK:
         _cleanup()
-        pending = _PENDING_2FA.pop(challenge_id, None)
+        pending = _PENDING_2FA.get(challenge_id)
         if not pending:
             return False, "A solicitação de verificação expirou. Faça o login novamente.", None
         client = pending["client"]
         try:
-            ok, reason = client.connect_2fa(str(code).strip())
+            token = pending.get("token")
+            if not token or not hasattr(client, "TWO_FA"):
+                return False, "A IQ Option iniciou 2FA, mas a API não forneceu um token de verificação compatível.", None
+            result = client.TWO_FA(token, method, str(code).strip())
+            if not isinstance(result, dict):
+                return False, f"Resposta inesperada da verificação 2FA: {result}", None
+            verified_token = result.get("token") or result.get("ssid") or result.get("session_token") or token
+            client.setting_2FA_TOKEN(verified_token)
+            ok, reason = _call_with_timeout(client.connect, 25.0, "login IQ Option após 2FA")
             if not ok:
-                _PENDING_2FA[challenge_id] = pending
-                return False, f"Falha na verificação 2FA: {reason}", None
+                return False, f"Falha na autenticação após 2FA: {reason}", None
             account = pending["account"]
             client.change_balance(account)
+            _PENDING_2FA.pop(challenge_id, None)
             _SESSIONS[session_id] = IQSession(client, account, time.time(), time.time())
             return True, f"Conectado à conta {account}.", _safe_balance(client)
         except Exception as exc:
-            _PENDING_2FA[challenge_id] = pending
             return False, f"Não foi possível concluir a verificação 2FA: {exc}", None
 
 def cancel_2fa(challenge_id: str):
