@@ -1152,26 +1152,32 @@ def analyze_timeframe(df: pd.DataFrame, tf_key: str) -> dict | None:
 
 
 
-def _resample_ohlcv(df: pd.DataFrame, minutes: int) -> pd.DataFrame:
+def _resample_ohlcv(df: pd.DataFrame, minutes: int, include_incomplete: bool = False) -> pd.DataFrame:
     if df is None or df.empty:
         return pd.DataFrame()
     out=df[["Open","High","Low","Close","Volume"]].resample(
         f"{int(minutes)}min",label="right",closed="left"
     ).agg({"Open":"first","High":"max","Low":"min","Close":"last","Volume":"sum"}).dropna()
+    if include_incomplete:
+        return out
     current_bucket=int(time.time())//(minutes*60)*(minutes*60)
     return out.loc[out.index<=pd.to_datetime(current_bucket,unit="s",utc=True)]
 
 
-def _prepare_frames_from_1m(candles: list[dict]) -> dict[str,pd.DataFrame]:
+def _prepare_frames_from_1m(candles: list[dict], include_incomplete: bool = False) -> dict[str,pd.DataFrame]:
     base=candles_to_df(candles)
     if base.empty: return {}
-    return {"1m":base,"5m":_resample_ohlcv(base,5),"15m":_resample_ohlcv(base,15)}
+    return {
+        "1m":base,
+        "5m":_resample_ohlcv(base,5,include_incomplete),
+        "15m":_resample_ohlcv(base,15,include_incomplete),
+    }
 
 
 def _smart_multiframe_signal(frames: dict[str,pd.DataFrame], expiry: str) -> dict:
     trigger_key="1m" if expiry=="1min" else "5m"
     context_keys=("5m","15m") if expiry=="1min" else ("15m",)
-    trigger=_strategy_signal(frames.get(trigger_key,pd.DataFrame()))
+    trigger=_strategy_signal(frames.get(trigger_key+"_live",frames.get(trigger_key,pd.DataFrame())))
     contexts=[_strategy_signal(frames.get(k,pd.DataFrame())) for k in context_keys]
     result={"signal":"AGUARDAR","confirmed":False,"score":0,"confidence":0,
             "reason":"Aguardando confluência entre contexto e gatilho.",
@@ -1255,9 +1261,12 @@ def analyze_asset(session_id: str, asset: str, strategy: str = "smart_confluence
             signals[expiry]={**cached,"locked":True,"seconds_remaining":max(0,cached["expires_at"]-now)}
             continue
         raw=service.get_candles_smart(session_id,asset,60,900)
-        raw=_drop_incomplete_candle(raw,60)
-        base_df=candles_to_df(raw)
-        frames=_prepare_frames_from_1m(raw)
+        closed_raw=_drop_incomplete_candle(raw,60)
+        base_df=candles_to_df(closed_raw)
+        frames=_prepare_frames_from_1m(closed_raw)
+        live_frames=_prepare_frames_from_1m(raw,include_incomplete=True)
+        frames["1m_live"]=live_frames.get("1m",pd.DataFrame())
+        frames["5m_live"]=live_frames.get("5m",pd.DataFrame())
         if base_df.empty or "1m" not in frames or frames["1m"].empty:
             decision={"signal":"AGUARDAR","confirmed":False,"score":0,"confidence":0,
                       "reason":"A IQ Option não retornou candles fechados.","data_ready":False}
@@ -1265,7 +1274,18 @@ def analyze_asset(session_id: str, asset: str, strategy: str = "smart_confluence
         else:
             decision=_smart_multiframe_signal(frames,expiry)
             accuracy=_historical_multiframe_accuracy(base_df,expiry)
-            decision["data_ready"]=True; decision["candle_count"]=len(base_df)
+            decision["data_ready"]=True
+            decision["candle_count"]=len(base_df)
+            trigger_key="1m" if expiry=="1min" else "5m"
+            live_trigger=frames.get(trigger_key+"_live",pd.DataFrame())
+            closed_trigger=frames.get(trigger_key,pd.DataFrame())
+            decision["mid_candle"]=bool(
+                not live_trigger.empty and (
+                    closed_trigger.empty or live_trigger.index[-1] > closed_trigger.index[-1]
+                )
+            )
+            if decision.get("signal") in ("CALL","PUT") and decision["mid_candle"]:
+                decision["reason"]=str(decision.get("reason") or "") + " Sinal identificado durante a vela em formação."
         sample=int(accuracy.get("sample_size") or 0); rate=accuracy.get("rate")
         accuracy_ok=sample>=MIN_ACCURACY_SAMPLE and rate is not None and float(rate)>=70.0
         decision["historical_accuracy"]=accuracy
