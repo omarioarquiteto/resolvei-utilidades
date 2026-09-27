@@ -2,10 +2,6 @@ from __future__ import annotations
 
 import threading
 import time
-import secrets
-import requests
-import socket
-from urllib3.util import connection as urllib3_connection
 from dataclasses import dataclass
 from typing import Any
 
@@ -25,7 +21,6 @@ class IQSession:
     last_used: float
 
 _SESSIONS: dict[str, IQSession] = {}
-_PENDING_2FA: dict[str, dict[str, Any]] = {}
 _LOCK = threading.RLock()
 _SESSION_TTL = 60 * 60 * 6
 _metadata_cache: dict[Any, dict] = {}
@@ -64,171 +59,21 @@ def _cleanup():
     for k in stale:
         item=_SESSIONS.pop(k)
         _close_client(item.client)
-    pending=[k for k,v in _PENDING_2FA.items() if now-v.get("created_at", now) > 600]
-    for k in pending:
-        item=_PENDING_2FA.pop(k, None)
-        if item: _close_client(item.get("client"))
-
-def iq_network_diagnostic():
-    """Diagnóstico seguro da rota Render -> IQ Option, sem enviar credenciais."""
-    import ssl
-
-    host = "auth.iqoption.com"
-    port = 443
-    result = {"host": host, "port": port}
-
-    try:
-        infos = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
-        ipv4 = sorted({item[4][0] for item in infos if item[0] == socket.AF_INET})
-        ipv6 = sorted({item[4][0] for item in infos if item[0] == socket.AF_INET6})
-        result["dns"] = {"ipv4": ipv4, "ipv6": ipv6}
-    except Exception as exc:
-        result["dns_error"] = type(exc).__name__ + ": " + str(exc)
-        return result
-
-    def tcp_test(address, family):
-        started = time.time()
-        try:
-            sock = socket.socket(family, socket.SOCK_STREAM)
-            sock.settimeout(8)
-            sock.connect((address, port))
-            elapsed = round(time.time() - started, 3)
-            sock.close()
-            return {"ok": True, "seconds": elapsed}
-        except Exception as exc:
-            return {"ok": False, "error": type(exc).__name__ + ": " + str(exc)}
-
-    result["tcp_ipv4"] = [tcp_test(ip, socket.AF_INET) for ip in ipv4[:3]]
-    if ipv6:
-        result["tcp_ipv6"] = [tcp_test(ip, socket.AF_INET6) for ip in ipv6[:3]]
-
-    # TLS é testado somente se uma conexão IPv4 TCP funcionar.
-    working_ipv4 = next((ip for ip, test in zip(ipv4[:3], result["tcp_ipv4"]) if test["ok"]), None)
-    if working_ipv4:
-        started = time.time()
-        try:
-            raw = socket.create_connection((working_ipv4, port), timeout=8)
-            context = ssl.create_default_context()
-            with context.wrap_socket(raw, server_hostname=host) as tls_sock:
-                result["tls_ipv4"] = {
-                    "ok": True,
-                    "seconds": round(time.time() - started, 3),
-                    "version": tls_sock.version(),
-                }
-        except Exception as exc:
-            result["tls_ipv4"] = {"ok": False, "error": type(exc).__name__ + ": " + str(exc)}
-
-    # GET sem credenciais: mede apenas se o HTTPS chega ao serviço.
-    if result.get("tls_ipv4", {}).get("ok"):
-        try:
-            response = requests.get(
-                "https://" + host + "/",
-                headers={"User-Agent": "Mozilla/5.0"},
-                timeout=10,
-            )
-            result["https_root"] = {"ok": True, "status": response.status_code}
-        except Exception as exc:
-            result["https_root"] = {"ok": False, "error": type(exc).__name__ + ": " + str(exc)}
-
-    return result
-
-def _http_login(email: str, password: str):
-    url = "https://auth.iqoption.com/api/v2/login"
-    headers = {"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/120 Safari/537.36"}
-    # Render pode resolver auth.iqoption.com para IPv6 sem rota funcional.
-    # Forçamos IPv4 somente durante a chamada de autenticação.
-    original_family = urllib3_connection.allowed_gai_family
-    urllib3_connection.allowed_gai_family = lambda: socket.AF_INET
-    try:
-        response = requests.post(
-            url,
-            data={"identifier": email.strip(), "password": password},
-            headers=headers,
-            timeout=30,
-        )
-    finally:
-        urllib3_connection.allowed_gai_family = original_family
-    try: payload = response.json()
-    except Exception: payload = None
-    if response.status_code == 200:
-        ssid = response.cookies.get("ssid")
-        if ssid: return ssid, None
-        if isinstance(payload, dict) and payload.get("code") == "verify":
-            return None, {"token": payload.get("token"), "method": payload.get("method") or "sms"}
-        return None, {"error": "A IQ Option não retornou uma sessão válida."}
-    if isinstance(payload, dict):
-        detail = payload.get("message") or payload.get("error") or payload.get("reason")
-        if detail: return None, {"error": str(detail)}
-    return None, {"error": f"HTTP {response.status_code} na autenticação."}
-
-def _http_verify_2fa(token: str, method: str, code: str):
-    url = "https://auth.iqoption.com/api/v2/verify/2fa"
-    headers = {"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/120 Safari/537.36", "Content-Type": "application/json"}
-    response = requests.post(url, json={"method": method, "token": token, "code": code.strip()}, headers=headers, timeout=15)
-    try: payload = response.json()
-    except Exception: payload = {}
-    if response.status_code == 200 and isinstance(payload, dict): return payload
-    detail = payload.get("message") or payload.get("error") or payload.get("reason")
-    return {"code": "error", "message": str(detail or f"HTTP {response.status_code}")}
 
 def connect_session(session_id: str, email: str, password: str, account: str):
     with _LOCK:
         _cleanup()
-        client = None
         try:
-            ssid, challenge = _http_login(email, password)
-            if challenge and challenge.get("token"):
-                challenge_id = secrets.token_urlsafe(32)
-                _PENDING_2FA[challenge_id] = {"client": IQ_Option(email.strip(), password), "account": account, "created_at": time.time(), "token": challenge["token"], "method": challenge.get("method") or "sms"}
-                return False, "2FA_REQUIRED", {"challenge_id": challenge_id}
-            if not ssid:
-                reason = (challenge or {}).get("error") or "A IQ Option recusou a autenticação."
-                return False, f"Falha na autenticação da IQ Option: {reason}", None
-            client = IQ_Option(email.strip(), password, set_ssid=ssid)
-            ok, reason = _call_with_timeout(client.connect, 25.0, "conexão WebSocket IQ Option")
+            client=IQ_Option(email.strip(), password)
+            ok, reason=client.connect()
             if not ok:
                 _close_client(client)
-                return False, f"Login aceito, mas a conexão de mercado da IQ Option falhou: {reason}", None
-            _call_with_timeout(lambda: client.change_balance(account), 10.0, f"seleção da conta {account}")
-            _SESSIONS[session_id] = IQSession(client, account, time.time(), time.time())
+                return False, f"Falha na autenticação da IQ Option: {reason}", None
+            client.change_balance(account)
+            _SESSIONS[session_id]=IQSession(client,account,time.time(),time.time())
             return True, f"Conectado à conta {account}.", _safe_balance(client)
-        except requests.RequestException as exc:
-            _close_client(client)
-            return False, f"Não foi possível alcançar o serviço de autenticação da IQ Option: {exc}", None
         except Exception as exc:
-            _close_client(client)
-            return False, f"Não foi possível autenticar/conectar à IQ Option: {exc}", None
-
-def complete_2fa(challenge_id: str, code: str, session_id: str, method: str = "sms"):
-    with _LOCK:
-        _cleanup()
-        pending = _PENDING_2FA.get(challenge_id)
-        if not pending: return False, "A solicitação de verificação expirou. Faça o login novamente.", None
-        client = pending["client"]
-        try:
-            token = pending.get("token")
-            method = pending.get("method") or method or "sms"
-            if not token: return False, "A IQ Option não forneceu o token necessário para a verificação.", None
-            result = _http_verify_2fa(token, method, code)
-            if result.get("code") != "success" or not result.get("token"):
-                return False, f"Falha na verificação da IQ Option: {result.get('message') or result}", None
-            client.setting_2FA_TOKEN(result["token"])
-            ok, reason = _call_with_timeout(client.connect, 25.0, "login IQ Option após 2FA")
-            if not ok: return False, f"Falha na conexão após 2FA: {reason}", None
-            account = pending["account"]
-            _call_with_timeout(lambda: client.change_balance(account), 10.0, f"seleção da conta {account}")
-            _PENDING_2FA.pop(challenge_id, None)
-            _SESSIONS[session_id] = IQSession(client, account, time.time(), time.time())
-            return True, f"Conectado à conta {account}.", _safe_balance(client)
-        except requests.RequestException as exc:
-            return False, f"Não foi possível concluir a verificação da IQ Option: {exc}", None
-        except Exception as exc:
-            return False, f"Não foi possível concluir a verificação 2FA: {exc}", None
-
-def cancel_2fa(challenge_id: str):
-    with _LOCK:
-        pending = _PENDING_2FA.pop(challenge_id, None)
-        if pending: _close_client(pending.get("client"))
+            return False, f"Não foi possível autenticar na IQ Option: {exc}", None
 
 def disconnect_session(session_id: str):
     with _LOCK:
