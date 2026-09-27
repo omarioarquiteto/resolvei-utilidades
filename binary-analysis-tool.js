@@ -112,7 +112,7 @@
     const chips = monitoredAssets.length
       ? monitoredAssets.map((asset) => `
           <button class="binary-pair-chip ${asset === currentAsset ? "active" : ""}" type="button" data-pair-chip="${esc(asset)}">
-            ${esc(asset)} <span aria-hidden="true">×</span>
+            ${esc(asset)} <span class="binary-pair-remove" data-remove-pair="1" role="button" tabindex="0" aria-label="Remover ${esc(asset)}" title="Remover par">×</span>
           </button>`).join("")
       : '<span class="binary-no-pairs">Nenhum par adicionado. O par atual será usado.</span>';
 
@@ -648,19 +648,25 @@
     });
 
     document.querySelectorAll("[data-pair-chip]").forEach((button) => {
+      const pair = button.dataset.pairChip;
+      if (!pair) return;
+
       button.addEventListener("click", () => {
-        const pair = button.dataset.pairChip;
-        if (!pair) return;
         currentAsset = pair;
+        currentMarket = pair.endsWith("-OTC") ? "OTC" : "REGULAR";
         saveState();
         setSettingsScreen("Par selecionado. Clique em “Analisar agora” para calcular o sinal.");
         renderSettings();
       });
-      button.querySelector("span")?.addEventListener("click", (event) => {
+
+      const removeButton = button.querySelector("[data-remove-pair]");
+      removeButton?.addEventListener("click", (event) => {
+        event.preventDefault();
         event.stopPropagation();
         monitoredAssets = monitoredAssets.filter((item) => item !== pair);
         if (!monitoredAssets.length) monitoredAssets = [currentAsset];
         if (!monitoredAssets.includes(currentAsset)) currentAsset = monitoredAssets[0];
+        currentMarket = currentAsset.endsWith("-OTC") ? "OTC" : "REGULAR";
         saveState();
         setSettingsScreen("Par monitorado removido. Nenhuma análise foi executada.");
         renderSettings();
