@@ -1260,9 +1260,41 @@ def analyze_asset(
         raise ValueError(f"Estratégia desconhecida: {strategy}")
 
     now = int(time.time())
+    expiries = (only_expiry,) if only_expiry else ("1min", "5min", "15min")
+    market_status = service.get_market_status(session_id, asset)
+    if market_status == "fechado":
+        closed_signals = {}
+        for expiry in expiries:
+            if expiry not in TIMEFRAMES:
+                raise ValueError(f"Vencimento desconhecido: {expiry}")
+            closed_signals[expiry] = {
+                "signal": "AGUARDAR",
+                "score": 0,
+                "confidence": 0,
+                "reason": "O ativo está fechado na IQ Option. Se houver a versão OTC disponível, selecione o mercado OTC.",
+                "votos": [],
+                "resumo_votos": {"bulls": 0, "bears": 0, "neutros": 0, "total": 0, "confianca": 0},
+                "proximity": {"label": "MERCADO FECHADO", "percent": 0, "score": 0, "target": 0},
+                "historical_accuracy": {"rate": None, "sample_size": 0, "wins": 0, "ultimos": []},
+                "expiry": expiry,
+                "locked": False,
+                "seconds_remaining": 0,
+                "market_closed": True,
+            }
+        return {
+            "asset": asset,
+            "strategy": strategy,
+            "strategy_name": STRATEGIES[strategy]["name"],
+            "strategy_description": STRATEGIES[strategy]["description"],
+            "signals": closed_signals,
+            "news": {"available": True, "blocked": False, "events": [], "warning": None},
+            "warning": "Mercado fechado para este ativo. Verifique o ativo equivalente com sufixo OTC.",
+            "market": "fechado",
+            "market_closed": True,
+        }
+
     news = news_service.get_news_risk(asset)
     signals = {}
-    expiries = (only_expiry,) if only_expiry else ("1min", "5min", "15min")
     for expiry in expiries:
         if expiry not in TIMEFRAMES:
             raise ValueError(f"Vencimento desconhecido: {expiry}")
@@ -1279,7 +1311,14 @@ def analyze_asset(
         interval = TIMEFRAMES[expiry]["interval"]
         candles = _drop_incomplete_candle(service.get_candles_smart(session_id, asset, interval, 240), interval)
         df = compute_indicators(candles_to_df(candles))
-        decision = _strategy_signal(df, strategy) if not df.empty else _signal("AGUARDAR", 0, "Sem dados de mercado.", [])
+        if df.empty:
+            decision = _signal("AGUARDAR", 0, "A IQ Option não retornou candles para este ativo/timeframe. Verifique a disponibilidade do ativo ou tente OTC.", [])
+            decision["data_ready"] = False
+            decision["candle_count"] = 0
+        else:
+            decision = _strategy_signal(df, strategy)
+            decision["data_ready"] = True
+            decision["candle_count"] = len(df)
         if news["blocked"]:
             decision["news_blocked"] = True
             decision["news_warning"] = "Há evento econômico de alto impacto no intervalo monitorado."
@@ -1348,6 +1387,8 @@ def analyze_asset(
         "signals": signals,
         "news": news,
         "warning": warning,
+        "market": market_status or "indisponivel",
+        "market_closed": market_status == "fechado",
     }
 
 
