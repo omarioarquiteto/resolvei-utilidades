@@ -6,20 +6,36 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Header, HTTPException, Query
 from pydantic import BaseModel
 
-from .iq_analysis import analyze_asset, get_chart_data, strategy_catalog, walkforward_asset
-from .iq_service import list_assets
-from .iq_service import connect_session, disconnect_session, get_balance, get_market_status, is_connected, session_count
+from .engine import analyze_asset, get_chart_data, strategy_catalog, walkforward_asset
+from .service import (
+    connect_session,
+    disconnect_session,
+    get_balance,
+    get_market_status,
+    get_payout,
+    is_connected,
+    list_assets,
+    session_count,
+)
 
 router = APIRouter(prefix="/api/iq", tags=["IQ Option"])
+
 
 class IQLoginRequest(BaseModel):
     email: str
     password: str
     account: str = "PRACTICE"
 
+
 @router.get("/health")
 def iq_health():
-    return {"ok": True, "provider": "IQ Option", "api_mode": "community/unofficial", "connected_sessions": session_count()}
+    return {
+        "ok": True,
+        "provider": "IQ Option",
+        "api_mode": "community/unofficial",
+        "connected_sessions": session_count(),
+    }
+
 
 @router.post("/login")
 def iq_login(request: IQLoginRequest):
@@ -34,7 +50,14 @@ def iq_login(request: IQLoginRequest):
     if not ok:
         disconnect_session(session_id)
         raise HTTPException(502, message)
-    return {"ok": True, "session_id": session_id, "message": message, "account": account, "balance": balance}
+    return {
+        "ok": True,
+        "session_id": session_id,
+        "message": message,
+        "account": account,
+        "balance": balance,
+    }
+
 
 @router.post("/logout")
 def iq_logout(x_iq_session: str | None = Header(default=None)):
@@ -42,12 +65,18 @@ def iq_logout(x_iq_session: str | None = Header(default=None)):
         disconnect_session(x_iq_session)
     return {"ok": True}
 
+
 @router.get("/status")
 def iq_status(x_iq_session: str | None = Header(default=None)):
     if not x_iq_session:
         return {"connected": False, "balance": None, "account": None}
     status = is_connected(x_iq_session)
-    return {"connected": status["connected"], "balance": get_balance(x_iq_session), "account": status.get("account")}
+    return {
+        "connected": status["connected"],
+        "balance": get_balance(x_iq_session),
+        "account": status.get("account"),
+    }
+
 
 @router.get("/assets")
 def iq_assets(x_iq_session: str | None = Header(default=None)):
@@ -55,12 +84,18 @@ def iq_assets(x_iq_session: str | None = Header(default=None)):
         raise HTTPException(401, "Conecte sua conta da IQ Option primeiro.")
     return {"assets": list_assets(x_iq_session)}
 
+
 @router.get("/strategies")
 def iq_strategies():
     return {"strategies": strategy_catalog()}
 
+
 @router.get("/analyze/{asset}")
-def iq_analyze(asset: str, strategy: str = Query("trend_pullback"), x_iq_session: str | None = Header(default=None)):
+def iq_analyze(
+    asset: str,
+    strategy: str = Query("trend_pullback"),
+    x_iq_session: str | None = Header(default=None),
+):
     if not x_iq_session or not is_connected(x_iq_session)["connected"]:
         raise HTTPException(401, "Conecte sua conta da IQ Option primeiro.")
     try:
@@ -75,10 +110,18 @@ def iq_analyze(asset: str, strategy: str = Query("trend_pullback"), x_iq_session
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
     except Exception as exc:
-        raise HTTPException(502, f"Não foi possível analisar {asset.upper()}: {exc}") from exc
+        raise HTTPException(
+            502, f"Não foi possível analisar {asset.upper()}: {exc}"
+        ) from exc
+
 
 @router.get("/candles/{asset}")
-def iq_candles(asset: str, interval: int = Query(300, ge=60, le=1800), count: int = Query(200, ge=60, le=500), x_iq_session: str | None = Header(default=None)):
+def iq_candles(
+    asset: str,
+    interval: int = Query(300, ge=60, le=1800),
+    count: int = Query(200, ge=60, le=500),
+    x_iq_session: str | None = Header(default=None),
+):
     if not x_iq_session or not is_connected(x_iq_session)["connected"]:
         raise HTTPException(401, "Conecte sua conta da IQ Option primeiro.")
     try:
@@ -86,8 +129,14 @@ def iq_candles(asset: str, interval: int = Query(300, ge=60, le=1800), count: in
     except Exception as exc:
         raise HTTPException(502, f"Falha ao obter candles: {exc}") from exc
 
+
 @router.get("/backtest/{asset}")
-def iq_backtest(asset: str, expiry: str = Query("1min"), count: int = Query(240, ge=80, le=500), x_iq_session: str | None = Header(default=None)):
+def iq_backtest(
+    asset: str,
+    expiry: str = Query("1min"),
+    count: int = Query(240, ge=80, le=500),
+    x_iq_session: str | None = Header(default=None),
+):
     if not x_iq_session or not is_connected(x_iq_session)["connected"]:
         raise HTTPException(401, "Conecte sua conta da IQ Option primeiro.")
     try:
