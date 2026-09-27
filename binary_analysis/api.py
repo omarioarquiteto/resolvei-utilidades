@@ -114,7 +114,7 @@ def iq_analyze(
         result["selected_candle_count"] = selected.get("candle_count", 0)
 
         result["market"] = result.get("market") or get_market_status(x_iq_session, asset)
-        result["payout"] = None if result["market"] == "fechado" else get_payout(x_iq_session, asset)
+        result["payout"] = get_payout(x_iq_session, asset) if result.get("selected_data_ready") else None
         for signal in (result.get("signals") or {}).values():
             if isinstance(signal, dict):
                 signal["payout"] = result["payout"]
