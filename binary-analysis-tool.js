@@ -87,11 +87,27 @@
 
   function proximityStage(signal) {
     const percent = Math.max(0, Math.min(100, Number(signal?.proximity?.percent ?? 0)));
-    if (percent >= 100 && signal?.signal === "CALL") return { percent, title: "COMPRA", label: "Limiar técnico atingido para CALL." };
-    if (percent >= 100 && signal?.signal === "PUT") return { percent, title: "VENDA", label: "Limiar técnico atingido para PUT." };
-    if (percent >= 75) return { percent, title: "SINAL MUITO PRÓXIMO", label: "A estratégia está próxima do limiar técnico configurado." };
-    if (percent >= 50) return { percent, title: "ATENÇÃO", label: "Há confluência parcial, mas ainda não atingiu o limiar técnico." };
-    return { percent, title: "ANALISANDO MERCADO", label: "Ainda falta confluência para atingir o limiar técnico." };
+    if (signal?.signal === "CALL") {
+      return {
+        percent,
+        title: "COMPRA",
+        label: signal?.confirmed
+          ? "Limiar técnico atingido para CALL."
+          : "Direção técnica predominante em CALL; o score ainda está abaixo do limiar ideal."
+      };
+    }
+    if (signal?.signal === "PUT") {
+      return {
+        percent,
+        title: "VENDA",
+        label: signal?.confirmed
+          ? "Limiar técnico atingido para PUT."
+          : "Direção técnica predominante em PUT; o score ainda está abaixo do limiar ideal."
+      };
+    }
+    if (percent >= 75) return { percent, title: "SINAL MUITO PRÓXIMO", label: "A análise está próxima do limiar técnico configurado." };
+    if (percent >= 50) return { percent, title: "ATENÇÃO", label: "Há confluência parcial, mas ainda não há direção confirmável." };
+    return { percent, title: "ANALISANDO MERCADO", label: "Dados insuficientes para uma direção técnica." };
   }
   function formatDuration(seconds) {
     const total = Math.max(0, Math.ceil(Number(seconds || 0)));
@@ -177,7 +193,7 @@
 
         <div class="binary-disclaimer">
           API comunitária não oficial da IQ Option. A ferramenta somente analisa dados e não envia ordens.
-          Você pode monitorar vários pares e trocar o par exibido sem perder sua configuração.
+          A análise considera somente o par atualmente selecionado.
         </div>
       </section>`;
   }
@@ -536,7 +552,7 @@
     setSignalScreen("🔎 Iniciando análise...");
     const loadingHost = document.getElementById("binaryCardHost");
     if (loadingHost) {
-      loadingHost.innerHTML = `<article class="binary-signal-card is-wait binary-analyzing-card"><div class="binary-card-top binary-drag-handle"><span>ANÁLISE EM ANDAMENTO</span><span>MONITORANDO</span></div><div class="binary-analyzing-icon">◌</div><div class="binary-analyzing-title" id="binaryAnalyzingTitle">ANALISANDO MERCADO</div><div class="binary-analyzing-subtitle" id="binaryAnalyzingSubtitle">Coletando candles, calculando indicadores e avaliando a estrutura técnica do par.</div><div class="binary-analysis-progress binary-thermometer"><div class="binary-thermometer-head"><span>TERMÔMETRO TÉCNICO</span><strong id="binaryAnalysisThermometerValue">18%</strong></div><div class="binary-proximity-track"><div class="binary-proximity-fill binary-analysis-thermometer-fill" id="binaryAnalysisThermometerFill" style="width:18%"></div></div></div><div class="binary-analyzing-label" id="binaryAnalyzingLabel">Lendo candles e preparando os indicadores...</div><div class="binary-signal-actions"><button class="binary-secondary-btn" id="binCancelAnalysis" type="button">✕ Cancelar análise</button></div></article>`;
+      loadingHost.innerHTML = `<article class="binary-signal-card is-wait binary-analyzing-card"><div class="binary-card-top binary-drag-handle"><span>ANÁLISE EM ANDAMENTO</span><span>MONITORANDO</span></div><div class="binary-analyzing-icon">◌</div><div class="binary-analyzing-title" id="binaryAnalyzingTitle">ANALISANDO MERCADO</div><div class="binary-analyzing-subtitle" id="binaryAnalyzingSubtitle">Coletando candles, calculando indicadores e avaliando a estrutura técnica do par.</div><div class="binary-analysis-progress binary-thermometer"><div class="binary-thermometer-head"><span>PROGRESSO DA ANÁLISE</span><strong id="binaryAnalysisThermometerValue">18%</strong></div><div class="binary-proximity-track"><div class="binary-proximity-fill binary-analysis-thermometer-fill" id="binaryAnalysisThermometerFill" style="width:18%"></div></div></div><div class="binary-analyzing-label" id="binaryAnalyzingLabel">Lendo candles e preparando os indicadores...</div><div class="binary-signal-actions"><button class="binary-secondary-btn" id="binCancelAnalysis" type="button">✕ Cancelar análise</button></div></article>`;
       document.getElementById("binCancelAnalysis")?.addEventListener("click", cancelAnalysis);
       startAnalysisStageAnimation();
     }
