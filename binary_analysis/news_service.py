@@ -10,6 +10,7 @@ import requests
 
 CALENDAR_URL = (os.getenv("BIQUOTE_CALENDAR_URL") or "").strip() or "https://biquote.io/api/calendar/upcoming"
 CALENDAR_CACHE_SECONDS = 60
+CALENDAR_REQUEST_TIMEOUT_SECONDS = 3
 _calendar_cache: dict = {"expires_at": 0.0, "payload": None}
 _calendar_lock = threading.Lock()
 CURRENCY_BY_ASSET = {
@@ -52,7 +53,7 @@ def _get_calendar_payload() -> list[dict]:
             raise ValueError(
                 "BIQUOTE_CALENDAR_URL vazia ou inválida no .env — configure a URL do calendário Biquote"
             )
-        response = requests.get(CALENDAR_URL, timeout=8)
+        response = requests.get(CALENDAR_URL, timeout=CALENDAR_REQUEST_TIMEOUT_SECONDS)
         response.raise_for_status()
         payload = response.json()
         if not isinstance(payload, list):
