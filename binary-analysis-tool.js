@@ -186,7 +186,7 @@
     const signal = data?.signals?.[currentExpiry] || {};
     const accuracy = signal.historical_accuracy || {};
     const votes = signal.resumo_votos || {};
-    const direction = signal.signal || "AGUARDAR";
+    const direction = data?.selected_signal || signal.signal || "AGUARDAR";
     const stateClass = direction === "CALL" ? "is-call" : direction === "PUT" ? "is-put" : "is-wait";
     const locked = Boolean(signal.locked);
     const reason = signal.reason || "Aguardando confirmação técnica.";
@@ -351,6 +351,7 @@
       const data = await api(
         "/analyze/" + encodeURIComponent(currentAsset) +
         "?strategy=" + encodeURIComponent(currentStrategy) +
+        "&expiry=" + encodeURIComponent(currentExpiry) +
         "&refresh=" + (force ? "1" : "0")
       );
       renderCard(data);
