@@ -377,7 +377,7 @@
   }
 
   async function logout() {
-    stopMonitoring();
+    resetSignalState();
     if (analysisController) {
       try { analysisController.abort(); } catch (_) {}
       analysisController = null;
@@ -423,6 +423,13 @@
     monitoringTimer = null;
   }
 
+  function resetSignalState() {
+    stopMonitoring();
+    currentSignalDirection = "AGUARDAR";
+    currentSignalRank = -1;
+    signalHoldUntil = 0;
+  }
+
   function cancelAnalysis() {
     stopMonitoring();
     clearInterval(countdownTimer);
@@ -435,6 +442,7 @@
     currentSignalRank = -1;
     currentSignalDirection = "AGUARDAR";
     inFlight = false;
+    resetSignalState();
     setSettingsScreen("Análise cancelada.");
     renderSettings();
     applyFloatingPosition();
@@ -468,7 +476,7 @@
           return;
         }
 
-        const canReplace = currentSignalDirection === "AGUARDAR"
+            const canReplace = currentSignalDirection === "AGUARDAR"
           || now >= signalHoldUntil
           || rank > currentSignalRank + 0.5;
 
@@ -477,6 +485,13 @@
           currentSignalDirection = direction;
           signalHoldUntil = Date.now() + 60000;
           renderCard(candidate);
+          const holdSeconds = Math.max(0, Math.ceil((signalHoldUntil - Date.now()) / 1000));
+          const status = document.getElementById("binaryStatus");
+          if (status) {
+            status.textContent = currentSignalDirection === "AGUARDAR"
+              ? "⏳ Aguardando confirmação técnica..."
+              : `✓ Sinal técnico ${currentSignalDirection} exibido. Proteção do sinal: ${formatDuration(holdSeconds)}.`;
+          }
           saveState();
           clearInterval(countdownTimer);
           countdownTimer = setInterval(updateTimer, 250);
@@ -524,10 +539,22 @@
       if (status) {
         const candleCount = Number(data.selected_candle_count || 0);
         if (data.market === "fechado") {
+          currentSignalDirection = "AGUARDAR";
+          currentSignalRank = -1;
+          stopMonitoring();
           status.textContent = `⏸️ ${currentAsset} está fechado. Se o equivalente OTC estiver disponível, selecione o mercado OTC.`;
         } else if (data.selected_data_ready) {
-          status.textContent = `✓ ${currentAsset} · ${expiryLabel(currentExpiry).toLowerCase()} · ${candleCount} candles processados · mercado ${data.market || "indisponível"}.`;
+          const selected = selectedSignalFromData(data);
+          currentSignalDirection = selected.signal || "AGUARDAR";
+          currentSignalRank = signalRank(selected);
+          status.textContent = currentSignalDirection === "AGUARDAR"
+            ? `⏳ Dados processados (${candleCount} candles). Aguardando confirmação técnica...`
+            : `✓ ${currentAsset} · ${expiryLabel(currentExpiry).toLowerCase()} · ${candleCount} candles processados · sinal técnico ${currentSignalDirection} · mercado ${data.market || "indisponível"}.`;
+          startSignalMonitoring();
         } else {
+          currentSignalDirection = "AGUARDAR";
+          currentSignalRank = -1;
+          stopMonitoring();
           status.textContent = `⚠️ ${currentAsset} · nenhum candle válido processado. Mercado ${data.market || "indisponível"}.`;
         }
       }
