@@ -411,7 +411,7 @@
         "/analyze/" + encodeURIComponent(currentAsset) +
         "?strategy=" + encodeURIComponent(currentStrategy) +
         "&expiry=" + encodeURIComponent(currentExpiry) +
-        "&refresh=" + (force ? "1" : "0")
+        "&refresh=1"
       );
       renderCard(data);
       renderSettings();
@@ -422,6 +422,27 @@
       clearInterval(countdownTimer);
       countdownTimer = setInterval(updateTimer, 250);
     } catch (error) {
+      if (loadingHost) {
+        loadingHost.innerHTML = `
+          <article class="binary-signal-card is-wait binary-error-card">
+            <div class="binary-card-top binary-drag-handle">
+              <span>ANÁLISE</span><span>ERRO</span>
+            </div>
+            <div class="binary-analyzing-title">Não foi possível concluir a análise</div>
+            <div class="binary-reason">${esc(error.message)}</div>
+            <div class="binary-signal-actions">
+              <button class="binary-secondary-btn" id="binSignalSettingsError" type="button">⚙ Configurar</button>
+              <button class="binary-primary-btn" id="binSignalRetry" type="button">🔎 Tentar novamente</button>
+            </div>
+          </article>`;
+        document.getElementById("binSignalRetry")?.addEventListener("click", () => analyze());
+        document.getElementById("binSignalSettingsError")?.addEventListener("click", () => {
+          setSettingsScreen("Configuração carregada. Nenhuma nova análise foi executada.");
+          renderSettings();
+          applyFloatingPosition();
+          enableFloatingDrag();
+        });
+      }
       if (status) status.textContent = "⚠️ " + error.message;
     } finally {
       inFlight = false;
@@ -546,6 +567,7 @@
 
     handle.addEventListener("pointerdown", (event) => {
       if (!isFloating() || event.button !== 0) return;
+      if (event.target.closest("button, input, select, textarea, a")) return;
       const rect = page.getBoundingClientRect();
       dragState = {
         pointerId: event.pointerId,
@@ -559,6 +581,7 @@
       page.style.right = "auto";
       page.style.bottom = "auto";
       handle.classList.add("dragging");
+      page.classList.add("is-dragging");
       handle.setPointerCapture?.(event.pointerId);
       event.preventDefault();
     });
@@ -580,6 +603,7 @@
       localStorage.setItem("resolvei_binary_float_top", String(Math.round(rect.top)));
       dragState = null;
       handle.classList.remove("dragging");
+      page.classList.remove("is-dragging");
       try { handle.releasePointerCapture?.(event.pointerId); } catch (_) {}
     };
 
