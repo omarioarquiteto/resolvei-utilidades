@@ -1498,22 +1498,13 @@ def analyze_asset(
         )
         decision["historical_accuracy"] = estimate_historical_accuracy(df, strategy, horizon)
         accuracy = decision["historical_accuracy"]
-        # Só libera CALL/PUT se houver pelo menos 20 sinais avaliados e
-        # a taxa histórica for estritamente superior a 70%.
+        # A taxa histórica é informativa e continua sendo exibida como
+        # referência de acerto, mas não bloqueia a emissão do sinal.
+        # O motor deve entregar CALL/PUT quando houver direção técnica,
+        # mesmo enquanto a amostra histórica ainda estiver sendo formada.
         if decision.get("signal") in ("CALL", "PUT"):
-            rate = accuracy.get("rate")
-            sample = int(accuracy.get("sample_size") or 0)
-            if sample < MIN_ACCURACY_SAMPLE or rate is None or float(rate) <= 70.0:
-                decision["signal"] = "AGUARDAR"
-                decision["confirmed"] = False
-                decision["accuracy_gate"] = False
-                decision["accuracy_gate_reason"] = (
-                    f"Sinal bloqueado: exige mais de 70% de acerto em pelo menos "
-                    f"{MIN_ACCURACY_SAMPLE} sinais. Histórico atual: "
-                    f"{'amostra insuficiente' if rate is None else f'{rate:.1f}% em {sample} sinais'}."
-                )
-            else:
-                decision["accuracy_gate"] = True
+            decision["accuracy_gate"] = True
+            decision["accuracy_gate_reason"] = None
         signals[expiry] = {
             **decision,
             "expiry": expiry,
