@@ -448,21 +448,21 @@
       currentAsset = asset.value;
       if (!monitoredAssets.includes(currentAsset)) monitoredAssets.push(currentAsset);
       saveState();
-      analyze(true);
+      setSettingsScreen("Par alterado. Clique em “Analisar agora” para calcular o sinal.");
       renderSettings();
     });
 
     strategy?.addEventListener("change", () => {
       currentStrategy = strategy.value;
       saveState();
-      analyze(true);
+      setSettingsScreen("Estratégia alterada. Clique em “Analisar agora” para recalcular.");
     });
 
     document.getElementById("binAddPair")?.addEventListener("click", () => {
       if (!monitoredAssets.includes(currentAsset)) monitoredAssets.push(currentAsset);
       saveState();
+      setSettingsScreen("Par adicionado aos monitorados. Nenhuma análise foi executada.");
       renderSettings();
-      analyze(true);
     });
 
     document.querySelectorAll("[data-pair-chip]").forEach((button) => {
