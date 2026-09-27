@@ -779,7 +779,6 @@
   function init() {
     const root = mount();
     if (!root) return;
-    loadSavedAssets();
     if (session) startConnected();
     else renderLogin();
   }
