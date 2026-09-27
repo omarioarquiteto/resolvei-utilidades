@@ -195,6 +195,9 @@
     const history = Array.isArray(accuracy.ultimos) ? accuracy.ultimos.slice(-12) : [];
     const indicatorVotes = Array.isArray(signal.votos) ? signal.votos : [];
     const strategyName = strategies[currentStrategy]?.name || currentStrategy;
+    const action = direction === "CALL" ? "COMPRA" : direction === "PUT" ? "VENDA" : "AGUARDAR";
+    const actionClass = direction === "CALL" ? "buy" : direction === "PUT" ? "sell" : "wait";
+    const newsWarning = signal.news_warning || data.warning || "";
 
     const badges = [
       ["rsi", "RSI (14)"], ["stoch", "Stochastic"], ["stochrsi", "Stoch RSI"],
@@ -232,16 +235,22 @@
         </div>
 
         <div class="binary-card-main">
-          <div class="binary-direction">${direction}</div>
-          <div class="binary-timer" id="binaryTimer">${formatDuration(remaining)}</div>
+          <div class="binary-action-block ${actionClass}">
+            <span class="binary-action-label">${actionClass === "buy" ? "SINAL DE COMPRA" : actionClass === "sell" ? "SINAL DE VENDA" : "SEM ENTRADA"}</span>
+            <div class="binary-direction">${action}</div>
+            <span class="binary-action-code">${direction === "CALL" ? "CALL" : direction === "PUT" ? "PUT" : "AGUARDAR"}</span>
+          </div>
+          <div class="binary-timer-block">
+            <span>EXPIRA EM</span>
+            <div class="binary-timer" id="binaryTimer">${formatDuration(remaining)}</div>
+          </div>
         </div>
-
         <div class="binary-payout">Payout ${payout == null ? "—" : pct(payout)}</div>
 
         <div class="binary-reason">${esc(reason)}
           <span class="binary-accuracy"> · acerto: <strong>${pct(accuracy.rate)}</strong> (${Number(accuracy.sample_size || 0)} sinais · ${Number(accuracy.wins || 0)} acertos)</span>
         </div>
-
+        ${newsWarning ? "<div class=\"binary-news-warning\">⚠ " + esc(newsWarning) + "</div>" : ""}
         <div class="binary-history-row">${historyMarks}</div>
 
         <div class="binary-divider"></div>
