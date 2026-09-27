@@ -80,8 +80,8 @@ STRATEGIES = {
 }
 
 _SIGNAL_CACHE: dict[tuple[str, str, str], dict] = {}
-MIN_ACCURACY_SAMPLE = 15     # amostra mínima para publicar o percentual
-ACCURACY_WINDOW = 40         # janela rolante: últimos N sinais avaliados
+MIN_ACCURACY_SAMPLE = 20     # amostra mínima para publicar o percentual
+ACCURACY_WINDOW = 20         # janela rolante: últimos N sinais avaliados
 
 # Parâmetros configuráveis por estratégia (limiares usados em _strategy_signal).
 # Ex.: adx_min, tolerâncias de RSI, zonas de ATR, min_score. Sem overrides,
@@ -1416,6 +1416,19 @@ def analyze_asset(
         votos = _votar(df, len(df) - 1) if not df.empty else []
         if votos:
             agregado = aggregate_votes(votos)
+            if decision["signal"] in ("CALL", "PUT"):
+                # Toda estratégia precisa ser confirmada pelo conjunto de
+                # indicadores ativos antes de poder gerar um sinal acionável.
+                if agregado["direction"] != decision["signal"]:
+                    decision["indicator_confirmation"] = False
+                    decision["indicator_confirmation_reason"] = (
+                        f"Confirmação insuficiente pelos indicadores: "
+                        f"{agregado['bulls']} CALL x {agregado['bears']} PUT."
+                    )
+                    decision["signal"] = "AGUARDAR"
+                    decision["confirmed"] = False
+                else:
+                    decision["indicator_confirmation"] = True
             if (
                 _usar_votos()
                 and decision["signal"] in ("CALL", "PUT")
@@ -1464,7 +1477,8 @@ def analyze_asset(
 
         # Alinha o vencimento ao proximo fechamento de vela da IQ Option.
         # Os timeframes sao contados a partir do epoch Unix: 1m, 5m e 15m.
-        expires_at = ((now // interval) + 1) * interval
+        entry_at = ((now // interval) + 1) * interval
+        expires_at = entry_at + interval
         horizon = 1
         strategy_params = get_params_estrategia(strategy)
         decision["proximity"] = _proximity(
@@ -1473,12 +1487,31 @@ def analyze_asset(
             int(strategy_params.get("min_score", STRATEGIES[strategy]["max_score"])),
         )
         decision["historical_accuracy"] = estimate_historical_accuracy(df, strategy, horizon)
+        accuracy = decision["historical_accuracy"]
+        # Só libera CALL/PUT se houver pelo menos 20 sinais avaliados e
+        # a taxa histórica for estritamente superior a 70%.
+        if decision.get("signal") in ("CALL", "PUT"):
+            rate = accuracy.get("rate")
+            sample = int(accuracy.get("sample_size") or 0)
+            if sample < MIN_ACCURACY_SAMPLE or rate is None or float(rate) <= 70.0:
+                decision["signal"] = "AGUARDAR"
+                decision["confirmed"] = False
+                decision["accuracy_gate"] = False
+                decision["accuracy_gate_reason"] = (
+                    f"Sinal bloqueado: exige mais de 70% de acerto em pelo menos "
+                    f"{MIN_ACCURACY_SAMPLE} sinais. Histórico atual: "
+                    f"{'amostra insuficiente' if rate is None else f'{rate:.1f}% em {sample} sinais'}."
+                )
+            else:
+                decision["accuracy_gate"] = True
         signals[expiry] = {
             **decision,
             "expiry": expiry,
+            "entry_at": entry_at,
             "expires_at": expires_at,
             "locked": False,
-            "seconds_remaining": expires_at - now,
+            "seconds_to_entry": max(0, entry_at - now),
+            "seconds_remaining": max(0, expires_at - entry_at),
         }
         # O cache do sinal é válido independentemente da fonte de notícias.
         _SIGNAL_CACHE[cache_key] = signals[expiry]
