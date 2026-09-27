@@ -1150,9 +1150,19 @@ def _ids_indicadores_ativos() -> list[str]:
     bruto = trade_manager.get_config_valor("indicadores_ativos", "")
     ids = [parte.strip() for parte in str(bruto or "").split(",") if parte.strip()]
     validos = [i for i in ids if i in _INDICADORES_POR_ID]
-    # Se nada foi configurado ainda, apenas os indicadores de PADRÃO participam;
-    # os indicadores novos (padrao=False) entram somente quando marcados na aba Estratégias.
-    return validos or [reg["id"] for reg in INDICADORES_PADRAO if reg.get("padrao", True)]
+
+    # Núcleo mínimo obrigatório para a análise binária: pelo menos 12
+    # indicadores de famílias diferentes/relacionadas. Uma configuração
+    # antiga com menos indicadores é automaticamente complementada.
+    recomendados = [
+        "rsi", "macd", "ema510", "ema1020", "bollinger", "adx",
+        "mfi", "roc", "sar", "obv", "cmf", "donchian",
+    ]
+    base = validos or recomendados
+    for indicador in recomendados:
+        if indicador not in base:
+            base.append(indicador)
+    return base
 
 
 def set_indicadores_ativos(ids: list[str]) -> tuple[bool, str]:
