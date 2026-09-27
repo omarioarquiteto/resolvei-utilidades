@@ -27,8 +27,8 @@ _metadata_cache: dict[str, dict] = {}
 
 def _close_client(client):
     try:
-        if client is not None and hasattr(client, "close"):
-            client.close()
+        if client is not None and hasattr(client, "api") and client.api is not None:
+            client.api.close()
     except Exception:
         pass
 
@@ -100,25 +100,23 @@ def list_assets(session_id: str):
 
 def get_market_status(session_id: str, asset: str):
     client=get_client(session_id)
-    key="metadata"
     try:
         now=time.time()
-        cached=_metadata_cache.get(key)
+        cached=_metadata_cache.get("open_time")
         if not cached or now-cached["ts"]>60:
-            metadata=client.get_asset_metadata()
+            metadata=client.get_all_open_time() or {}
             open_map={}
-            for category,acts in (metadata or {}).items():
-                if not isinstance(acts,dict): continue
-                for ticker,info in acts.items():
-                    if isinstance(info,dict) and "is_open" in info:
-                        open_map[str(ticker).upper()]=bool(info["is_open"])
-            _metadata_cache[key]={"ts":now,"open_map":open_map}
-        value=_metadata_cache[key]["open_map"].get(asset.upper())
+            for category, acts in metadata.items():
+                if not isinstance(acts, dict): continue
+                for ticker, info in acts.items():
+                    if isinstance(info, dict) and "open" in info:
+                        open_map[str(ticker).upper()] = bool(info["open"])
+            _metadata_cache["open_time"]={"ts":now,"open_map":open_map}
+        value=_metadata_cache["open_time"]["open_map"].get(asset.upper())
         return None if value is None else ("aberto" if value else "fechado")
     except Exception as exc:
         print(f"[iq] erro get_market_status({asset}): {exc}")
         return None
-
 def _normalize(c: dict):
     return {
         "time":int(c.get("from") or c.get("at") or 0),
