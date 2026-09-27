@@ -103,7 +103,7 @@ def iq_analyze(
     if expiry not in ("1min", "5min"):
         raise HTTPException(400, "A expiração deve ser 1min ou 5min.")
     try:
-        result = analyze_asset(x_iq_session, asset, strategy, force_refresh=refresh)
+        result = analyze_asset(x_iq_session, asset, strategy, force_refresh=refresh, only_expiry=expiry)
         selected = result.get("signals", {}).get(expiry, {})
         result["selected_expiry"] = expiry
         result["selected_signal"] = selected.get("signal", "AGUARDAR")
