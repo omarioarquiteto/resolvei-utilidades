@@ -8,6 +8,7 @@
   const FLOATING_KEY = "resolvei_binary_floating";
 
   let session = sessionStorage.getItem(SESSION_KEY) || "";
+  let pending2FA = "";
   let assets = [];
   let strategies = {};
   let currentAsset = localStorage.getItem(CURRENT_ASSET_KEY) || "EURUSD";
@@ -138,6 +139,13 @@
           </div>
           <button class="binary-primary-btn" id="binLogin">🔐 Conectar</button>
           <div class="binary-login-message" id="binLoginMessage">${esc(message)}</div>
+          <div id="bin2FABox" style="display:none;margin-top:16px;padding:14px;border:1px solid rgba(255,255,255,.12);border-radius:12px;">
+            <strong>VERIFICAÇÃO EM DUAS ETAPAS</strong>
+            <p style="margin:8px 0;">A IQ Option solicitou um código de verificação. Informe o código recebido.</p>
+            <label>Código de verificação<input id="bin2FACode" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="12"></label>
+            <button class="binary-primary-btn" id="bin2FAVerify" type="button" style="margin-top:10px;">✓ Verificar código</button>
+            <button class="binary-secondary-btn" id="bin2FACancel" type="button" style="margin-top:8px;">Cancelar</button>
+          </div>
         </div>
       </div>`;
   }
@@ -406,6 +414,48 @@
       if (status) status.textContent = "⏱️ Expiração encerrada. Clique em “Analisar novamente” para gerar um novo sinal.";
     }
   }
+  function show2FA(challengeId, message) {
+    pending2FA = challengeId || "";
+    const box = document.getElementById("bin2FABox");
+    const msg = document.getElementById("binLoginMessage");
+    const loginButton = document.getElementById("binLogin");
+    if (box) box.style.display = "block";
+    if (loginButton) loginButton.disabled = true;
+    if (msg) msg.textContent = "🔐 " + (message || "Informe o código de verificação.");
+    document.getElementById("bin2FACode")?.focus();
+  }
+
+  async function verify2FA() {
+    const msg = document.getElementById("binLoginMessage");
+    const button = document.getElementById("bin2FAVerify");
+    const code = document.getElementById("bin2FACode")?.value.trim() || "";
+    if (!pending2FA || !code) { if (msg) msg.textContent = "Informe o código recebido pela IQ Option."; return; }
+    if (button) button.disabled = true;
+    if (msg) msg.textContent = "⏳ Validando código...";
+    try {
+      const response = await fetch(API + "/login/2fa", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ challenge_id: pending2FA, code }) });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.detail || "Código de verificação inválido.");
+      session = data.session_id;
+      sessionStorage.setItem(SESSION_KEY, session);
+      pending2FA = "";
+      await startConnected();
+    } catch (error) {
+      if (msg) msg.textContent = "🔴 " + error.message;
+    } finally { if (button) button.disabled = false; }
+  }
+
+  async function cancel2FA() {
+    if (pending2FA) { try { await fetch(API + "/login/2fa/cancel?challenge_id=" + encodeURIComponent(pending2FA), { method: "POST" }); } catch (_) {} }
+    pending2FA = "";
+    const box = document.getElementById("bin2FABox");
+    const loginButton = document.getElementById("binLogin");
+    if (box) box.style.display = "none";
+    if (loginButton) loginButton.disabled = false;
+    const msg = document.getElementById("binLoginMessage");
+    if (msg) msg.textContent = "Verificação cancelada. Você pode tentar novamente.";
+  }
+
   async function login() {
     const msg = document.getElementById("binLoginMessage");
     const button = document.getElementById("binLogin");
@@ -414,26 +464,18 @@
     button.disabled = true;
     try {
       const response = await fetch(API + "/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email: document.getElementById("binEmail").value.trim(),
-          password: document.getElementById("binPassword").value,
-          account: document.getElementById("binAccount").value
-        })
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: document.getElementById("binEmail").value.trim(), password: document.getElementById("binPassword").value, account: document.getElementById("binAccount").value })
       });
       const data = await response.json().catch(() => ({}));
+      if (data.requires_2fa && data.challenge_id) { show2FA(data.challenge_id, data.message); return; }
       if (!response.ok) throw new Error(data.detail || "Não foi possível conectar.");
       session = data.session_id;
       sessionStorage.setItem(SESSION_KEY, session);
       await startConnected();
-    } catch (error) {
-      msg.textContent = "🔴 " + error.message;
-    } finally {
-      button.disabled = false;
-    }
+    } catch (error) { msg.textContent = "🔴 " + error.message; button.disabled = false; }
+    finally { if (!pending2FA) button.disabled = false; }
   }
-
   async function logout() {
     resetSignalState();
     if (analysisController) {
@@ -866,6 +908,9 @@
     if (!root) return;
     root.innerHTML = loginMarkup(message);
     document.getElementById("binLogin")?.addEventListener("click", login);
+    document.getElementById("bin2FAVerify")?.addEventListener("click", verify2FA);
+    document.getElementById("bin2FACancel")?.addEventListener("click", cancel2FA);
+    document.getElementById("bin2FACode")?.addEventListener("keydown", (event) => { if (event.key === "Enter") verify2FA(); });
   }
 
   function init() {
