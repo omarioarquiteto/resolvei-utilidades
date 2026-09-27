@@ -1,151 +1,31 @@
 (function(){
-var SYMBOLS=[
-  ["EUR/USD","EUR/USD"],["GBP/USD","GBP/USD"],["USD/JPY","USD/JPY"],["AUD/USD","AUD/USD"],
-  ["USD/CAD","USD/CAD"],["USD/CHF","USD/CHF"],["NZD/USD","NZD/USD"],["EUR/GBP","EUR/GBP"],
-  ["EUR/JPY","EUR/JPY"],["GBP/JPY","GBP/JPY"]
-];
-var EXPIRIES=[[1,"1 minuto"],[5,"5 minutos"],[15,"15 minutos"]];
-var ui='<div class="tool-layout options-binary-layout">'+
-  '<section class="card panel">'+
-    '<span class="eyebrow">ESTUDO DE OPÇÕES BINÁRIAS</span>'+
-    '<h2>📊 Análise de opções binárias</h2>'+
-    '<div class="notice"><strong>Como funciona:</strong> selecione o par, escolha a expiração e clique no gráfico para definir o ponto de entrada. O valor investido e o payout servem para simular o resultado financeiro. O Resolvei não envia ordens para corretoras.</div>'+
-    '<div class="form-grid">'+
-      '<div class="field"><label for="optSymbol">Par de moedas</label><select id="optSymbol">'+SYMBOLS.map(function(x){return "<option value=\""+x[0]+"\">"+x[1]+"</option>";}).join("")+'</select></div>'+
-      '<div class="field"><label for="optExpiry">Tempo de expiração</label><select id="optExpiry">'+EXPIRIES.map(function(x){return "<option value=\""+x[0]+"\">"+x[1]+"</option>";}).join("")+'</select></div>'+
-      '<div class="field"><label for="optInvestment">Valor da entrada</label><div class="input-wrap"><span class="prefix">R$</span><input id="optInvestment" type="number" min="1" step="0.01" value="100"></div></div>'+
-      '<div class="field"><label for="optPayout">Payout da operação</label><div class="input-wrap"><input id="optPayout" type="number" min="1" max="100" step="0.1" value="80"><span class="suffix">%</span></div><small>Informe o payout oferecido pela sua corretora.</small></div>'+
-      '<div class="field full"><label for="optDirection">Direção estudada</label><select id="optDirection"><option value="call">CALL — Alta</option><option value="put">PUT — Baixa</option></select></div>'+
-    '</div>'+
-    '<div class="actions"><button class="btn primary" id="optAnalyzeBtn">🔎 Analisar ponto de entrada</button><button class="btn" id="optLatestBtn">Usar último ponto</button></div>'+
-    '<div id="optStatus" class="notice">Carregando dados de mercado…</div>'+
-  '</section>'+
-  '<section class="card panel options-chart-panel">'+
-    '<div class="section-head" style="margin:0 0 10px"><div><span class="eyebrow">GRÁFICO</span><h2 style="margin:4px 0 0">Clique no candle para escolher a entrada</h2></div><div class="chip" id="optPointLabel">Último candle</div></div>'+
-    '<canvas id="optChart" height="330" style="width:100%;cursor:crosshair"></canvas>'+
-  '</section>'+
-  '<section id="optResult"><div class="result-box"><div class="result-label">Entrada</div><div class="result-main">—</div><p>Escolha um ponto no gráfico e analise a entrada.</p></div></section>'+
-  '<section class="card panel">'+
-    '<div class="section-head" style="margin:0 0 10px"><div><span class="eyebrow">HISTÓRICO</span><h2 style="margin:4px 0 0">Backtest por expiração</h2></div></div>'+
-    '<div id="optBacktest"><div class="result-box"><div class="result-label">Backtest</div><div class="result-main">—</div><p>O resultado aparecerá ao analisar.</p></div></div>'+
-  '</section>'+
-'</div>';
+const API="/api/iq";let session=sessionStorage.getItem("resolvei_iq_session")||"",strategies={};
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c]));
+const pct=v=>v==null?"—":Number(v).toLocaleString("pt-BR",{maximumFractionDigits:1})+"%";
+async function api(path,opt={}){opt.headers=Object.assign({},opt.headers||{},session?{"X-IQ-Session":session}:{});const r=await fetch(API+path,opt),d=await r.json().catch(()=>({}));if(!r.ok)throw Error(d.detail||"Erro no servidor.");return d}
+const ui=`<div class="tool-layout iq-layout">
+<section class="card panel"><div class="section-head"><div><span class="eyebrow">IQ OPTION</span><h1>📡 Análise técnica</h1><p>Análise baseada nos candles da IQ Option, com a mesma família de estratégias usada no Market Insight AI.</p></div><span class="chip" id="iqState">Desconectado</span></div>
+<div class="notice"><strong>Importante:</strong> esta integração usa uma biblioteca comunitária não oficial. A senha é usada apenas para autenticar a sessão, não é salva pelo Resolvei. A ferramenta é somente de análise e não envia ordens.</div>
+<div class="form-grid"><div class="field"><label>Usuário / e-mail IQ Option</label><input id="iqEmail" type="email" autocomplete="username"></div><div class="field"><label>Senha IQ Option</label><input id="iqPassword" type="password" autocomplete="current-password"></div><div class="field"><label>Conta</label><select id="iqAccount"><option value="PRACTICE">PRACTICE — Demo</option><option value="REAL">REAL — Conta real</option></select></div></div>
+<div class="actions"><button class="btn primary" id="iqLogin">🔐 Autenticar</button><button class="btn" id="iqLogout">Desconectar</button></div><div id="iqMsg" class="notice" hidden></div></section>
+<section class="card panel" id="iqPanel" hidden><div class="section-head"><div><span class="eyebrow">MARKET INSIGHT AI</span><h2>📊 Análise multi-timeframe</h2></div><span class="chip" id="iqBalance">Saldo: —</span></div>
+<div class="form-grid"><div class="field"><label>Ativo</label><select id="iqAsset"></select></div><div class="field"><label>Estratégia</label><select id="iqStrategy"></select></div></div>
+<div class="actions"><button class="btn primary" id="iqAnalyze">🔎 Analisar</button><button class="btn" id="iqRefresh">↻ Atualizar candles</button></div><div id="iqStatus" class="notice">—</div><div id="iqSignals" class="iq-signals"></div></section>
+<section class="card panel" id="iqChartBox" hidden><div class="section-head"><div><span class="eyebrow">GRÁFICO</span><h2>Candles + indicadores</h2></div><span class="chip" id="iqChartInfo">—</span></div><canvas id="iqChart" height="390"></canvas></section>
+<section class="card panel" id="iqDetails" hidden><span class="eyebrow">DETALHAMENTO</span><h2>Indicadores e votos</h2><div id="iqDetailsGrid" class="iq-details-grid"></div></section>
+<section class="card panel"><div class="note"><strong>Leitura:</strong> CALL, PUT e AGUARDAR são saídas das regras técnicas. O acerto histórico é uma medida da amostra passada e não garante o próximo resultado.</div></section>
+</div>`;
 
-function esc(s){return String(s).replace(/[&<>"]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c];});}
-function money(v){return "R$ "+Number(v||0).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2});}
-function n(v,d){return Number(v||0).toLocaleString("pt-BR",{minimumFractionDigits:d||4,maximumFractionDigits:d||4});}
-function pct(v){return Number(v||0).toLocaleString("pt-BR",{minimumFractionDigits:2,maximumFractionDigits:2})+"%";}
-
-var state={candles:[],entryIndex:-1};
-
-function chart(){
-  var c=document.getElementById("optChart");if(!c||!state.candles.length)return;
-  var rows=state.candles,w=c.clientWidth||900,h=330,d=window.devicePixelRatio||1;
-  c.width=w*d;c.height=h*d;var ctx=c.getContext("2d");ctx.scale(d,d);ctx.clearRect(0,0,w,h);
-  var vals=rows.map(function(x){return Number(x.close);}),mn=Math.min.apply(Math,vals),mx=Math.max.apply(Math,vals),range=mx-mn||1;
-  var pad={l:44,r:16,t:18,b:30};
-  ctx.strokeStyle=getComputedStyle(document.documentElement).getPropertyValue("--line")||"#555";ctx.lineWidth=1;
-  ctx.beginPath();ctx.moveTo(pad.l,pad.t);ctx.lineTo(pad.l,h-pad.b);ctx.lineTo(w-pad.r,h-pad.b);ctx.stroke();
-  ctx.beginPath();
-  vals.forEach(function(v,i){var x=pad.l+i*(w-pad.l-pad.r)/Math.max(1,vals.length-1),y=pad.t+(mx-v)/range*(h-pad.t-pad.b);if(i===0)ctx.moveTo(x,y);else ctx.lineTo(x,y);});
-  ctx.stroke();
-  if(state.entryIndex>=0&&state.entryIndex<rows.length){
-    var ex=pad.l+state.entryIndex*(w-pad.l-pad.r)/Math.max(1,vals.length-1),ey=pad.t+(mx-vals[state.entryIndex])/range*(h-pad.t-pad.b);
-    ctx.setLineDash([5,5]);ctx.beginPath();ctx.moveTo(ex,pad.t);ctx.lineTo(ex,h-pad.b);ctx.stroke();ctx.setLineDash([]);
-    ctx.beginPath();ctx.arc(ex,ey,5,0,Math.PI*2);ctx.fill();
-  }
-}
-function pointFromEvent(ev){
-  var c=document.getElementById("optChart");if(!c||!state.candles.length)return;
-  var rect=c.getBoundingClientRect(),x=ev.clientX-rect.left,padL=44,padR=16;
-  var idx=Math.round((x-padL)/Math.max(1,rect.width-padL-padR)*(state.candles.length-1));
-  idx=Math.max(0,Math.min(state.candles.length-1,idx));state.entryIndex=idx;
-  var p=state.candles[idx];
-  document.getElementById("optPointLabel").textContent="Entrada · "+esc(p.datetime||"")+" · "+n(p.close,5);
-  chart();
-}
-function loadChart(){
-  var c=document.getElementById("optChart");if(!c)return;
-  c.addEventListener("click",pointFromEvent);
-  chart();
-}
-async function getData(entryIndex){
-  var symbol=document.getElementById("optSymbol").value,expiry=document.getElementById("optExpiry").value;
-  var output=1200;
-  var url="/api/options/analyze?symbol="+encodeURIComponent(symbol)+"&expiry="+encodeURIComponent(expiry)+"&outputsize="+output;
-  if(Number.isInteger(entryIndex)&&entryIndex>=0)url+="&entry_index="+entryIndex;
-  var r=await fetch(url),d=await r.json();if(!r.ok)throw new Error(d.detail||"Falha ao consultar o mercado.");return d;
-}
-function renderResult(d){
-  var a=d.entry||d.analysis||{},ind=a.indicators||{},dir=d.direction||(a.direction||"neutro"),chosen=document.getElementById("optDirection").value;
-  var selected=chosen==="call"?"CALL":"PUT";
-  var validDir=(selected==="CALL"&&dir==="alta")||(selected==="PUT"&&dir==="baixa");
-  var investment=Number(document.getElementById("optInvestment").value||0),payout=Number(document.getElementById("optPayout").value||0),win=investment*(payout/100),breakEven=payout>0?100/(100+payout)*100:0;
-  var cls=dir==="alta"?"opt-up":dir==="baixa"?"opt-down":"opt-neutral";
-  var html='<div class="result-box">'+
-    '<div class="result-label">Ponto de entrada · '+esc(d.symbol||"")+' · expiração '+esc(String(d.expiry||document.getElementById("optExpiry").value))+' min</div>'+
-    '<div class="result-main '+cls+'">'+esc(dir.toUpperCase())+'</div>'+
-    '<p><strong>'+selected+'</strong> · Entrada '+money(investment)+' · Payout '+pct(payout)+'</p>'+
-    '<div class="result-sub">'+
-      '<div class="result-row"><span>Preço de entrada</span><strong>'+n(a.entryPrice||ind.price,5)+'</strong></div>'+
-      '<div class="result-row"><span>Preço no vencimento histórico</span><strong>'+(a.expiryPrice? n(a.expiryPrice,5):"—")+'</strong></div>'+
-      '<div class="result-row"><span>Score técnico</span><strong>'+n(a.score,0)+'/100</strong></div>'+
-      '<div class="result-row"><span>Concordância com a direção escolhida</span><strong>'+ (validDir?"SIM":"NÃO / NEUTRO") +'</strong></div>'+
-      '<div class="result-row"><span>Lucro líquido se vencer</span><strong>'+money(win)+'</strong></div>'+
-      '<div class="result-row"><span>Ponto de equilíbrio teórico</span><strong>'+pct(breakEven)+'</strong></div>'+
-    '</div>'+
-    '<div class="suggestion-grid"><div class="suggestion-box"><h3>Confirmações</h3><ul>'+(a.reasons||[]).map(function(x){return "<li>"+esc(x)+"</li>";}).join("")+'</ul></div><div class="suggestion-box"><h3>Pontos de atenção</h3><ul>'+(a.risks||[]).map(function(x){return "<li>"+esc(x)+"</li>";}).join("")+'</ul></div></div>'+
-    '<div class="note">O score é uma medida de regras técnicas e não representa probabilidade garantida de acerto. Em opções binárias, o resultado real também depende de cotação, payout, latência e regras da corretora.</div>'+
-  '</div>';
-  document.getElementById("optResult").innerHTML=html;
-}
-function renderBacktest(d){
-  var b=d.backtest||{},expiry=d.expiry||document.getElementById("optExpiry").value;
-  var html='<div class="result-box">'+
-    '<div class="result-label">'+esc(d.symbol||"")+" · "+esc(String(expiry))+' min</div>'+
-    '<div class="form-grid">'+
-      '<div><strong>CALL</strong><br>'+pct(b.callHitRate)+'</div>'+
-      '<div><strong>PUT</strong><br>'+pct(b.putHitRate)+'</div>'+
-      '<div><strong>Amostras</strong><br>'+Number(b.samples||0)+'</div>'+
-      '<div><strong>Empates</strong><br>'+Number(b.ties||0)+'</div>'+
-    '</div>'+
-    '<div class="note">'+esc(b.note||"Backtest histórico.")+'</div>'+
-  '</div>';
-  document.getElementById("optBacktest").innerHTML=html;
-}
-async function analyze(entryIndex){
-  var st=document.getElementById("optStatus");
-  try{
-    st.textContent="⏳ Consultando candles de 1 minuto e calculando o ponto escolhido…";
-    var d=await getData(entryIndex);
-    state.candles=d.candles||[];
-    state.entryIndex=Number.isInteger(d.entryIndex)?d.entryIndex:state.candles.length-1;
-    chart();
-    var label=document.getElementById("optPointLabel"),p=state.candles[state.entryIndex];if(p)label.textContent="Entrada · "+(p.datetime||"")+" · "+n(p.close,5);
-    renderResult(d);renderBacktest(d);
-    st.textContent="✅ Dados atualizados. O gráfico usa candles de 1 minuto para medir exatamente a expiração.";
-  }catch(e){st.textContent="⚠️ "+e.message;}
-}
-function bind(){
-  var a=document.getElementById("optAnalyzeBtn");if(!a)return;
-  loadChart();
-  document.getElementById("optLatestBtn").addEventListener("click",function(){state.entryIndex=state.candles.length-1;var p=state.candles[state.entryIndex];if(p)document.getElementById("optPointLabel").textContent="Último candle · "+(p.datetime||"")+" · "+n(p.close,5);chart();analyze(state.entryIndex);});
-  a.addEventListener("click",function(){analyze(state.entryIndex>=0?state.entryIndex:-1);});
-  document.getElementById("optSymbol").addEventListener("change",function(){state={candles:[],entryIndex:-1};document.getElementById("optStatus").textContent="Par alterado. Clique em analisar.";document.getElementById("optPointLabel").textContent="Último candle";});
-  document.getElementById("optExpiry").addEventListener("change",function(){if(state.candles.length)analyze(state.entryIndex);});
-}
-function route(){
-  if((location.hash||"").indexOf("analise-opcoes")<0)return false;
-  var app=document.getElementById("app");if(!app)return false;app.innerHTML=ui;bind();analyze(-1);return true;
-}
-var oldRender=window.render;
-window.render=function(){if(!route()&&oldRender)oldRender();};
-window.addEventListener("hashchange",route);if((location.hash||"").indexOf("analise-opcoes")>=0)route();
-var nav=document.querySelector(".nav-links");
-if(nav&&!document.getElementById("binaryOptionsNav")){
-  var link=document.createElement("a");link.id="binaryOptionsNav";link.href="#/ferramenta/analise-opcoes";link.textContent="📊 Opções binárias";nav.insertBefore(link,nav.firstChild);
-}
-var s=document.createElement("style");
-s.textContent='.options-binary-layout{grid-template-columns:1fr 1fr}.options-chart-panel{grid-column:1/-1}.opt-up{color:var(--success)}.opt-down{color:var(--danger)}.opt-neutral{color:var(--muted)}@media(max-width:920px){.options-binary-layout{grid-template-columns:1fr}.options-chart-panel{grid-column:auto}}';
-document.head.appendChild(s);
+function connected(ok){document.getElementById("iqState").textContent=ok?"🟢 Conectado":"⚪ Desconectado";["iqPanel","iqChartBox","iqDetails"].forEach(id=>document.getElementById(id).hidden=!ok)}
+async function setup(){if(!session){connected(false);return}try{let s=await api("/status");if(!s.connected){session="";sessionStorage.removeItem("resolvei_iq_session");connected(false);return}connected(true);document.getElementById("iqBalance").textContent="Saldo: "+(s.balance==null?"—":"R$ "+Number(s.balance).toLocaleString("pt-BR",{minimumFractionDigits:2}));let a=await api("/assets"),st=await api("/strategies");document.getElementById("iqAsset").innerHTML=a.assets.map(x=>`<option value="${esc(x)}">${esc(x)}</option>`).join("");strategies=st.strategies;document.getElementById("iqStrategy").innerHTML=Object.entries(strategies).map(([k,v])=>`<option value="${k}">${esc(v.name)}</option>`).join("");await analyze()}catch(e){connected(false)}}
+async function login(){let msg=document.getElementById("iqMsg"),btn=document.getElementById("iqLogin");msg.hidden=false;msg.textContent="⏳ Autenticando…";btn.disabled=true;try{let r=await fetch(API+"/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({email:document.getElementById("iqEmail").value.trim(),password:document.getElementById("iqPassword").value,account:document.getElementById("iqAccount").value})}),d=await r.json();if(!r.ok)throw Error(d.detail||"Falha no login.");session=d.session_id;sessionStorage.setItem("resolvei_iq_session",session);msg.textContent="🟢 "+d.message;connected(true);await setup()}catch(e){msg.textContent="🔴 "+e.message;connected(false)}finally{btn.disabled=false}}
+async function logout(){try{await api("/logout",{method:"POST"})}catch(e){}session="";sessionStorage.removeItem("resolvei_iq_session");connected(false);document.getElementById("iqMsg").hidden=false;document.getElementById("iqMsg").textContent="Sessão desconectada."}
+async function analyze(){if(!session)return;let st=document.getElementById("iqStatus");st.textContent="⏳ Analisando 1m, 5m e 15m…";try{let asset=document.getElementById("iqAsset").value,strategy=document.getElementById("iqStrategy").value;let d=await api("/analyze/"+encodeURIComponent(asset)+"?strategy="+strategy);render(d);await chart();st.textContent="✅ "+asset+" · mercado: "+(d.market||"desconhecido")}catch(e){st.textContent="⚠️ "+e.message}}
+function render(d){let box=document.getElementById("iqSignals");box.innerHTML=["1min","5min","15min"].map(tf=>{let s=d.signals[tf]||{},a=s.historical_accuracy||{},c=s.signal==="CALL"?"call":s.signal==="PUT"?"put":"wait";return `<article class="iq-signal ${c}"><div class="iq-top"><b>${tf.toUpperCase()}</b><span>${esc(s.proximity?.label||"AGUARDAR")}</span></div><div class="iq-main">${esc(s.signal||"AGUARDAR")}</div><b>Score ${s.score||0} / ${strategies[d.strategy]?.max_score||0}</b><p>${esc(s.reason||"")}</p><div class="iq-meta">Acerto histórico: <b>${pct(a.rate)}</b> · Amostra: <b>${a.sample_size||0}</b> · Votos: <b>${s.resumo_votos?.bulls||0}↑ / ${s.resumo_votos?.bears||0}↓</b></div></article>`}).join("");
+document.getElementById("iqDetailsGrid").innerHTML=["1min","5min","15min"].map(tf=>{let s=d.signals[tf]||{};return `<div class="iq-detail"><h3>${tf}</h3><p><b>Indicadores:</b> ${esc((s.indicators||[]).join(" · "))}</p><ul>${(s.votos||[]).map(v=>`<li><b>${esc(v.vote)}</b> — ${esc(v.name)}: ${esc(v.reason)}</li>`).join("")}</ul></div>`}).join("")}
+async function chart(){try{let d=await api("/candles/"+encodeURIComponent(document.getElementById("iqAsset").value)+"?interval=300&count=180");draw(d)}catch(e){}}
+function draw(d){let c=document.getElementById("iqChart");if(!d.candles?.length)return;let rows=d.candles,w=c.clientWidth||900,h=390,ratio=devicePixelRatio||1;c.width=w*ratio;c.height=h*ratio;let x=c.getContext("2d");x.scale(ratio,ratio);let p={l:45,r:15,t:15,b:25},lo=Math.min(...rows.map(r=>r.low)),hi=Math.max(...rows.map(r=>r.high)),rg=hi-lo||1,Y=v=>p.t+(hi-v)/rg*(h-p.t-p.b),X=i=>p.l+i*(w-p.l-p.r)/Math.max(1,rows.length-1);x.clearRect(0,0,w,h);rows.forEach((r,i)=>{let xx=X(i);x.beginPath();x.moveTo(xx,Y(r.high));x.lineTo(xx,Y(r.low));x.stroke();let yo=Y(r.open),yc=Y(r.close);x.fillRect(xx-2,Math.min(yo,yc),4,Math.max(1,Math.abs(yc-yo)))});["ema20","ema50","bb_upper","bb_lower"].forEach(k=>{let arr=d[k]||[];if(!arr.length)return;x.beginPath();arr.forEach((v,i)=>{let j=Math.round(i*(rows.length-1)/Math.max(1,arr.length-1));i?x.lineTo(X(j),Y(v.value)):x.moveTo(X(j),Y(v.value))});x.stroke()});document.getElementById("iqChartInfo").textContent=rows.length+" candles"})
+function route(){if(!(location.hash||"").includes("analise-opcoes"))return false;let app=document.getElementById("app");if(!app)return false;app.innerHTML=ui;document.getElementById("iqLogin").onclick=login;document.getElementById("iqLogout").onclick=logout;document.getElementById("iqAnalyze").onclick=analyze;document.getElementById("iqRefresh").onclick=chart;document.getElementById("iqAsset").onchange=analyze;document.getElementById("iqStrategy").onchange=analyze;setup();return true}
+let old=window.render;window.render=function(){if(!route()&&old)old()};window.addEventListener("hashchange",route);if((location.hash||"").includes("analise-opcoes"))route();
+let style=document.createElement("style");style.textContent=".iq-layout{grid-template-columns:1fr 1fr}.iq-layout>section:first-child,.iq-layout>section:nth-child(2),.iq-chart-box,.iq-details,.iq-layout>section:last-child{grid-column:1/-1}.iq-signals{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:16px}.iq-signal{padding:18px;border:1px solid var(--line);border-radius:16px}.iq-signal.call{border-color:var(--success)}.iq-signal.put{border-color:var(--danger)}.iq-main{font-size:30px;font-weight:800;margin:10px 0}.iq-top,.iq-meta{display:flex;justify-content:space-between;gap:10px;font-size:12px}.iq-meta{margin-top:12px;flex-wrap:wrap}.iq-details-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}.iq-detail{border:1px solid var(--line);border-radius:14px;padding:15px}.iq-chart-box canvas{width:100%;height:390px}@media(max-width:920px){.iq-layout{grid-template-columns:1fr}.iq-layout>section{grid-column:auto}.iq-signals,.iq-details-grid{grid-template-columns:1fr}}";document.head.appendChild(style);
 })();
