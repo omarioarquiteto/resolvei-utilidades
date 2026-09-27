@@ -340,15 +340,29 @@ def _strategy_signal(df: pd.DataFrame, strategy: str) -> dict:
     raise ValueError(f"Estratégia desconhecida: {strategy}")
 
 
-def _proximity(score: int, max_score: int = 4) -> dict:
-    ratio = max(0.0, min(1.0, score / max_score))
-    if ratio >= 0.75:
+def _proximity(score: int, max_score: int = 4, min_score: int | None = None) -> dict:
+    """Mede quão perto o score técnico está do limiar necessário da estratégia.
+
+    100% significa que o score atingiu o mínimo técnico configurado.
+    Não representa probabilidade de acerto.
+    """
+    score = max(0, int(score or 0))
+    target = max(1, int(min_score or max_score or 1))
+    ratio = max(0.0, min(1.0, score / target))
+    if ratio >= 1.0:
+        label = "LIMIAR TÉCNICO ATINGIDO"
+    elif ratio >= 0.75:
         label = "SINAL MUITO PRÓXIMO"
     elif ratio >= 0.5:
         label = "ATENÇÃO"
     else:
         label = "AGUARDAR"
-    return {"label": label, "percent": round(ratio * 100, 1)}
+    return {
+        "label": label,
+        "percent": round(ratio * 100, 1),
+        "score": score,
+        "target": target,
+    }
 
 
 def estimate_historical_accuracy(df: pd.DataFrame, strategy: str, horizon: int = 1) -> dict:
@@ -1304,7 +1318,12 @@ def analyze_asset(
         # Os timeframes sao contados a partir do epoch Unix: 1m, 5m e 15m.
         expires_at = ((now // interval) + 1) * interval
         horizon = 1
-        decision["proximity"] = _proximity(decision["score"], STRATEGIES[strategy]["max_score"])
+        strategy_params = get_params_estrategia(strategy)
+        decision["proximity"] = _proximity(
+            decision["score"],
+            STRATEGIES[strategy]["max_score"],
+            int(strategy_params.get("min_score", STRATEGIES[strategy]["max_score"])),
+        )
         decision["historical_accuracy"] = estimate_historical_accuracy(df, strategy, horizon)
         signals[expiry] = {
             **decision,
