@@ -291,8 +291,19 @@
     const secondsToEntry = Math.max(0, Number(signal.seconds_to_entry ?? 0));
     const intervalSeconds = currentExpiry === "5min" ? 300 : 60;
     const expirationRemaining = Math.max(0, Number(signal.seconds_remaining ?? intervalSeconds));
-    currentEntryAt = Date.now() + secondsToEntry * 1000;
-    currentExpiresAt = currentEntryAt + intervalSeconds * 1000;
+
+    // Quando CALL/PUT já foi encontrado, o sinal vale a partir do instante
+    // em que foi exibido, inclusive se a análise encontrou a condição no meio
+    // da vela. O contador visual acompanha esse período, em vez de esperar
+    // o próximo fechamento de vela para começar.
+    const signalIsActive = direction === "CALL" || direction === "PUT";
+    const timerNow = Date.now();
+    currentEntryAt = signalIsActive
+      ? timerNow
+      : timerNow + secondsToEntry * 1000;
+    currentExpiresAt = signalIsActive
+      ? timerNow + intervalSeconds * 1000
+      : currentEntryAt + intervalSeconds * 1000;
 
     const host = document.getElementById("binaryCardHost");
     if (!host) return;
