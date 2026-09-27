@@ -613,12 +613,11 @@
       loadSavedAssets();
       root.innerHTML = shellMarkup();
       await loadCatalog();
+      setSettingsScreen("Conexão pronta. Clique em “Analisar agora” quando quiser iniciar.");
       renderSettings();
-      await analyze(true);
       enableFloatingDrag();
 
       clearInterval(refreshTimer);
-      refreshTimer = setInterval(() => analyze(false), 1000);
     } catch (error) {
       renderLogin(error.message);
     }
