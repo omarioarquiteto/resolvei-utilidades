@@ -264,7 +264,7 @@
     const history = Array.isArray(accuracy.ultimos) ? accuracy.ultimos.slice(-12) : [];
     const indicatorVotes = Array.isArray(signal.votos) ? signal.votos : [];
     const strategyName = strategies[currentStrategy]?.name || currentStrategy;
-    const action = direction === "CALL" ? "COMPRA" : direction === "PUT" ? "VENDA" : "AGUARDAR";
+    const action = direction === "CALL" ? "COMPRA" : direction === "PUT" ? "VENDA" : "ANALISANDO";
     const actionClass = direction === "CALL" ? "buy" : direction === "PUT" ? "sell" : "wait";
     const newsWarning = signal.news_warning || data.warning || "";
     const proximity = signal.proximity || {};
@@ -324,7 +324,7 @@
           <div class="binary-action-block ${actionClass}">
             <span class="binary-action-label">${actionClass === "buy" ? "SINAL DE COMPRA" : actionClass === "sell" ? "SINAL DE VENDA" : "SEM ENTRADA"}</span>
             <div class="binary-direction">${action}</div>
-            <span class="binary-action-code">${direction === "CALL" ? "CALL" : direction === "PUT" ? "PUT" : "AGUARDAR"}</span>
+            <span class="binary-action-code">${direction === "CALL" ? "CALL" : direction === "PUT" ? "PUT" : "ANALISANDO"}</span>
           </div>
           <div class="binary-timer-block">
             <span id="binaryTimerLabel">${secondsToEntry > 0 ? "ENTRADA EM" : "EXPIRA EM"}</span>
@@ -526,7 +526,7 @@
         if (direction === "AGUARDAR") {
           const status = document.getElementById("binaryStatus");
           if (status && currentSignalDirection === "AGUARDAR") {
-            status.textContent = "⏳ Aguardando confirmação do sinal... Clique em “Cancelar análise” para voltar aos pares.";
+            status.textContent = "🔎 ANALISANDO MERCADO · aguardando dados técnicos válidos...";
           }
           return;
         }
@@ -544,7 +544,7 @@
           const status = document.getElementById("binaryStatus");
           if (status) {
             status.textContent = currentSignalDirection === "AGUARDAR"
-              ? "⏳ Aguardando confirmação técnica..."
+              ? "🔎 ANALISANDO MERCADO..."
               : `✓ Sinal técnico ${currentSignalDirection} exibido. Proteção do sinal: ${formatDuration(holdSeconds)}.`;
           }
           saveState();
@@ -609,7 +609,7 @@
           currentSignalDirection = selected.signal || "AGUARDAR";
           currentSignalRank = signalRank(selected);
           status.textContent = currentSignalDirection === "AGUARDAR"
-            ? `⏳ Dados processados (${candleCount} candles). Aguardando confirmação técnica...`
+            ? `🔎 Dados processados (${candleCount} candles). ANALISANDO MERCADO...`
             : `✓ ${currentAsset} · ${expiryLabel(currentExpiry).toLowerCase()} · ${candleCount} candles processados · sinal técnico ${currentSignalDirection} · mercado ${data.market || "indisponível"}.`;
           startSignalMonitoring();
         } else {
