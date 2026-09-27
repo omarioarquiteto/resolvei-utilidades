@@ -94,13 +94,23 @@ def iq_strategies():
 def iq_analyze(
     asset: str,
     strategy: str = Query("trend_pullback"),
+    expiry: str = Query("1min"),
     refresh: bool = Query(False),
     x_iq_session: str | None = Header(default=None),
 ):
     if not x_iq_session or not is_connected(x_iq_session)["connected"]:
         raise HTTPException(401, "Conecte sua conta da IQ Option primeiro.")
+    if expiry not in ("1min", "5min"):
+        raise HTTPException(400, "A expiração deve ser 1min ou 5min.")
     try:
         result = analyze_asset(x_iq_session, asset, strategy, force_refresh=refresh)
+        selected = result.get("signals", {}).get(expiry, {})
+        result["selected_expiry"] = expiry
+        result["selected_signal"] = selected.get("signal", "AGUARDAR")
+        result["selected_confidence"] = selected.get("confidence")
+        result["selected_score"] = selected.get("score")
+        result["selected_reason"] = selected.get("reason")
+
         result["market"] = get_market_status(x_iq_session, asset)
         result["payout"] = get_payout(x_iq_session, asset)
         for signal in (result.get("signals") or {}).values():
