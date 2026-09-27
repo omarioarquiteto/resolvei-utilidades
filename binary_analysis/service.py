@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import threading
 import time
+import secrets
 from dataclasses import dataclass
 from typing import Any
 
@@ -21,6 +22,7 @@ class IQSession:
     last_used: float
 
 _SESSIONS: dict[str, IQSession] = {}
+_PENDING_2FA: dict[str, dict[str, Any]] = {}
 _LOCK = threading.RLock()
 _SESSION_TTL = 60 * 60 * 6
 _metadata_cache: dict[Any, dict] = {}
@@ -59,6 +61,10 @@ def _cleanup():
     for k in stale:
         item=_SESSIONS.pop(k)
         _close_client(item.client)
+    pending=[k for k,v in _PENDING_2FA.items() if now-v.get("created_at", now) > 600]
+    for k in pending:
+        item=_PENDING_2FA.pop(k, None)
+        if item: _close_client(item.get("client"))
 
 def connect_session(session_id: str, email: str, password: str, account: str):
     with _LOCK:
@@ -67,6 +73,10 @@ def connect_session(session_id: str, email: str, password: str, account: str):
             client=IQ_Option(email.strip(), password)
             ok, reason=client.connect()
             if not ok:
+                if str(reason).upper() == "2FA":
+                    challenge_id = secrets.token_urlsafe(32)
+                    _PENDING_2FA[challenge_id] = {"client": client, "account": account, "created_at": time.time()}
+                    return False, "2FA_REQUIRED", {"challenge_id": challenge_id}
                 _close_client(client)
                 return False, f"Falha na autenticação da IQ Option: {reason}", None
             client.change_balance(account)
@@ -74,6 +84,31 @@ def connect_session(session_id: str, email: str, password: str, account: str):
             return True, f"Conectado à conta {account}.", _safe_balance(client)
         except Exception as exc:
             return False, f"Não foi possível autenticar na IQ Option: {exc}", None
+
+def complete_2fa(challenge_id: str, code: str, session_id: str):
+    with _LOCK:
+        _cleanup()
+        pending = _PENDING_2FA.pop(challenge_id, None)
+        if not pending:
+            return False, "A solicitação de verificação expirou. Faça o login novamente.", None
+        client = pending["client"]
+        try:
+            ok, reason = client.connect_2fa(str(code).strip())
+            if not ok:
+                _PENDING_2FA[challenge_id] = pending
+                return False, f"Falha na verificação 2FA: {reason}", None
+            account = pending["account"]
+            client.change_balance(account)
+            _SESSIONS[session_id] = IQSession(client, account, time.time(), time.time())
+            return True, f"Conectado à conta {account}.", _safe_balance(client)
+        except Exception as exc:
+            _PENDING_2FA[challenge_id] = pending
+            return False, f"Não foi possível concluir a verificação 2FA: {exc}", None
+
+def cancel_2fa(challenge_id: str):
+    with _LOCK:
+        pending = _PENDING_2FA.pop(challenge_id, None)
+        if pending: _close_client(pending.get("client"))
 
 def disconnect_session(session_id: str):
     with _LOCK:
