@@ -259,7 +259,9 @@
     const direction = data?.selected_signal || signal.signal || "AGUARDAR";
     const stateClass = direction === "CALL" ? "is-call" : direction === "PUT" ? "is-put" : "is-wait";
     const locked = Boolean(signal.locked);
-    const reason = signal.signal === "AGUARDAR"\n      ? (signal.accuracy_gate_reason || signal.reason || "Aguardando confirmação técnica.")\n      : (signal.reason || "Aguardando confirmação técnica.");
+    const reason = signal.signal === "AGUARDAR"
+      ? (signal.accuracy_gate_reason || signal.reason || "Aguardando confirmação técnica.")
+      : (signal.reason || "Aguardando confirmação técnica.");
     const payout = signal.payout ?? data.payout;
     const history = Array.isArray(accuracy.ultimos) ? accuracy.ultimos.slice(-12) : [];
     const indicatorVotes = Array.isArray(signal.votos) ? signal.votos : [];
