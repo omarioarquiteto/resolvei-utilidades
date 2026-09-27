@@ -108,7 +108,8 @@ def get_payout(session_id: str, asset: str):
         if cached and now-cached["ts"] < 60:
             return cached["value"]
         profits=client.get_all_profit() or {}
-        info=profits.get(key) or profits.get(key.replace("-OTC","")) or {}
+        is_otc = key.endswith("-OTC")
+        info=profits.get(key) or (None if is_otc else profits.get(key.replace("-OTC",""))) or {}
         value=None
         for mode in ("binary","turbo"):
             raw=info.get(mode) if isinstance(info,dict) else None
