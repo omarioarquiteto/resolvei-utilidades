@@ -56,6 +56,16 @@
   font-size:11px;
   font-weight:750;
 }
+.binary-action-block{display:flex;flex-direction:column;align-items:flex-start}
+.binary-action-label{font-size:10px;font-weight:850;letter-spacing:.08em;color:#7a8883}
+.binary-action-block .binary-direction{margin-top:3px}
+.binary-action-code{margin-top:4px;padding:2px 7px;border-radius:999px;background:#f2f5f4;color:#71807a;font-size:10px;font-weight:800;letter-spacing:.04em}
+.binary-action-block.buy .binary-action-label,.binary-action-block.buy .binary-direction{color:#0aae70}
+.binary-action-block.sell .binary-action-label,.binary-action-block.sell .binary-direction{color:#e23e49}
+.binary-action-block.wait .binary-action-label,.binary-action-block.wait .binary-direction{color:#7a8983}
+.binary-timer-block{display:flex;flex-direction:column;align-items:flex-end;gap:5px}
+.binary-timer-block>span{font-size:10px;font-weight:800;letter-spacing:.06em;color:#7c8984}
+.binary-news-warning{margin-top:10px;padding:9px 11px;border:1px solid #f0cf8b;border-radius:9px;background:#fffaf0;color:#795b15;font-size:11px;line-height:1.4}
 .binary-card-main{margin-top:14px}
 .binary-direction{
   font-size:34px;
