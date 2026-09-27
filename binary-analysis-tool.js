@@ -504,6 +504,22 @@
     document.getElementById("binFloating")?.addEventListener("click", () => setFloating(!isFloating()));
   }
 
+  async function refreshCandlesOnly() {
+    if (!session || inFlight) return;
+    const btn = document.getElementById("binRefresh");
+    const status = document.getElementById("binaryStatus");
+    if (btn) { btn.disabled = true; btn.textContent = "⏳ Atualizando..."; }
+    try {
+      const data = await api("/candles/" + encodeURIComponent(currentAsset) + "?interval=60&count=120");
+      const qtd = Array.isArray(data.candles) ? data.candles.length : 0;
+      if (status) status.textContent = "✓ " + qtd + " candles recebidos para " + currentAsset + ". Clique em “Analisar agora” para gerar o sinal.";
+    } catch (error) {
+      if (status) status.textContent = "⚠️ " + error.message;
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = "↻ Atualizar candles"; }
+    }
+  }
+
   function applyFloatingPosition() {
     if (!isFloating()) return;
     const page = document.querySelector(".binary-analysis-page.floating");
