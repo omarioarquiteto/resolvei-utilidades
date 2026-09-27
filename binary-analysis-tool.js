@@ -11,7 +11,7 @@
   let assets = [];
   let strategies = {};
   let currentAsset = localStorage.getItem(CURRENT_ASSET_KEY) || "EURUSD";
-  let currentStrategy = localStorage.getItem(STRATEGY_KEY) || "trend_pullback";
+  let currentStrategy = localStorage.getItem(STRATEGY_KEY) || "smart_confluence";
   let currentExpiry = localStorage.getItem(EXPIRY_KEY) || "1min";
   let currentMarket = localStorage.getItem(MARKET_KEY) || (currentAsset.endsWith("-OTC") ? "OTC" : "REGULAR");
   let refreshTimer = null;
@@ -73,17 +73,13 @@
 
   function startAnalysisStageAnimation() {
     stopAnalysisStageAnimation();
-    const stages = [
-      ["ANALISANDO MERCADO", 18, "Lendo candles e preparando os indicadores..."],
-      ["ATENÇÃO", 48, "Conferindo tendência, momentum e volatilidade..."],
-      ["SINAL MUITO PRÓXIMO", 78, "Avaliando confluência e confirmação técnica..."]
-    ];
-    let index = 0;
-    setAnalysisStage(...stages[index]);
-    analysisStageTimer = setInterval(() => {
-      index = (index + 1) % stages.length;
-      setAnalysisStage(...stages[index]);
-    }, 2200);
+    // O estado visual não simula progresso interno. A análise é executada no
+    // backend e a interface só muda quando existe um resultado real.
+    setAnalysisStage(
+      "ANALISANDO MERCADO",
+      42,
+      "Lendo candles fechados, contexto multi-timeframe e confluência técnica..."
+    );
   }
 
   function proximityStage(signal) {
