@@ -3,7 +3,6 @@ from __future__ import annotations
 import threading
 import time
 import secrets
-import json
 import requests
 from dataclasses import dataclass
 from typing import Any
