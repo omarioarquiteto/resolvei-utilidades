@@ -312,6 +312,7 @@
         <div class="binary-signal-actions">
           <button class="binary-secondary-btn" id="binSignalSettings" type="button">⚙ Configurar</button>
           <button class="binary-primary-btn" id="binSignalAnalyze" type="button">🔎 Analisar novamente</button>
+          ${direction === "AGUARDAR" ? '<button class="binary-secondary-btn" id="binCancelWaiting" type="button">✕ Cancelar análise</button>' : ""}
         </div>
       </article>`;
 
@@ -329,6 +330,8 @@
       currentExpiresAt = 0;
       analyze();
     });
+
+    document.getElementById("binCancelWaiting")?.addEventListener("click", cancelAnalysis);
   }
 
   function updateTimer() {
@@ -519,7 +522,14 @@
       renderCard(data);
       renderSettings();
       if (status) {
-        status.textContent = `${currentAsset} · ${expiryLabel(currentExpiry).toLowerCase()} · mercado ${data.market || "indisponível"}`;
+        const candleCount = Number(data.selected_candle_count || 0);
+        if (data.market === "fechado") {
+          status.textContent = `⏸️ ${currentAsset} está fechado. Se o equivalente OTC estiver disponível, selecione o mercado OTC.`;
+        } else if (data.selected_data_ready) {
+          status.textContent = `✓ ${currentAsset} · ${expiryLabel(currentExpiry).toLowerCase()} · ${candleCount} candles processados · mercado ${data.market || "indisponível"}.`;
+        } else {
+          status.textContent = `⚠️ ${currentAsset} · nenhum candle válido processado. Mercado ${data.market || "indisponível"}.`;
+        }
       }
       saveState();
       clearInterval(countdownTimer);
