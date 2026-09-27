@@ -398,6 +398,87 @@
     saveState();
   }
 
+  function selectedSignalFromData(data) {
+    return data?.signals?.[currentExpiry] || {};
+  }
+
+  function signalRank(signal) {
+    if (!signal || !["CALL", "PUT"].includes(signal.signal)) return -1;
+    const proximity = Number(signal.proximity?.percent ?? 0);
+    const confidence = Number(signal.confidence ?? 0);
+    const score = Number(signal.score ?? 0);
+    return proximity * 1000 + confidence * 10 + score;
+  }
+
+  function stopMonitoring() {
+    clearInterval(monitoringTimer);
+    monitoringTimer = null;
+  }
+
+  function cancelAnalysis() {
+    stopMonitoring();
+    clearInterval(countdownTimer);
+    countdownTimer = null;
+    if (analysisController) {
+      try { analysisController.abort(); } catch (_) {}
+      analysisController = null;
+    }
+    currentExpiresAt = 0;
+    currentSignalRank = -1;
+    currentSignalDirection = "AGUARDAR";
+    inFlight = false;
+    setSettingsScreen("Análise cancelada.");
+    renderSettings();
+    applyFloatingPosition();
+    enableFloatingDrag();
+  }
+
+  function startSignalMonitoring() {
+    stopMonitoring();
+    signalHoldUntil = Date.now() + 60000;
+
+    monitoringTimer = setInterval(async () => {
+      if (!session || inFlight || !document.querySelector(".binary-analysis-page.signal-mode")) return;
+
+      const now = Date.now();
+      try {
+        const candidate = await api(
+          "/analyze/" + encodeURIComponent(currentAsset) +
+          "?strategy=" + encodeURIComponent(currentStrategy) +
+          "&expiry=" + encodeURIComponent(currentExpiry) +
+          "&refresh=1"
+        );
+        const signal = selectedSignalFromData(candidate);
+        const direction = signal.signal || "AGUARDAR";
+        const rank = signalRank(signal);
+
+        if (direction === "AGUARDAR") {
+          const status = document.getElementById("binaryStatus");
+          if (status && currentSignalDirection === "AGUARDAR") {
+            status.textContent = "⏳ Aguardando confirmação do sinal... Clique em “Cancelar análise” para voltar aos pares.";
+          }
+          return;
+        }
+
+        const canReplace = currentSignalDirection === "AGUARDAR"
+          || now >= signalHoldUntil
+          || rank > currentSignalRank + 0.5;
+
+        if (canReplace) {
+          currentSignalRank = rank;
+          currentSignalDirection = direction;
+          signalHoldUntil = Date.now() + 60000;
+          renderCard(candidate);
+          saveState();
+          clearInterval(countdownTimer);
+          countdownTimer = setInterval(updateTimer, 250);
+        }
+      } catch (_) {
+        // Falha transitória não substitui o sinal que já está na tela.
+      }
+    }, 5000);
+  }
+
   async function analyze(trigger = "manual") {
     if (!session || inFlight) return;
     const cardHost = document.getElementById("binaryCardHost");
