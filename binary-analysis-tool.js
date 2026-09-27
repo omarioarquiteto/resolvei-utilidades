@@ -20,6 +20,7 @@
   let signalHoldUntil = 0;
   let currentSignalRank = -1;
   let currentSignalDirection = "AGUARDAR";
+  let currentEntryAt = 0;
   let analysisController = null;
   let analysisStageTimer = null;
   let inFlight = false;
@@ -260,7 +261,6 @@
     const locked = Boolean(signal.locked);
     const reason = signal.reason || "Aguardando confirmação técnica.";
     const payout = signal.payout ?? data.payout;
-    const voteConfidence = votes.confianca ?? signal.confidence ?? null;
     const history = Array.isArray(accuracy.ultimos) ? accuracy.ultimos.slice(-12) : [];
     const indicatorVotes = Array.isArray(signal.votos) ? signal.votos : [];
     const strategyName = strategies[currentStrategy]?.name || currentStrategy;
@@ -288,8 +288,11 @@
 
     const countText = `▲ ${Number(votes.bulls || 0)} CALL <span class="vote-red">▼ ${Number(votes.bears || 0)} PUT</span> <span class="vote-blue">● ${Number(votes.neutros ?? votes.neutrals ?? 0)} neutros</span>`;
 
-    const remaining = Math.max(0, Number(signal.seconds_remaining || 0));
-    currentExpiresAt = Date.now() + remaining * 1000;
+    const secondsToEntry = Math.max(0, Number(signal.seconds_to_entry ?? 0));
+    const intervalSeconds = currentExpiry === "5min" ? 300 : 60;
+    const expirationRemaining = Math.max(0, Number(signal.seconds_remaining ?? intervalSeconds));
+    currentEntryAt = Date.now() + secondsToEntry * 1000;
+    currentExpiresAt = currentEntryAt + intervalSeconds * 1000;
 
     const host = document.getElementById("binaryCardHost");
     if (!host) return;
@@ -313,12 +316,10 @@
             <span class="binary-action-code">${direction === "CALL" ? "CALL" : direction === "PUT" ? "PUT" : "AGUARDAR"}</span>
           </div>
           <div class="binary-timer-block">
-            <span>EXPIRA EM</span>
-            <div class="binary-timer" id="binaryTimer">${formatDuration(remaining)}</div>
+            <span id="binaryTimerLabel">${secondsToEntry > 0 ? "ENTRADA EM" : "EXPIRA EM"}</span>
+            <div class="binary-timer" id="binaryTimer">${formatDuration(secondsToEntry > 0 ? secondsToEntry : expirationRemaining)}</div>
           </div>
         </div>
-        <div class="binary-payout">Payout ${payout == null ? "—" : pct(payout)}</div>
-
         <div class="binary-reason">${esc(reason)}
           <span class="binary-accuracy"> · acerto: <strong>${pct(accuracy.rate)}</strong> (${Number(accuracy.sample_size || 0)} sinais · ${Number(accuracy.wins || 0)} acertos)</span>
         </div>
@@ -328,19 +329,17 @@
         <div class="binary-proximity-block">
           <div class="binary-proximity-head">
             <span>${proximityStage(signal).title}</span>
-            <strong>${proximityPercent.toFixed(0)}%</strong>
           </div>
           <div class="binary-proximity-track">
             <div class="binary-proximity-fill" style="width:${proximityPercent}%"></div>
           </div>
-          <div class="binary-proximity-label">${esc(proximityLabel)} · baseada no score técnico, não é probabilidade de acerto.</div>
+          <div class="binary-proximity-label">${esc(proximityLabel)}</div>
         </div>
 
         <div class="binary-divider"></div>
 
         <div class="binary-votes-row">
           <div class="binary-votes-counts">${countText}</div>
-          <div class="binary-confidence">confiança ${pct(voteConfidence)}</div>
         </div>
 
         <div class="binary-indicators">${badges}</div>
@@ -373,7 +372,16 @@
   function updateTimer() {
     const el = document.getElementById("binaryTimer");
     if (!el) return;
-    const seconds = Math.max(0, Math.ceil((currentExpiresAt - Date.now()) / 1000));
+    const label = document.getElementById("binaryTimerLabel");
+    const now = Date.now();
+    if (currentEntryAt && now < currentEntryAt) {
+      const seconds = Math.max(0, Math.ceil((currentEntryAt - now) / 1000));
+      if (label) label.textContent = "ENTRADA EM";
+      el.textContent = formatDuration(seconds);
+      return;
+    }
+    const seconds = Math.max(0, Math.ceil((currentExpiresAt - now) / 1000));
+    if (label) label.textContent = "EXPIRA EM";
     el.textContent = formatDuration(seconds);
     if (seconds <= 0) {
       clearInterval(countdownTimer);
@@ -382,7 +390,6 @@
       if (status) status.textContent = "⏱️ Expiração encerrada. Clique em “Analisar novamente” para gerar um novo sinal.";
     }
   }
-
   async function login() {
     const msg = document.getElementById("binLoginMessage");
     const button = document.getElementById("binLogin");
