@@ -152,6 +152,7 @@
   function shellMarkup() {
     return `
       <div class="binary-analysis-page ${isFloating() ? "floating " : ""}settings-mode">
+        <div class="binary-floating-grip binary-drag-handle" title="Clique e arraste com o botão esquerdo para mover a janela">⋮⋮ Arraste para mover</div>
         <div id="binaryCardHost"></div>
         <div id="binaryStatus" class="binary-status-line"></div>
         <div id="binarySettingsHost"></div>
@@ -538,7 +539,7 @@
 
   function enableFloatingDrag() {
     const page = document.querySelector(".binary-analysis-page.floating");
-    const handle = page?.querySelector(".binary-drag-handle");
+    const handle = page?.querySelector(".binary-floating-grip") || page?.querySelector(".binary-drag-handle");
     if (!page || !handle || handle.dataset.dragBound === "1") return;
     handle.dataset.dragBound = "1";
     applyFloatingPosition();
