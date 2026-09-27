@@ -71,7 +71,9 @@ if FIREBASE_PROJECT_ID and FIREBASE_CLIENT_EMAIL and FIREBASE_PRIVATE_KEY:
     except Exception:
         _firebase_admin = None
 
-app = FastAPI(title="Resolvei API", version="3.0.0")\n\napp.include_router(iq_options_router)
+app = FastAPI(title="Resolvei API", version="3.0.0")
+
+app.include_router(iq_options_router)
 
 # O frontend atualmente é servido pelo próprio FastAPI, portanto as requisições
 # são same-origin. Mantemos CORS configurável para o domínio próprio e futuros
