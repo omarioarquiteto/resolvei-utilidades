@@ -505,6 +505,9 @@
     try {
       if (status) status.textContent = `Verificando ${currentAsset} · ${expiryLabel(currentExpiry).toLowerCase()}...`;
       analysisController = new AbortController();
+      const analysisTimeout = setTimeout(() => {
+        try { analysisController?.abort(); } catch (_) {}
+      }, 30000);
       const data = await api(
         "/analyze/" + encodeURIComponent(currentAsset) +
         "?strategy=" + encodeURIComponent(currentStrategy) +
@@ -512,6 +515,7 @@
         "&refresh=1",
         { signal: analysisController.signal }
       );
+      clearTimeout(analysisTimeout);
       analysisController = null;
       renderCard(data);
       renderSettings();
@@ -541,7 +545,10 @@
       clearInterval(countdownTimer);
       countdownTimer = setInterval(updateTimer, 250);
     } catch (error) {
-      if (error?.name === "AbortError") return;
+      if (error?.name === "AbortError") {
+        if (status) status.textContent = "⏱️ A análise excedeu 30 segundos ou foi cancelada. Verifique o par/mercado e tente novamente.";
+        return;
+      }
       if (loadingHost) {
         loadingHost.innerHTML = `
           <article class="binary-signal-card is-wait binary-error-card">
@@ -607,8 +614,8 @@
     });
 
     asset?.addEventListener("change", () => {
+      resetSignalState();
       currentAsset = asset.value;
-      if (!monitoredAssets.includes(currentAsset)) monitoredAssets.push(currentAsset);
       saveState();
       setSettingsScreen("Par alterado. Clique em “Analisar agora” para calcular o sinal.");
       renderSettings();
@@ -750,7 +757,6 @@
       const root = mount();
       if (!root) return;
 
-      loadSavedAssets();
       root.innerHTML = shellMarkup();
       await loadCatalog();
       setSettingsScreen("Conexão pronta. Clique em “Analisar agora” quando quiser iniciar.");
