@@ -1230,8 +1230,16 @@ def build_strategy(expiry: str, context: dict, trigger: dict | None, context_key
         "warning": "Score de confluência não representa probabilidade de acerto.",
     }
     
-def analyze_asset(session_id: str, asset: str, strategy: str = "trend_pullback") -> dict:
-    """Analisa uma unica estrategia e retorna somente os tres prazos de entrada."""
+def analyze_asset(
+    session_id: str,
+    asset: str,
+    strategy: str = "trend_pullback",
+    force_refresh: bool = False,
+) -> dict:
+    """Analisa uma estrategia e retorna os prazos de entrada.
+
+    force_refresh=True ignora o cache do sinal atual e recalcula os candles.
+    """
     asset = asset.upper().replace("=X", "")
     if strategy not in STRATEGIES:
         raise ValueError(f"Estratégia desconhecida: {strategy}")
@@ -1243,7 +1251,7 @@ def analyze_asset(session_id: str, asset: str, strategy: str = "trend_pullback")
         cache_key = (asset, strategy, expiry)
         cached = _SIGNAL_CACHE.get(cache_key)
         market_safe = news["available"] and not news["blocked"]
-        if market_safe and cached and cached["expires_at"] > now and "proximity" in cached and "historical_accuracy" in cached:
+        if (not force_refresh) and market_safe and cached and cached["expires_at"] > now and "proximity" in cached and "historical_accuracy" in cached:
             signals[expiry] = {**cached, "locked": True, "seconds_remaining": cached["expires_at"] - now}
             continue
 
