@@ -66,7 +66,7 @@
     const labelEl = document.getElementById("binaryAnalyzingLabel");
     if (title) title.textContent = stage;
     if (subtitle) subtitle.textContent = "Coletando candles, calculando indicadores e avaliando a estrutura técnica do par.";
-    if (value) value.textContent = Math.round(percent) + "%";
+    if (value) value.textContent = stage;
     if (fill) fill.style.width = Math.max(0, Math.min(100, percent)) + "%";
     if (labelEl) labelEl.textContent = label;
   }
@@ -259,7 +259,7 @@
     const direction = data?.selected_signal || signal.signal || "AGUARDAR";
     const stateClass = direction === "CALL" ? "is-call" : direction === "PUT" ? "is-put" : "is-wait";
     const locked = Boolean(signal.locked);
-    const reason = signal.reason || "Aguardando confirmação técnica.";
+    const reason = signal.signal === "AGUARDAR"\n      ? (signal.accuracy_gate_reason || signal.reason || "Aguardando confirmação técnica.")\n      : (signal.reason || "Aguardando confirmação técnica.");
     const payout = signal.payout ?? data.payout;
     const history = Array.isArray(accuracy.ultimos) ? accuracy.ultimos.slice(-12) : [];
     const indicatorVotes = Array.isArray(signal.votos) ? signal.votos : [];
@@ -577,7 +577,7 @@
     setSignalScreen("🔎 Iniciando análise...");
     const loadingHost = document.getElementById("binaryCardHost");
     if (loadingHost) {
-      loadingHost.innerHTML = `<article class="binary-signal-card is-wait binary-analyzing-card"><div class="binary-card-top binary-drag-handle"><span>ANÁLISE EM ANDAMENTO</span><span>MONITORANDO</span></div><div class="binary-analyzing-icon">◌</div><div class="binary-analyzing-title" id="binaryAnalyzingTitle">ANALISANDO MERCADO</div><div class="binary-analyzing-subtitle" id="binaryAnalyzingSubtitle">Coletando candles, calculando indicadores e avaliando a estrutura técnica do par.</div><div class="binary-analysis-progress binary-thermometer"><div class="binary-thermometer-head"><span>PROGRESSO DA ANÁLISE</span><strong id="binaryAnalysisThermometerValue">18%</strong></div><div class="binary-proximity-track"><div class="binary-proximity-fill binary-analysis-thermometer-fill" id="binaryAnalysisThermometerFill" style="width:18%"></div></div></div><div class="binary-analyzing-label" id="binaryAnalyzingLabel">Lendo candles e preparando os indicadores...</div><div class="binary-signal-actions"><button class="binary-secondary-btn" id="binCancelAnalysis" type="button">✕ Cancelar análise</button></div></article>`;
+      loadingHost.innerHTML = `<article class="binary-signal-card is-wait binary-analyzing-card"><div class="binary-card-top binary-drag-handle"><span>ANÁLISE EM ANDAMENTO</span><span>MONITORANDO</span></div><div class="binary-analyzing-icon">◌</div><div class="binary-analyzing-title" id="binaryAnalyzingTitle">ANALISANDO MERCADO</div><div class="binary-analyzing-subtitle" id="binaryAnalyzingSubtitle">Coletando candles, calculando indicadores e avaliando a estrutura técnica do par.</div><div class="binary-analysis-progress binary-thermometer"><div class="binary-thermometer-head"><span>PROGRESSO DA ANÁLISE</span><strong id="binaryAnalysisThermometerValue">ANALISANDO MERCADO</strong></div><div class="binary-proximity-track"><div class="binary-proximity-fill binary-analysis-thermometer-fill" id="binaryAnalysisThermometerFill" style="width:18%"></div></div></div><div class="binary-analyzing-label" id="binaryAnalyzingLabel">Lendo candles e preparando os indicadores...</div><div class="binary-signal-actions"><button class="binary-secondary-btn" id="binCancelAnalysis" type="button">✕ Cancelar análise</button></div></article>`;
       document.getElementById("binCancelAnalysis")?.addEventListener("click", cancelAnalysis);
       startAnalysisStageAnimation();
     }
