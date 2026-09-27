@@ -21,6 +21,8 @@
 }
 .binary-signal-card.is-put{border-color:#e33b42}
 .binary-signal-card.is-wait{border-color:#aab7b2}
+.binary-drag-handle{cursor:grab;user-select:none;touch-action:none}
+.binary-drag-handle.dragging{cursor:grabbing}
 .binary-card-top,
 .binary-card-main,
 .binary-votes-row{
