@@ -71,14 +71,24 @@ def connect_session(session_id: str, email: str, password: str, account: str):
         _cleanup()
         try:
             client=IQ_Option(email.strip(), password)
-            ok, reason=client.connect()
+            ok, reason = _call_with_timeout(client.connect, 25.0, "login IQ Option")
             if not ok:
-                if str(reason).upper() == "2FA":
+                raw_reason = str(reason or "")
+                try:
+                    import json
+                    payload = json.loads(raw_reason)
+                except Exception:
+                    payload = None
+                if isinstance(payload, dict) and payload.get("code") == "verify":
                     challenge_id = secrets.token_urlsafe(32)
-                    _PENDING_2FA[challenge_id] = {"client": client, "account": account, "created_at": time.time()}
+                    _PENDING_2FA[challenge_id] = {"client": client, "account": account, "created_at": time.time(), "token": payload.get("token")}
+                    return False, "2FA_REQUIRED", {"challenge_id": challenge_id}
+                if raw_reason.upper() == "2FA":
+                    challenge_id = secrets.token_urlsafe(32)
+                    _PENDING_2FA[challenge_id] = {"client": client, "account": account, "created_at": time.time(), "token": None}
                     return False, "2FA_REQUIRED", {"challenge_id": challenge_id}
                 _close_client(client)
-                return False, f"Falha na autenticação da IQ Option: {reason}", None
+                return False, f"Falha na autenticação da IQ Option: {raw_reason}", None
             client.change_balance(account)
             _SESSIONS[session_id]=IQSession(client,account,time.time(),time.time())
             return True, f"Conectado à conta {account}.", _safe_balance(client)
