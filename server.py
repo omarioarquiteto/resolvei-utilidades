@@ -31,7 +31,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, Response
 from pydantic import BaseModel, Field
 
-from api.options import router as iq_options_router
+from binary_analysis.api import router as binary_analysis_router
 
 load_dotenv()
 
@@ -73,7 +73,7 @@ if FIREBASE_PROJECT_ID and FIREBASE_CLIENT_EMAIL and FIREBASE_PRIVATE_KEY:
 
 app = FastAPI(title="Resolvei API", version="3.0.0")
 
-app.include_router(iq_options_router)
+app.include_router(binary_analysis_router)
 
 # O frontend atualmente é servido pelo próprio FastAPI, portanto as requisições
 # são same-origin. Mantemos CORS configurável para o domínio próprio e futuros
@@ -714,7 +714,9 @@ def geocode_solar(req: SolarResourceRequest) -> dict[str, Any]:
     # O CEP ajuda bastante quando o endereço é pouco específico, mas não é enviado
     # como único termo porque o Nominatim pode ter cobertura postal irregular.
     if req.cep:
-        pieces.insert(-1, f"CEP {re.sub(r'\D', '', req.cep)}")
+        cep_digits = re.sub(r"\D", "", req.cep)
+        if cep_digits:
+            pieces.insert(-1, f"CEP {cep_digits}")
     query = ", ".join(pieces)
     if not query:
         raise HTTPException(status_code=400, detail="Informe um endereço ou CEP para localizar o ponto.")
