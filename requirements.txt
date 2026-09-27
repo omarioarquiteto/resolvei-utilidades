@@ -18,4 +18,6 @@ cryptography>=43,<46
 
 pandas>=2.2,<3
 numpy>=1.26,<3
-iqair==1.0.0
+
+websocket-client==0.56.0
+git+https://github.com/iqoptionapi/iqoptionapi.git
