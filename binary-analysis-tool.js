@@ -497,11 +497,9 @@
     document.getElementById("binAnalyzeNow")?.addEventListener("click", () => {
       if (inFlight) return;
       currentExpiresAt = 0;
-      const status = document.getElementById("binaryStatus");
-      if (status) status.textContent = "🔎 Nova análise solicitada...";
-      analyze(true);
+      analyze();
     });
-    document.getElementById("binRefresh")?.addEventListener("click", () => analyze(true));
+    document.getElementById("binRefresh")?.addEventListener("click", refreshCandlesOnly);
     document.getElementById("binLogout")?.addEventListener("click", logout);
     document.getElementById("binFloating")?.addEventListener("click", () => setFloating(!isFloating()));
   }
