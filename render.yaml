@@ -7,6 +7,6 @@ services:
     healthCheckPath: /api/health
     envVars:
       - key: PYTHON_VERSION
-        value: "3.10"
+        value: "3.10.21"
       - key: CORS_ORIGINS
         value: "https://resolvei.onrender.com,https://resolvei-utilidades.onrender.com,https://resolvei.com.br,https://www.resolvei.com.br"
