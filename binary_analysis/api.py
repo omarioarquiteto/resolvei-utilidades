@@ -4,14 +4,11 @@ import secrets
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Header, HTTPException, Query
-from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from .engine import analyze_asset, get_chart_data, strategy_catalog, walkforward_asset
 from .service import (
     connect_session,
-    complete_2fa,
-    cancel_2fa,
     disconnect_session,
     get_balance,
     get_market_status,
@@ -40,11 +37,6 @@ def iq_health():
     }
 
 
-
-@router.get("/network-diagnostic")
-def iq_network_diagnostic_route():
-    return iq_network_diagnostic()
-
 @router.post("/login")
 def iq_login(request: IQLoginRequest):
     email = request.email.strip()
@@ -55,13 +47,6 @@ def iq_login(request: IQLoginRequest):
         raise HTTPException(400, "A conta deve ser PRACTICE (demo) ou REAL.")
     session_id = secrets.token_urlsafe(32)
     ok, message, balance = connect_session(session_id, email, request.password, account)
-    if not ok and message == "2FA_REQUIRED":
-        return JSONResponse(status_code=202, content={
-            "ok": False,
-            "requires_2fa": True,
-            "challenge_id": balance.get("challenge_id") if isinstance(balance, dict) else None,
-            "message": "A IQ Option solicitou uma verificacao em duas etapas. Informe o codigo recebido."
-        })
     if not ok:
         disconnect_session(session_id)
         raise HTTPException(502, message)
@@ -72,28 +57,6 @@ def iq_login(request: IQLoginRequest):
         "account": account,
         "balance": balance,
     }
-
-
-class IQ2FARequest(BaseModel):
-    challenge_id: str
-    code: str
-
-
-@router.post("/login/2fa")
-def iq_login_2fa(request: IQ2FARequest):
-    if not request.challenge_id or not request.code.strip():
-        raise HTTPException(400, "Informe o codigo de verificacao enviado pela IQ Option.")
-    session_id = secrets.token_urlsafe(32)
-    ok, message, balance = complete_2fa(request.challenge_id, request.code, session_id)
-    if not ok:
-        raise HTTPException(502, message)
-    return {"ok": True, "session_id": session_id, "message": message, "balance": balance}
-
-
-@router.post("/login/2fa/cancel")
-def iq_login_2fa_cancel(challenge_id: str = Query(...)):
-    cancel_2fa(challenge_id)
-    return {"ok": True}
 
 
 @router.post("/logout")
