@@ -384,15 +384,17 @@
     saveState();
   }
 
-  async function analyze(force = false) {
+  async function analyze(trigger = "manual") {
     if (!session || inFlight) return;
     const cardHost = document.getElementById("binaryCardHost");
     const status = document.getElementById("binaryStatus");
     if (!cardHost) return;
 
-    if (!force && currentExpiresAt > Date.now() + 1000) return;
+    if (trigger !== "manual") return;
 
     inFlight = true;
+    currentExpiresAt = 0;
+    setSignalScreen("🔎 Iniciando análise...");
     const manualButton = document.getElementById("binAnalyzeNow");
     if (manualButton) {
       manualButton.disabled = true;
