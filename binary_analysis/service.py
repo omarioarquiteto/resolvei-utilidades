@@ -25,6 +25,27 @@ _LOCK = threading.RLock()
 _SESSION_TTL = 60 * 60 * 6
 _metadata_cache: dict[Any, dict] = {}
 
+def _call_with_timeout(fn, timeout_seconds: float, operation: str):
+    """Executa chamadas potencialmente bloqueantes da API em thread daemon."""
+    result = {}
+    error = {}
+
+    def runner():
+        try:
+            result["value"] = fn()
+        except Exception as exc:
+            error["value"] = exc
+
+    worker = threading.Thread(target=runner, name=f"iq-{operation}", daemon=True)
+    worker.start()
+    worker.join(max(0.1, float(timeout_seconds)))
+
+    if worker.is_alive():
+        raise TimeoutError(f"{operation} excedeu {timeout_seconds:.1f}s")
+    if "value" in error:
+        raise error["value"]
+    return result.get("value")
+
 def _close_client(client):
     try:
         if client is not None and hasattr(client, "api") and client.api is not None:
@@ -107,7 +128,7 @@ def get_payout(session_id: str, asset: str):
         now=time.time()
         if cached and now-cached["ts"] < 60:
             return cached["value"]
-        profits=client.get_all_profit() or {}
+        profits=_call_with_timeout(client.get_all_profit, 4.0, "get_all_profit") or {}
         is_otc = key.endswith("-OTC")
         info=profits.get(key) or (None if is_otc else profits.get(key.replace("-OTC",""))) or {}
         value=None
@@ -137,7 +158,7 @@ def get_market_status(session_id: str, asset: str):
         now=time.time()
         cached=_metadata_cache.get("open_time")
         if not cached or now-cached["ts"]>60:
-            metadata=client.get_all_open_time() or {}
+            metadata=_call_with_timeout(client.get_all_open_time, 4.0, "get_all_open_time") or {}
             open_map={}
             for category, acts in metadata.items():
                 if not isinstance(acts, dict): continue
@@ -163,7 +184,7 @@ def _normalize(c: dict):
 def get_candles(session_id: str, asset: str, interval: int=300, count: int=200):
     client=get_client(session_id)
     try:
-        raw=client.get_candles(asset,interval,count,time.time())
+        raw=_call_with_timeout(lambda: client.get_candles(asset,interval,count,time.time()), 12.0, f"get_candles({asset},{interval})")
         if isinstance(raw,dict): raw=raw.get("candles") or raw.get("data") or []
         return [_normalize(c) for c in (raw or [])]
     except Exception as exc:
