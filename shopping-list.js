@@ -455,7 +455,12 @@
         '<div class="shopping-list-top">' +
           '<button class="btn ghost" type="button" data-action="back-home">← Minhas listas</button>' +
           '<div class="shopping-list-title"><span class="eyebrow">LISTA COMPARTILHADA</span><h2>' + esc(state.list.title || "Lista de compras") + '</h2><p>' + memberCount + ' ' + (memberCount === 1 ? "pessoa" : "pessoas") + ' com acesso</p></div>' +
-          '<div class="shopping-list-top-actions"><button class="btn" type="button" data-action="share">🔗 Compartilhar</button><button class="btn primary" type="button" data-action="new-list">＋ Nova lista</button></div>' +
+          '<div class="shopping-list-top-actions">' +
+          '<button class="btn" type="button" data-action="share">🔗 Compartilhar</button>' +
+          (listIsFinalized(state.list) ? '<button class="btn" type="button" data-action="reuse-current-list">↻ Reaproveitar lista</button>' : '') +
+          (state.list.ownerId === uid() ? '<button class="btn ghost" type="button" data-action="delete-current-list">🗑 Excluir lista</button>' : '') +
+          '<button class="btn primary" type="button" data-action="new-list">＋ Nova lista</button>' +
+        '</div>' +
         '</div>' +
         '<div class="shopping-progress-card">' +
           '<div><strong>' + doneCount + ' de ' + items.length + ' itens</strong><span>' + (items.length ? Math.round(doneCount / items.length * 100) : 0) + '% concluído</span></div>' +
@@ -837,6 +842,7 @@
         state.listId = null;
         state.list = null;
         state.items = [];
+        state.itemsLoaded = false;
         goList("");
       }
     }).catch(function (error) {
