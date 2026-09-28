@@ -1,4 +1,4 @@
-/* Resolvei — Lista de Compras colaborativa, com classificação local e IA opcional */
+/* Resolvei — Lista de Compras colaborativa, com classificação local e aprendizado por usuário */
 (function () {
   "use strict";
 
