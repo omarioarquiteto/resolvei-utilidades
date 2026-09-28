@@ -38,7 +38,8 @@
     itemsLoaded: false,
     editingId: null,
     editingTitle: false,
-    toastTimer: null
+    toastTimer: null,
+    legacyMigrationAttempted: {}
   };
   window.resolveiShoppingState = state;
 
@@ -461,7 +462,7 @@
             (state.editingTitle
               ? '<div class="shopping-title-inline-edit"><input id="shoppingTitleEdit" type="text" maxlength="80" value="' + esc(state.list.title || "Lista de compras") + '" aria-label="Nome da lista"><button class="shopping-inline-save" type="button" data-action="save-title">Salvar</button><button class="shopping-inline-cancel" type="button" data-action="cancel-title">Cancelar</button></div>'
               : '<div class="shopping-title-edit-wrap"><h2>' + esc(state.list.title || "Lista de compras") + '</h2><button class="shopping-title-edit" type="button" data-action="rename-list" aria-label="Editar nome da lista">✎</button></div>') +
-            '<p>' + memberCount + ' ' + (memberCount === 1 ? "pessoa" : "pessoas") + ' com acesso</p>' +
+            '<p>' + memberCount + ' ' + (memberCount === 1 ? "pessoa" : "pessoas") + ' com acesso · 🟢 sincronização em tempo real</p>' +
           '</div>' +
           '<div class="shopping-list-top-actions">' +
             '<button class="btn" type="button" data-action="share">🔗 Compartilhar</button>' +
@@ -554,75 +555,78 @@
     });
   }
 
-  function subscribeItems() {
-    if (state.unsubItems) { state.unsubItems(); state.unsubItems = null; }
-    if (!state.listId || !uid() || !db()) return;
+  function normalizeEmbeddedItems(rawItems) {
+    if (!Array.isArray(rawItems)) return [];
+    return rawItems.map(function (x) {
+      var item = Object.assign({}, x || {});
+      item.id = item.id || ("legacy-" + Math.random().toString(36).slice(2));
+      item.name = String(item.name || "").trim();
+      item.brand = String(item.brand || "");
+      item.qty = Number(item.qty) > 0 ? Number(item.qty) : 1;
+      item.unit = item.unit || "un.";
+      item.categoryId = categoryFor(item.name).id;
+      item.done = !!item.done;
+      item.position = typeof item.position === "number" ? item.position : 999999;
+      return item;
+    }).filter(function (x) { return !!x.name; }).sort(sortItems);
+  }
 
-    var listId = state.listId;
-    var ref = db().collection("shoppingLists").doc(listId).collection("items");
-    state.itemsLoaded = false;
+  function stateFromEmbeddedList(data) {
+    return normalizeEmbeddedItems(data && data.items);
+  }
 
-    state.unsubItems = ref.onSnapshot(function (snap) {
-      // Ignore a late snapshot from an old list after navigation.
-      if (state.listId !== listId) return;
-
-      state.items = snap.docs.map(function (d) {
-        var x = d.data() || {};
-        x.id = d.id;
-        return x;
-      }).sort(sortItems);
-
-      var wasLoaded = state.itemsLoaded;
-      state.itemsLoaded = true;
-
-      if (state.list) {
-        var total = state.items.length;
-        var done = state.items.filter(function (x) { return !!x.done; }).length;
-        state.list.itemCount = total;
-        state.list.doneCount = done;
-
-        // Only persist counters when they actually changed. This avoids
-        // a list snapshot -> item resubscription loop.
-        var storedTotal = Number(state.list._storedItemCount);
-        var storedDone = Number(state.list._storedDoneCount);
-        if (storedTotal !== total || storedDone !== done) {
-          state.list._storedItemCount = total;
-          state.list._storedDoneCount = done;
-          db().collection("shoppingLists").doc(listId).set({
-            itemCount: total,
-            doneCount: done,
-            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-          }, {merge:true}).catch(function (error) {
-            console.error("Resolvei list counters:", error);
-          });
-        }
-
-        // Only auto-delete after a list that was already loaded becomes empty.
-        if (wasLoaded && total === 0) {
-          cleanupEmptyList(listId).then(function (deleted) {
-            if (deleted && state.listId === listId) {
-              toast("Lista vazia excluída automaticamente.");
-              if (state.unsubList) { state.unsubList(); state.unsubList = null; }
-              if (state.unsubItems) { state.unsubItems(); state.unsubItems = null; }
-              state.listId = null;
-              state.list = null;
-              state.items = [];
-              state.itemsLoaded = false;
-              goList("");
-            }
-          }).catch(function (error) {
-            console.error("Resolvei auto-delete empty list:", error);
-          });
-          return;
-        }
-
-        renderCurrent();
-      }
-    }, function (error) {
-      console.error("Resolvei shopping items:", error);
-      toast("Não foi possível sincronizar os produtos. " + (error.message || ""));
+  function persistLegacyItems(listId, legacyItems, ref, data) {
+    var clean = normalizeEmbeddedItems(legacyItems).map(function (item, index) {
+      item.position = index;
+      return item;
+    });
+    return ref.update({
+      items: clean,
+      itemCount: clean.length,
+      doneCount: clean.filter(function (x) { return !!x.done; }).length,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    }).then(function () {
+      return clean;
     });
   }
+
+  function migrateLegacyItems(listId, ref, data) {
+    if (Object.prototype.hasOwnProperty.call(data || {}, "items")) {
+      return Promise.resolve(stateFromEmbeddedList(data));
+    }
+    if (state.legacyMigrationAttempted[listId]) return Promise.resolve([]);
+    state.legacyMigrationAttempted[listId] = true;
+    return ref.collection("items").get().then(function (snap) {
+      var legacy = snap.docs.map(function (d) {
+        var item = d.data() || {};
+        item.id = d.id;
+        return item;
+      }).sort(sortItems);
+      return persistLegacyItems(listId, legacy, ref, data);
+    }).catch(function (error) {
+      console.error("Resolvei legacy shopping migration:", error);
+      toast("Não foi possível sincronizar os itens antigos desta lista.");
+      return [];
+    });
+  }
+
+  function applyEmbeddedItems(items) {
+    state.items = normalizeEmbeddedItems(items);
+    state.itemsLoaded = true;
+    if (state.list) {
+      state.list.items = state.items.slice();
+      state.list.itemCount = state.items.length;
+      state.list.doneCount = state.items.filter(function (x) { return !!x.done; }).length;
+    }
+    renderCurrent();
+  }
+
+  // A lista completa fica no documento principal. Assim, todos os usuários
+  // acompanham o mesmo snapshot em tempo real e as alterações usam transações,
+  // evitando perda quando duas pessoas editam ao mesmo tempo.
+  function subscribeItems() { return; }
+
+
 
   function subscribeList(id) {
     if (state.unsubList) { state.unsubList(); state.unsubList = null; }
@@ -647,7 +651,7 @@
       if (!snap.exists) {
         state.list = null;
         state.items = [];
-        if (state.unsubItems) { state.unsubItems(); state.unsubItems = null; }
+        state.itemsLoaded = false;
         renderLoading("Esta lista não existe ou foi removida.");
         return;
       }
@@ -659,18 +663,55 @@
       state.list = data;
 
       var members = Array.isArray(data.memberIds) ? data.memberIds : [];
-      if (members.indexOf(uid()) >= 0) {
-        if (!state.unsubItems) subscribeItems();
+      if (members.indexOf(uid()) === -1) {
+        state.items = [];
+        state.itemsLoaded = false;
         renderCurrent();
-      } else {
-        if (state.unsubItems) { state.unsubItems(); state.unsubItems = null; }
-        renderCurrent();
+        return;
+      }
+
+      if (!Object.prototype.hasOwnProperty.call(data, "items")) {
+        renderLoading("Sincronizando itens da lista...");
+        migrateLegacyItems(listId, ref, data).then(function (items) {
+          if (state.listId !== listId) return;
+          applyEmbeddedItems(items);
+          if (!items.length) {
+            cleanupEmptyList(listId).then(function (deleted) {
+              if (!deleted || state.listId !== listId) return;
+              toast("Lista vazia excluída automaticamente.");
+            }).catch(function (error) {
+              console.error("Resolvei auto-delete empty list:", error);
+            });
+          }
+        });
+        return;
+      }
+
+      var items = stateFromEmbeddedList(data);
+      applyEmbeddedItems(items);
+
+      // Listas sem itens são inválidas e devem desaparecer automaticamente.
+      if (!items.length && state.listId === listId) {
+        cleanupEmptyList(listId).then(function (deleted) {
+          if (!deleted || state.listId !== listId) return;
+          toast("Lista vazia excluída automaticamente.");
+          if (state.unsubList) { state.unsubList(); state.unsubList = null; }
+          state.listId = null;
+          state.list = null;
+          state.items = [];
+          state.itemsLoaded = false;
+          goList("");
+        }).catch(function (error) {
+          console.error("Resolvei auto-delete empty list:", error);
+        });
       }
     }, function (error) {
       console.error("Resolvei shopping list:", error);
       renderLoading("Não foi possível abrir esta lista. " + (error.message || "Verifique o login e o link compartilhado."));
     });
   }
+
+
 
   function subscribeLists() {
     if (state.unsubLists) { state.unsubLists(); state.unsubLists = null; }
@@ -695,6 +736,7 @@
     var msg = document.getElementById("shoppingHomeMsg");
     var title = (titleInput ? titleInput.value.trim() : "") || "Compras";
     var parsed = parseListText(input ? input.value : "");
+
     if (!parsed.length) {
       if (msg) { msg.hidden = false; msg.textContent = "Digite pelo menos um produto para organizar a lista."; }
       return;
@@ -705,23 +747,10 @@
     }
 
     var ref = db().collection("shoppingLists").doc();
-    var batch = db().batch();
-    var base = {
-      title: title,
-      ownerId: uid(),
-      memberIds: [uid()],
-      shareEnabled: true,
-      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-      itemCount: parsed.length,
-      doneCount: 0,
-      schemaVersion: 1
-    };
-    batch.set(ref, base);
-
-    parsed.forEach(function (item, index) {
-      var itemRef = ref.collection("items").doc();
-      batch.set(itemRef, {
+    var now = Date.now();
+    var initialItems = parsed.map(function (item, index) {
+      return {
+        id: ref.id + "-item-" + index + "-" + Math.random().toString(36).slice(2, 8),
         raw: item.raw,
         name: item.name,
         brand: item.brand || "",
@@ -731,17 +760,32 @@
         done: false,
         position: index,
         createdBy: uid(),
-        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-      });
+        createdAt: now,
+        updatedAt: now
+      };
     });
+
+    var base = {
+      title: title,
+      ownerId: uid(),
+      memberIds: [uid()],
+      shareEnabled: true,
+      items: initialItems,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+      itemCount: initialItems.length,
+      doneCount: 0,
+      schemaVersion: 2
+    };
 
     var button = document.querySelector('[data-action="create-list"]');
     if (button) { button.disabled = true; button.textContent = "Organizando..."; }
 
-    batch.commit().then(function () {
-      state.list = Object.assign({}, base, {id: ref.id, memberIds:[uid()], itemCount:parsed.length, doneCount:0});
+    ref.set(base).then(function () {
+      state.list = Object.assign({}, base, { id: ref.id, items: initialItems.slice(), memberIds: [uid()] });
       state.listId = ref.id;
+      state.items = initialItems.slice();
+      state.itemsLoaded = true;
       goList(ref.id);
     }).catch(function (error) {
       console.error("Resolvei create list:", error);
@@ -750,6 +794,8 @@
       if (button) { button.disabled = false; button.textContent = "🛒 Organizar minha lista"; }
     });
   }
+
+
 
   function addBulkItems() {
     var input = document.getElementById("shoppingBulkInput");
@@ -767,8 +813,9 @@
     var lines = raw.split(/\r?\n/).map(function (x) { return x.trim(); }).filter(Boolean);
     var parsed = [];
     lines.forEach(function (line) {
-      var items = parseListText(line);
-      items.forEach(function (item) { if (item && item.name) parsed.push(item); });
+      parseListText(line).forEach(function (item) {
+        if (item && item.name) parsed.push(item);
+      });
     });
 
     if (!parsed.length) {
@@ -776,41 +823,57 @@
       return;
     }
 
-    var startPosition = state.items.length
-      ? Math.max.apply(null, state.items.map(function (x) { return typeof x.position === "number" ? x.position : 0; })) + 1
-      : 0;
-
-    var batch = db().batch();
-    parsed.forEach(function (item, index) {
-      var ref = db().collection("shoppingLists").doc(state.listId).collection("items").doc();
-      batch.set(ref, {
-        raw: item.raw,
-        name: item.name,
-        brand: item.brand || "",
-        qty: item.qty,
-        unit: item.unit,
-        categoryId: item.categoryId,
-        done: false,
-        position: startPosition + index,
-        createdBy: uid(),
-        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-      });
-    });
-
+    var listRef = db().collection("shoppingLists").doc(state.listId);
     var button = document.querySelector('[data-action="add-bulk"]');
     if (button) { button.disabled = true; button.textContent = "Adicionando..."; }
 
-    batch.commit().then(function () {
+    var now = Date.now();
+    db().runTransaction(function (tx) {
+      return tx.get(listRef).then(function (snap) {
+        if (!snap.exists) throw new Error("Lista não encontrada.");
+        var data = snap.data() || {};
+        var members = Array.isArray(data.memberIds) ? data.memberIds : [];
+        if (members.indexOf(uid()) === -1) throw new Error("Você não participa desta lista.");
+        var current = normalizeEmbeddedItems(data.items);
+        var start = current.length;
+        var additions = parsed.map(function (item, index) {
+          return {
+            id: state.listId + "-item-" + Date.now() + "-" + Math.random().toString(36).slice(2, 8) + "-" + index,
+            raw: item.raw,
+            name: item.name,
+            brand: item.brand || "",
+            qty: item.qty,
+            unit: item.unit,
+            categoryId: item.categoryId,
+            done: false,
+            position: start + index,
+            createdBy: uid(),
+            createdAt: now,
+            updatedAt: now
+          };
+        });
+        var all = current.concat(additions);
+        tx.update(listRef, {
+          items: all,
+          itemCount: all.length,
+          doneCount: all.filter(function (x) { return !!x.done; }).length,
+          updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        return all;
+      });
+    }).then(function (all) {
+      applyEmbeddedItems(all);
       input.value = "";
       toast("✅ " + parsed.length + " " + (parsed.length === 1 ? "produto adicionado." : "produtos adicionados."));
     }).catch(function (error) {
       console.error("Resolvei add bulk:", error);
-      toast("Não foi possível adicionar os produtos. " + (error.message || ""));
+      toast("Não foi possível adicionar os produtos. " + (error.message || "Verifique sua conexão."));
     }).finally(function () {
       if (button) { button.disabled = false; button.textContent = "Adicionar todos"; }
     });
   }
+
+
 
   function addItem() {
     var input = document.getElementById("shoppingAddInput");
@@ -822,7 +885,6 @@
       input.focus();
       return;
     }
-
     if (!state.listId || !uid() || !db()) {
       toast("Sua sessão não está pronta. Entre novamente no Resolvei.");
       return;
@@ -834,28 +896,44 @@
       return;
     }
 
-    var position = state.items.length
-      ? Math.max.apply(null, state.items.map(function (x) {
-          return typeof x.position === "number" ? x.position : 0;
-        })) + 1
-      : 0;
-
+    var listId = state.listId;
+    var listRef = db().collection("shoppingLists").doc(listId);
     var button = document.querySelector('[data-action="add-item"]');
     if (button) { button.disabled = true; button.textContent = "Adicionando..."; }
 
-    db().collection("shoppingLists").doc(state.listId).collection("items").add({
-      raw: parsed.raw,
-      name: parsed.name,
-      brand: parsed.brand || "",
-      qty: parsed.qty,
-      unit: parsed.unit,
-      categoryId: parsed.categoryId,
-      done: false,
-      position: position,
-      createdBy: uid(),
-      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-    }).then(function () {
+    db().runTransaction(function (tx) {
+      return tx.get(listRef).then(function (snap) {
+        if (!snap.exists) throw new Error("Lista não encontrada.");
+        var data = snap.data() || {};
+        var members = Array.isArray(data.memberIds) ? data.memberIds : [];
+        if (members.indexOf(uid()) === -1) throw new Error("Você não participa desta lista.");
+
+        var current = normalizeEmbeddedItems(data.items);
+        var item = {
+          id: listId + "-item-" + Date.now() + "-" + Math.random().toString(36).slice(2, 10),
+          raw: parsed.raw,
+          name: parsed.name,
+          brand: parsed.brand || "",
+          qty: parsed.qty,
+          unit: parsed.unit,
+          categoryId: parsed.categoryId,
+          done: false,
+          position: current.length,
+          createdBy: uid(),
+          createdAt: Date.now(),
+          updatedAt: Date.now()
+        };
+        var all = current.concat([item]);
+        tx.update(listRef, {
+          items: all,
+          itemCount: all.length,
+          doneCount: all.filter(function (x) { return !!x.done; }).length,
+          updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        return all;
+      });
+    }).then(function (all) {
+      applyEmbeddedItems(all);
       input.value = "";
       input.focus();
       toast("✅ Produto adicionado à lista.");
@@ -868,16 +946,40 @@
     });
   }
 
+
+
   function toggleItem(id, done) {
     if (!state.listId || !id || !uid() || !db()) return;
-    db().collection("shoppingLists").doc(state.listId).collection("items").doc(id).update({
-      done: !!done,
-      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-    }).catch(function (error) {
+    var listRef = db().collection("shoppingLists").doc(state.listId);
+    db().runTransaction(function (tx) {
+      return tx.get(listRef).then(function (snap) {
+        if (!snap.exists) throw new Error("Lista não encontrada.");
+        var data = snap.data() || {};
+        var members = Array.isArray(data.memberIds) ? data.memberIds : [];
+        if (members.indexOf(uid()) === -1) throw new Error("Você não participa desta lista.");
+        var items = normalizeEmbeddedItems(data.items);
+        var found = false;
+        items = items.map(function (item) {
+          if (item.id !== id) return item;
+          found = true;
+          return Object.assign({}, item, {done: !!done, updatedAt: Date.now()});
+        });
+        if (!found) throw new Error("Item não encontrado.");
+        tx.update(listRef, {
+          items: items,
+          itemCount: items.length,
+          doneCount: items.filter(function (x) { return !!x.done; }).length,
+          updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        return items;
+      });
+    }).then(applyEmbeddedItems).catch(function (error) {
       toast("Não foi possível atualizar o item.");
-      console.error(error);
+      console.error("Resolvei toggle item:", error);
     });
   }
+
+
 
   function editItem(id) {
     if (!state.items.some(function (x) { return x.id === id; })) return;
@@ -895,10 +997,8 @@
   }
 
   function saveEditItem(id) {
-    var item = state.items.find(function (x) { return x.id === id; });
-    if (!item || !state.listId || !uid() || !db()) return;
     var row = document.querySelector('[data-item-row="' + CSS.escape(id) + '"]');
-    if (!row) return;
+    if (!row || !state.listId || !uid() || !db()) return;
     var name = row.querySelector('[data-edit-name]')?.value?.trim() || "";
     var qty = parseNumber(row.querySelector('[data-edit-qty]')?.value);
     var unit = row.querySelector('[data-edit-unit]')?.value || "un.";
@@ -906,44 +1006,109 @@
       toast("Informe um produto e uma quantidade válida.");
       return;
     }
+
     var brandInfo = extractBrand(name);
     var productName = brandInfo.product;
     var category = categoryFor(productName);
-    db().collection("shoppingLists").doc(state.listId).collection("items").doc(id).update({
-      name: titleCase(productName),
-      brand: brandInfo.brand || "",
-      qty: qty,
-      unit: unit,
-      raw: name + " " + formatQty(qty) + " " + unit,
-      categoryId: category.id,
-      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-    }).then(function () {
+    var listRef = db().collection("shoppingLists").doc(state.listId);
+
+    db().runTransaction(function (tx) {
+      return tx.get(listRef).then(function (snap) {
+        if (!snap.exists) throw new Error("Lista não encontrada.");
+        var data = snap.data() || {};
+        var members = Array.isArray(data.memberIds) ? data.memberIds : [];
+        if (members.indexOf(uid()) === -1) throw new Error("Você não participa desta lista.");
+        var items = normalizeEmbeddedItems(data.items).map(function (item) {
+          if (item.id !== id) return item;
+          return Object.assign({}, item, {
+            name: titleCase(productName),
+            brand: brandInfo.brand || "",
+            qty: qty,
+            unit: unit,
+            raw: name + " " + formatQty(qty) + " " + unit,
+            categoryId: category.id,
+            updatedAt: Date.now()
+          });
+        });
+        tx.update(listRef, {items:items,updatedAt:firebase.firestore.FieldValue.serverTimestamp()});
+        return items;
+      });
+    }).then(function (items) {
+      applyEmbeddedItems(items);
       state.editingId = null;
       toast("Item atualizado.");
     }).catch(function (error) {
       toast("Não foi possível editar o item.");
-      console.error(error);
+      console.error("Resolvei edit item:", error);
     });
   }
 
+
+
   function deleteItem(id) {
     if (!window.confirm("Excluir este produto da lista?")) return;
-    db().collection("shoppingLists").doc(state.listId).collection("items").doc(id).delete()
-      .then(function () { toast("Item excluído."); })
-      .catch(function (error) { toast("Não foi possível excluir o item."); console.error(error); });
+    if (!state.listId || !uid() || !db()) return;
+    var listRef = db().collection("shoppingLists").doc(state.listId);
+
+    db().runTransaction(function (tx) {
+      return tx.get(listRef).then(function (snap) {
+        if (!snap.exists) throw new Error("Lista não encontrada.");
+        var data = snap.data() || {};
+        if ((data.memberIds || []).indexOf(uid()) === -1) throw new Error("Você não participa desta lista.");
+        var items = normalizeEmbeddedItems(data.items).filter(function (item) { return item.id !== id; });
+        tx.update(listRef, {
+          items: items,
+          itemCount: items.length,
+          doneCount: items.filter(function (x) { return !!x.done; }).length,
+          updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        return items;
+      });
+    }).then(function (items) {
+      applyEmbeddedItems(items);
+      toast("Item excluído.");
+    }).catch(function (error) {
+      toast("Não foi possível excluir o item.");
+      console.error("Resolvei delete item:", error);
+    });
   }
+
+
 
   function clearDone() {
     var done = state.items.filter(function (x) { return x.done; });
     if (!done.length) return;
     if (!window.confirm("Remover todos os itens já marcados como comprados?")) return;
-    var batch = db().batch();
-    done.forEach(function (item) {
-      batch.delete(db().collection("shoppingLists").doc(state.listId).collection("items").doc(item.id));
+    if (!state.listId || !uid() || !db()) return;
+
+    var listRef = db().collection("shoppingLists").doc(state.listId);
+    db().runTransaction(function (tx) {
+      return tx.get(listRef).then(function (snap) {
+        if (!snap.exists) throw new Error("Lista não encontrada.");
+        var data = snap.data() || {};
+        if ((data.memberIds || []).indexOf(uid()) === -1) throw new Error("Você não participa desta lista.");
+        var items = normalizeEmbeddedItems(data.items).filter(function (item) { return !item.done; });
+        tx.update(listRef, {
+          items: items,
+          itemCount: items.length,
+          doneCount: 0,
+          updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        return items;
+      });
+    }).then(function (items) {
+      applyEmbeddedItems(items);
+      toast("Itens comprados removidos.");
+      if (!items.length) cleanupEmptyList(state.listId).catch(function (error) {
+        console.error("Resolvei cleanup after clear:", error);
+      });
+    }).catch(function (error) {
+      toast("Não foi possível limpar os itens.");
+      console.error("Resolvei clear done:", error);
     });
-    batch.commit().then(function () { toast("Itens comprados removidos."); })
-      .catch(function (error) { toast("Não foi possível limpar os itens."); console.error(error); });
   }
+
+
 
   function renameList() {
     state.editingTitle = true;
@@ -1043,66 +1208,66 @@
     var source = state.lists.find(function (x) { return x.id === id; }) || (state.listId === id ? state.list : null);
     if (!source) return;
 
-    // Para uma lista finalizada, clonamos os itens atuais e zeramos o check.
-    var sourceItems = state.listId === id ? state.items.slice().sort(sortItems) : [];
-    var createFrom = function (items) {
+    var cloneFrom = function (items) {
+      var sourceItems = normalizeEmbeddedItems(items);
+      if (!sourceItems.length) {
+        toast("Esta lista não possui itens para reaproveitar.");
+        return Promise.resolve();
+      }
+
       var ref = db().collection("shoppingLists").doc();
+      var now = Date.now();
+      var clonedItems = sourceItems.map(function (item, index) {
+        return Object.assign({}, item, {
+          id: ref.id + "-item-" + index + "-" + Math.random().toString(36).slice(2, 8),
+          done: false,
+          position: index,
+          createdBy: uid(),
+          createdAt: now,
+          updatedAt: now
+        });
+      });
       var base = {
         title: (source.title || "Lista de compras") + " — nova",
         ownerId: uid(),
         memberIds: [uid()],
         shareEnabled: true,
+        items: clonedItems,
         createdAt: firebase.firestore.FieldValue.serverTimestamp(),
         updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
-        itemCount: items.length,
+        itemCount: clonedItems.length,
         doneCount: 0,
-        schemaVersion: 1,
+        schemaVersion: 2,
         reusedFromId: id
       };
-      var batch = db().batch();
-      batch.set(ref, base);
-      items.forEach(function (item, index) {
-        var itemRef = ref.collection("items").doc();
-        batch.set(itemRef, {
-          raw: item.raw || (item.name + " " + formatQty(item.qty) + " " + (item.unit || "un.")),
-          name: item.name,
-          brand: item.brand || "",
-          qty: item.qty || 1,
-          unit: item.unit || "un.",
-          categoryId: categoryFor(item.name).id,
-          done: false,
-          position: index,
-          createdBy: uid(),
-          createdAt: firebase.firestore.FieldValue.serverTimestamp(),
-          updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-        });
-      });
-      return batch.commit().then(function () {
+
+      return ref.set(base).then(function () {
         state.listId = ref.id;
         state.list = Object.assign({}, base, {id:ref.id});
-        state.items = [];
+        state.items = clonedItems.slice();
+        state.itemsLoaded = true;
         goList(ref.id);
         toast("Nova lista criada a partir da lista anterior.");
       });
     };
 
-    if (sourceItems.length) {
-      createFrom(sourceItems).catch(function (error) {
-        console.error("Resolvei reuse list:", error);
-        toast("Não foi possível reaproveitar a lista.");
-      });
-      return;
-    }
+    var sourceItems = Array.isArray(source.items) ? source.items : [];
+    if (sourceItems.length) return cloneFrom(sourceItems);
 
-    // Quando a lista é finalizada e não está aberta, buscamos os itens antes de clonar.
-    db().collection("shoppingLists").doc(id).collection("items").get().then(function (snap) {
-      var items = snap.docs.map(function (d) { var x=d.data()||{}; x.id=d.id; return x; }).sort(sortItems);
-      return createFrom(items);
+    return db().collection("shoppingLists").doc(id).collection("items").get().then(function (snap) {
+      var items = snap.docs.map(function (d) {
+        var x = d.data() || {};
+        x.id = d.id;
+        return x;
+      }).sort(sortItems);
+      return cloneFrom(items);
     }).catch(function (error) {
       console.error("Resolvei fetch reuse items:", error);
       toast("Não foi possível carregar os itens da lista.");
     });
   }
+
+
 
   function newList() {
     goList("");
