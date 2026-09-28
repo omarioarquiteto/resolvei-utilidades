@@ -419,7 +419,7 @@
             ["un.","kg","g","L","ml","pct.","pacote","pacotes","caixa","caixas","garrafa","garrafas","lata","latas","maço","maços","rolo","rolos","dúzia","dúzias","barra","barras","frasco","frascos","saco","sacos","pote","potes"].map(function(u){ return '<option value="' + esc(u) + '"' + (u === (item.unit || "un.") ? " selected" : "") + '>' + esc(u) + '</option>'; }).join("") +
           '</select></label>' +
           '<label class="field"><span>Classificação</span><select data-edit-category>' +
-            CATEGORIES.map(function(cat){ return '<option value="' + esc(cat.id) + '"' + (cat.id === categoryFor(item.name).id ? " selected" : "") + '>' + cat.icon + ' ' + esc(cat.title) + '</option>'; }).join("") +
+            CATEGORIES.map(function(cat){ return '<option value="' + esc(cat.id) + '"' + (cat.id === (item.categoryId || categoryFor(item.name).id) ? " selected" : "") + '>' + cat.icon + ' ' + esc(cat.title) + '</option>'; }).join("") +
           '</select></label>' +
         '</div>' +
         '<div class="shopping-edit-actions">' +
@@ -447,7 +447,7 @@
     var groups = {};
 
     visible.forEach(function (item) {
-      var cid = categoryFor(item.name).id;
+      var cid = item.categoryId || categoryFor(item.name).id;
       if (!groups[cid]) groups[cid] = [];
       groups[cid].push(item);
     });
@@ -576,8 +576,11 @@
       item.brand = String(item.brand || "");
       item.qty = Number(item.qty) > 0 ? Number(item.qty) : 1;
       item.unit = item.unit || "un.";
-      item.categoryId = state.classificationRules[normalize(item.name)]
-        || item.categoryId
+      var normalizedName = normalize(item.name);
+      var storedCategoryId = item.categoryId && categoryById(item.categoryId).id === item.categoryId
+        ? item.categoryId : "";
+      item.categoryId = storedCategoryId
+        || state.classificationRules[normalizedName]
         || categoryFor(item.name).id;
       item.done = !!item.done;
       item.position = typeof item.position === "number" ? item.position : 999999;
@@ -681,7 +684,19 @@
       categoryId: categoryId,
       updatedAt: firebase.firestore.FieldValue.serverTimestamp()
     };
-    return db().collection("users").doc(uid()).set(update, {merge:true});
+    return db().collection("users").doc(uid()).update(update).catch(function (error) {
+      // O documento do usuário pode ainda não existir em contas antigas.
+      if (error && error.code === "not-found") {
+        var initial = {shoppingCategoryRules:{}};
+        initial.shoppingCategoryRules[classificationRuleKey(normalized)] = {
+          product: normalized,
+          categoryId: categoryId,
+          updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        };
+        return db().collection("users").doc(uid()).set(initial, {merge:true});
+      }
+      throw error;
+    });
   }
 
   function applyEmbeddedItems(items) {
