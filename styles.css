@@ -444,3 +444,16 @@ button, input, select { font: inherit; }
 }
 
 .shopping-brand { color:var(--muted); font-style:normal; font-weight:600; font-size:.92em; }
+
+.shopping-history-group { margin-top:18px; }
+.shopping-history-group:first-of-type { margin-top:10px; }
+.shopping-history-group-title { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:8px; padding-bottom:7px; border-bottom:1px solid var(--line); font-size:13px; font-weight:800; }
+.shopping-history-group-title b { min-width:24px; height:24px; display:grid; place-items:center; padding:0 7px; border-radius:999px; background:var(--accent-soft); color:var(--accent); font-size:11px; }
+.shopping-history-group-title.finalized { color:var(--success); }
+.shopping-history-item { display:grid; grid-template-columns:1fr auto; align-items:stretch; border:1px solid var(--line); border-radius:13px; overflow:hidden; background:var(--surface); }
+.shopping-history-item + .shopping-history-item { margin-top:8px; }
+.shopping-history-item .shopping-history-row { border:0; border-radius:0; }
+.shopping-history-side-actions { display:flex; align-items:center; gap:4px; padding:6px; }
+.shopping-history-delete, .shopping-history-reuse { width:34px; height:34px; border:1px solid var(--line); border-radius:10px; background:var(--surface); color:var(--muted); cursor:pointer; font-weight:800; }
+.shopping-history-delete:hover { color:var(--danger); border-color:color-mix(in srgb,var(--danger) 40%,var(--line)); }
+.shopping-history-reuse:hover { color:var(--accent); border-color:var(--accent); }
