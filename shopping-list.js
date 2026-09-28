@@ -35,6 +35,7 @@
     authBound: false,
     eventsBound: false,
     marketMode: false,
+    editingId: null,
     toastTimer: null
   };
   window.resolveiShoppingState = state;
@@ -297,6 +298,20 @@
 
   function itemMarkup(item) {
     var doneClass = item.done ? " done" : "";
+    var editing = state.editingId === item.id;
+    if (editing) {
+      return '<div class="shopping-edit-card" data-item-row="' + esc(item.id) + '">' +
+        '<div class="shopping-edit-title">Editar produto</div>' +
+        '<div class="shopping-edit-grid">' +
+          '<label class="field"><span>Produto</span><input data-edit-name type="text" value="' + esc(item.name) + '" maxlength="120"></label>' +
+          '<label class="field"><span>Quantidade</span><input data-edit-qty type="number" min="0.001" step="any" value="' + esc(item.qty) + '"></label>' +
+          '<label class="field"><span>Unidade</span><select data-edit-unit>' +
+            ["un.","kg","g","L","ml","pct.","pacote","pacotes","caixa","caixas","garrafa","garrafas","lata","latas","maço","maços","rolo","rolos","dúzia","dúzias","barra","barras","frasco","frascos","saco","sacos","pote","potes"].map(function(u){ return '<option value="' + esc(u) + '"' + (u === (item.unit || "un.") ? " selected" : "") + '>' + esc(u) + '</option>'; }).join("") +
+          '</select></label>' +
+        '</div>' +
+        '<div class="shopping-edit-actions"><button class="btn primary" type="button" data-action="save-edit-item" data-item-id="' + esc(item.id) + '">Salvar</button><button class="btn ghost" type="button" data-action="cancel-edit">Cancelar</button></div>' +
+      '</div>';
+    }
     return '<div class="shopping-item-row' + doneClass + '" data-item-row="' + esc(item.id) + '">' +
       '<label class="shopping-check-label">' +
         '<input type="checkbox" data-action="toggle-item" data-item-id="' + esc(item.id) + '"' + (item.done ? " checked" : "") + '>' +
@@ -565,23 +580,42 @@
   }
 
   function editItem(id) {
+    if (!state.items.some(function (x) { return x.id === id; })) return;
+    state.editingId = id;
+    renderList();
+    setTimeout(function () {
+      var input = document.querySelector('[data-item-row="' + CSS.escape(id) + '"] [data-edit-name]');
+      if (input) { input.focus(); input.select(); }
+    }, 0);
+  }
+
+  function cancelEdit() {
+    state.editingId = null;
+    renderList();
+  }
+
+  function saveEditItem(id) {
     var item = state.items.find(function (x) { return x.id === id; });
-    if (!item) return;
-    var value = window.prompt("Edite o produto. Você pode alterar nome, quantidade e unidade:", item.raw || (item.name + " " + formatQty(item.qty) + " " + item.unit));
-    if (value === null) return;
-    var parsed = parseShoppingLine(value);
-    if (!parsed || !parsed.name) {
-      toast("Produto inválido.");
+    if (!item || !state.listId || !uid() || !db()) return;
+    var row = document.querySelector('[data-item-row="' + CSS.escape(id) + '"]');
+    if (!row) return;
+    var name = row.querySelector('[data-edit-name]')?.value?.trim() || "";
+    var qty = parseNumber(row.querySelector('[data-edit-qty]')?.value);
+    var unit = row.querySelector('[data-edit-unit]')?.value || "un.";
+    if (!name || qty <= 0) {
+      toast("Informe um produto e uma quantidade válida.");
       return;
     }
+    var category = categoryFor(name);
     db().collection("shoppingLists").doc(state.listId).collection("items").doc(id).update({
-      raw: parsed.raw,
-      name: parsed.name,
-      qty: parsed.qty,
-      unit: parsed.unit,
-      categoryId: parsed.categoryId,
+      name: titleCase(name),
+      qty: qty,
+      unit: unit,
+      raw: name + " " + formatQty(qty) + " " + unit,
+      categoryId: category.id,
       updatedAt: firebase.firestore.FieldValue.serverTimestamp()
     }).then(function () {
+      state.editingId = null;
       toast("Item atualizado.");
     }).catch(function (error) {
       toast("Não foi possível editar o item.");
@@ -671,6 +705,8 @@
       else if (action === "toggle-market") { state.marketMode = !state.marketMode; renderList(); }
       else if (action === "toggle-item") {}
       else if (action === "edit-item") editItem(el.getAttribute("data-item-id"));
+      else if (action === "save-edit-item") saveEditItem(el.getAttribute("data-item-id"));
+      else if (action === "cancel-edit") cancelEdit();
       else if (action === "delete-item") deleteItem(el.getAttribute("data-item-id"));
       else if (action === "clear-done") clearDone();
       else if (action === "rename-list") renameList();
