@@ -655,7 +655,8 @@
 
   function bindEvents() {
     var shell = document.getElementById("shoppingTool");
-    if (!shell || state.eventsBound) return;
+    if (!shell || shell.dataset.bound === "1") return;
+    shell.dataset.bound = "1";
     state.eventsBound = true;
 
     shell.addEventListener("click", function (event) {
