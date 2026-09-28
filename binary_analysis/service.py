@@ -188,6 +188,10 @@ def get_candles(session_id: str, asset: str, interval: int, count: int, include_
         raw = raw.get("candles") or raw.get("data") or []
     candles = [_normalize(x) for x in (raw or []) if isinstance(x, dict)]
     candles = sorted({c["time"]: c for c in candles}.values(), key=lambda x: x["time"])
+    if include_current:
+        live = get_realtime_candle(session_id, asset, interval)
+        if live and live.get('time'):
+            candles = sorted({c['time']: c for c in (candles + [live])}.values(), key=lambda x: x['time'])
     if not include_current:
         bucket = int(time.time()) // interval * interval
         candles = [x for x in candles if x["time"] < bucket]
@@ -196,9 +200,11 @@ def get_candles(session_id: str, asset: str, interval: int, count: int, include_
 def get_realtime_candle(session_id: str, asset: str, interval: int):
     client = get_client(session_id)
     try:
+        client.start_candles_stream(asset, interval, 20)
+        time.sleep(0.15)
         data = client.get_realtime_candles(asset, interval)
         if isinstance(data, dict) and data:
-            item = max(data.values(), key=lambda x: int(x.get("from", 0)))
+            item = max(data.values(), key=lambda x: int(x.get('from', 0)))
             return _normalize(item)
     except Exception:
         pass
