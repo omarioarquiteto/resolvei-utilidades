@@ -35,6 +35,7 @@
     authBound: false,
     eventsBound: false,
     marketMode: false,
+    itemsLoaded: false,
     editingId: null,
     toastTimer: null
   };
@@ -336,15 +337,41 @@
       '</section>';
   }
 
-  function renderHome() {
-    var listRows = state.lists.length ? state.lists.map(function (x) {
-      var memberCount = Array.isArray(x.memberIds) ? x.memberIds.length : 1;
-      return '<button class="shopping-history-row" type="button" data-action="open-list" data-list-id="' + esc(x.id) + '">' +
-        '<span class="shopping-history-icon">🛒</span>' +
-        '<span class="shopping-history-main"><strong>' + esc(x.title || "Lista de compras") + '</strong><small>' + memberCount + ' ' + (memberCount === 1 ? "pessoa" : "pessoas") + '</small></span>' +
+  function listIsFinalized(list) {
+    var count = Number(list.itemCount || 0);
+    var done = Number(list.doneCount || 0);
+    return count > 0 && done >= count;
+  }
+
+  function listHistoryRow(x, finalized) {
+    var memberCount = Array.isArray(x.memberIds) ? x.memberIds.length : 1;
+    var count = Number(x.itemCount || 0);
+    var done = Number(x.doneCount || 0);
+    var status = finalized ? (count + " " + (count === 1 ? "item" : "itens") + " · concluída") : (count + " " + (count === 1 ? "item" : "itens") + (done ? " · " + done + " comprados" : ""));
+    return '<div class="shopping-history-item">' +
+      '<button class="shopping-history-row" type="button" data-action="open-list" data-list-id="' + esc(x.id) + '">' +
+        '<span class="shopping-history-icon">' + (finalized ? "✅" : "🛒") + '</span>' +
+        '<span class="shopping-history-main"><strong>' + esc(x.title || "Lista de compras") + '</strong><small>' + esc(status) + ' · ' + memberCount + ' ' + (memberCount === 1 ? "pessoa" : "pessoas") + '</small></span>' +
         '<span class="shopping-history-arrow">›</span>' +
-      '</button>';
-    }).join("") : '<div class="shopping-empty-history">Nenhuma lista criada ainda.</div>';
+      '</button>' +
+      '<div class="shopping-history-side-actions">' +
+        (finalized ? '<button class="shopping-history-reuse" type="button" title="Reaproveitar lista" aria-label="Reaproveitar lista" data-action="reuse-list" data-list-id="' + esc(x.id) + '">↻</button>' : '') +
+        '<button class="shopping-history-delete" type="button" title="Excluir lista" aria-label="Excluir lista" data-action="delete-list" data-list-id="' + esc(x.id) + '">×</button>' +
+      '</div>' +
+    '</div>';
+  }
+
+  function renderHome() {
+    var active = state.lists.filter(function (x) { return !listIsFinalized(x); });
+    var finalized = state.lists.filter(function (x) { return listIsFinalized(x); });
+
+    var activeHtml = active.length
+      ? active.map(function (x) { return listHistoryRow(x, false); }).join("")
+      : '<div class="shopping-empty-history">Nenhuma lista ativa.</div>';
+
+    var finalizedHtml = finalized.length
+      ? finalized.map(function (x) { return listHistoryRow(x, true); }).join("")
+      : '<div class="shopping-empty-history">Nenhuma lista finalizada.</div>';
 
     root().innerHTML =
       '<div class="shopping-header-block">' +
@@ -361,8 +388,9 @@
           '<div id="shoppingHomeMsg" class="notice" hidden></div>' +
         '</section>' +
         '<section class="card panel shopping-history-card">' +
-          '<div class="shopping-section-title"><div><h3>Minhas listas</h3><p>Listas que você criou ou que foram compartilhadas com você.</p></div></div>' +
-          '<div class="shopping-history">' + listRows + '</div>' +
+          '<div class="shopping-section-title"><div><h3>Minhas listas</h3><p>Listas compartilhadas e criadas por você.</p></div></div>' +
+          '<div class="shopping-history-group"><div class="shopping-history-group-title"><span>🛒 Listas ativas</span><b>' + active.length + '</b></div><div class="shopping-history">' + activeHtml + '</div></div>' +
+          '<div class="shopping-history-group"><div class="shopping-history-group-title finalized"><span>✅ Listas finalizadas</span><b>' + finalized.length + '</b></div><div class="shopping-history">' + finalizedHtml + '</div></div>' +
         '</section>' +
       '</div>';
   }
@@ -489,19 +517,54 @@
     renderList();
   }
 
+  function recalcListMeta() {
+    if (!state.listId || !state.list || !db()) return;
+    var total = state.items.length;
+    var done = state.items.filter(function (x) { return !!x.done; }).length;
+    state.list.itemCount = total;
+    state.list.doneCount = done;
+
+    // Um item acabou de ser removido e a lista ficou sem itens:
+    // apagar automaticamente a lista (não há mais conteúdo para preservar).
+    if (state.itemsLoaded && total === 0) {
+      db().collection("shoppingLists").doc(state.listId).delete()
+        .then(function () {
+          toast("Lista vazia excluída automaticamente.");
+          state.listId = null;
+          state.list = null;
+          state.items = [];
+          goList("");
+        })
+        .catch(function (error) {
+          console.error("Resolvei auto-delete empty list:", error);
+        });
+      return;
+    }
+
+    db().collection("shoppingLists").doc(state.listId).update({
+      itemCount: total,
+      doneCount: done,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    }).catch(function (error) {
+      console.error("Resolvei list counters:", error);
+    });
+  }
+
   function subscribeItems() {
     if (state.unsubItems) { state.unsubItems(); state.unsubItems = null; }
     if (!state.listId || !uid()) return;
     var ref = db().collection("shoppingLists").doc(state.listId).collection("items");
+    state.itemsLoaded = false;
     state.unsubItems = ref.onSnapshot(function (snap) {
       state.items = snap.docs.map(function (d) {
         var x = d.data() || {};
         x.id = d.id;
         return x;
       }).sort(sortItems);
+      state.itemsLoaded = true;
       if (state.list) {
-        state.list.itemCount = state.items.length;
-        renderCurrent();
+        recalcListMeta();
+        if (state.listId) renderCurrent();
       }
     }, function () {
       toast("Não foi possível sincronizar os itens desta lista.");
@@ -514,6 +577,7 @@
     state.listId = id;
     state.list = null;
     state.items = [];
+    state.itemsLoaded = false;
     if (!id || !db() || !uid()) { renderCurrent(); return; }
 
     renderLoading("Abrindo lista...");
@@ -578,6 +642,7 @@
       createdAt: firebase.firestore.FieldValue.serverTimestamp(),
       updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
       itemCount: parsed.length,
+      doneCount: 0,
       schemaVersion: 1
     };
     batch.set(ref, base);
@@ -603,7 +668,7 @@
     if (button) { button.disabled = true; button.textContent = "Organizando..."; }
 
     batch.commit().then(function () {
-      state.list = Object.assign({}, base, {id: ref.id, memberIds:[uid()], itemCount:parsed.length});
+      state.list = Object.assign({}, base, {id: ref.id, memberIds:[uid()], itemCount:parsed.length, doneCount:0});
       state.listId = ref.id;
       goList(ref.id);
     }).catch(function (error) {
@@ -756,10 +821,101 @@
     });
   }
 
+  function deleteList(id) {
+    var target = state.lists.find(function (x) { return x.id === id; });
+    if (!target) return;
+    var u = user();
+    if (!u || target.ownerId !== u.uid) {
+      toast("Somente quem criou a lista pode excluí-la.");
+      return;
+    }
+    if (!window.confirm("Excluir a lista " + (target.title || "de compras") + "? Esta ação não pode ser desfeita.")) return;
+
+    db().collection("shoppingLists").doc(id).delete().then(function () {
+      toast("Lista excluída.");
+      if (state.listId === id) {
+        state.listId = null;
+        state.list = null;
+        state.items = [];
+        goList("");
+      }
+    }).catch(function (error) {
+      console.error("Resolvei delete list:", error);
+      toast("Não foi possível excluir a lista.");
+    });
+  }
+
+  function reuseList(id) {
+    if (!db() || !uid()) return;
+    var source = state.lists.find(function (x) { return x.id === id; }) || (state.listId === id ? state.list : null);
+    if (!source) return;
+
+    // Para uma lista finalizada, clonamos os itens atuais e zeramos o check.
+    var sourceItems = state.listId === id ? state.items.slice().sort(sortItems) : [];
+    var createFrom = function (items) {
+      var ref = db().collection("shoppingLists").doc();
+      var base = {
+        title: (source.title || "Lista de compras") + " — nova",
+        ownerId: uid(),
+        memberIds: [uid()],
+        shareEnabled: true,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+        itemCount: items.length,
+        doneCount: 0,
+        schemaVersion: 1,
+        reusedFromId: id
+      };
+      var batch = db().batch();
+      batch.set(ref, base);
+      items.forEach(function (item, index) {
+        var itemRef = ref.collection("items").doc();
+        batch.set(itemRef, {
+          raw: item.raw || (item.name + " " + formatQty(item.qty) + " " + (item.unit || "un.")),
+          name: item.name,
+          brand: item.brand || "",
+          qty: item.qty || 1,
+          unit: item.unit || "un.",
+          categoryId: categoryFor(item.name).id,
+          done: false,
+          position: index,
+          createdBy: uid(),
+          createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+          updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        });
+      });
+      return batch.commit().then(function () {
+        state.listId = ref.id;
+        state.list = Object.assign({}, base, {id:ref.id});
+        state.items = [];
+        goList(ref.id);
+        toast("Nova lista criada a partir da lista anterior.");
+      });
+    };
+
+    if (sourceItems.length) {
+      createFrom(sourceItems).catch(function (error) {
+        console.error("Resolvei reuse list:", error);
+        toast("Não foi possível reaproveitar a lista.");
+      });
+      return;
+    }
+
+    // Quando a lista é finalizada e não está aberta, buscamos os itens antes de clonar.
+    db().collection("shoppingLists").doc(id).collection("items").get().then(function (snap) {
+      var items = snap.docs.map(function (d) { var x=d.data()||{}; x.id=d.id; return x; }).sort(sortItems);
+      return createFrom(items);
+    }).catch(function (error) {
+      console.error("Resolvei fetch reuse items:", error);
+      toast("Não foi possível carregar os itens da lista.");
+    });
+  }
+
   function newList() {
     goList("");
     state.list = null;
     state.items = [];
+    state.itemsLoaded = false;
     renderHome();
   }
 
@@ -788,6 +944,10 @@
       else if (action === "rename-list") renameList();
       else if (action === "share") share();
       else if (action === "join-list") joinList();
+      else if (action === "delete-list") deleteList(el.getAttribute("data-list-id"));
+      else if (action === "reuse-list") reuseList(el.getAttribute("data-list-id"));
+      else if (action === "reuse-current-list") reuseList(state.listId);
+      else if (action === "delete-current-list") deleteList(state.listId);
     });
 
     shell.addEventListener("change", function (event) {
