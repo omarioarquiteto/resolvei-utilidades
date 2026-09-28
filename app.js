@@ -111,7 +111,7 @@ const tools = [
   {id:'festa',cat:'festas',icon:'🥳',title:'Planejador de festa',desc:'Estime comida, bebida, bolo e descartáveis.',tags:'festa aniversario convidados salgados'},
   {id:'bolo',cat:'festas',icon:'🍰',title:'Quantidade de bolo',desc:'Estime o peso do bolo pela quantidade de convidados.',tags:'bolo aniversário convidados festa'},
   {id:'gelo',cat:'festas',icon:'🧊',title:'Quantidade de gelo',desc:'Estime gelo para eventos e bebidas.',tags:'gelo festa bebida'},
-  {id:'lista-compras',cat:'outros',icon:'🛒',title:'Lista de compras',desc:'Monte e organize uma lista simples no navegador.',tags:'lista compras mercado supermercado'},
+  {id:'lista-compras',cat:'outros',icon:'🛒',title:'Lista de compras',desc:'Organize listas de compras e compartilhe em tempo real com outras pessoas, sem IA.',tags:'lista compras mercado supermercado'},
   {id:'dividir-pessoas',cat:'outros',icon:'👥',title:'Dividir qualquer valor',desc:'Distribua um valor igualmente entre pessoas.',tags:'dividir pessoas dinheiro grupo'},
 ];
 
@@ -247,15 +247,7 @@ function cltVsPJUI(){
     input('pjProfitBuffer','Margem extra desejada no PJ',{suffix:'%',value:'0',help:'Ex.: 10% acima da equivalência calculada.'})
   );
 }
-function listaComprasUI(){
-  return `<div class="tool-layout"><section class="card panel"><h2>Adicionar item</h2><div class="form-grid">
-    <div class="field full"><label for="itemName">Nome do item</label><input id="itemName" placeholder="Ex.: Arroz"></div>
-    <div class="field"><label for="itemQty">Quantidade</label><input id="itemQty" type="number" min="0" step="any" value="1"></div>
-    <div class="field"><label for="itemUnit">Unidade</label><select id="itemUnit"><option>un.</option><option>kg</option><option>g</option><option>L</option><option>ml</option><option>pacote</option><option>caixa</option><option>garrafa</option><option>lata</option><option>maço</option><option>outro</option></select></div>
-    <div class="field"><label for="itemPrice">Valor <span class="muted">(opcional)</span></label><input id="itemPrice" type="number" min="0" step="0.01" placeholder="0,00"></div>
-  </div><div class="actions"><button class="btn primary" id="addItem">＋ Adicionar à lista</button><button class="btn ghost" id="clearList">Limpar tudo</button></div>
-  <div class="notice">Os itens ficam salvos no navegador. Use “Copiar para WhatsApp” para gerar um texto organizado com emojis e total.</div><div id="list" class="shopping-list-box"></div></section><section class="card panel"><h2>📲 Texto para WhatsApp</h2><textarea id="shoppingText" class="whatsapp-text" rows="22" readonly></textarea><div class="actions"><button class="btn primary" id="copyShopping">📋 Copiar lista</button><button class="btn ghost" id="downloadShopping">⬇️ Baixar TXT</button></div><div id="shoppingTotal" class="shopping-total">Total: R$ 0,00</div></section></div>`;
-}
+function listaComprasUI(){ return window.resolveiShoppingAppMarkup ? window.resolveiShoppingAppMarkup() : '<div class="empty">Carregando Lista de Compras…</div>'; }
 function calcEscadaBlondel(alturaCm){
   const h=Math.max(1,Number(alturaCm)||0);
   const minN=Math.max(2,Math.ceil(h/18));
