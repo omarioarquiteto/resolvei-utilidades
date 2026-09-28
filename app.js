@@ -116,6 +116,19 @@ const tools = [
   {id:'dividir-pessoas',cat:'outros',icon:'👥',title:'Dividir qualquer valor',desc:'Distribua um valor igualmente entre pessoas.',tags:'dividir pessoas dinheiro grupo'},
 ];
 
+/* DEDUPE_TOOLS */
+// Garante que uma ferramenta não apareça duas vezes no catálogo, favoritos,
+// categorias ou resultados de busca mesmo que seja cadastrada acidentalmente
+// mais de uma vez no array principal.
+{
+  const seenToolKeys = new Set();
+  for (let i = tools.length - 1; i >= 0; i--) {
+    const key = String(tools[i]?.id || tools[i]?.title || '').trim().toLowerCase();
+    if (key && seenToolKeys.has(key)) tools.splice(i, 1);
+    else if (key) seenToolKeys.add(key);
+  }
+}
+
 const popular = ['porcentagem','combustivel-viagem','piso','tinta','placas-solares','posicao-solar','juros-compostos','idade'];
 
 const input = (id,label,opts={}) => {
