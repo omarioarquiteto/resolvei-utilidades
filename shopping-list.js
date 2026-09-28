@@ -595,17 +595,17 @@
       return Promise.resolve(stateFromEmbeddedList(data));
     }
     if (state.legacyMigrationAttempted[listId]) return Promise.resolve([]);
-    state.legacyMigrationAttempted[listId] = true;
     return ref.collection("items").get().then(function (snap) {
       var legacy = snap.docs.map(function (d) {
         var item = d.data() || {};
         item.id = d.id;
         return item;
       }).sort(sortItems);
+      state.legacyMigrationAttempted[listId] = true;
       return persistLegacyItems(listId, legacy, ref, data);
     }).catch(function (error) {
       console.error("Resolvei legacy shopping migration:", error);
-      toast("Não foi possível sincronizar os itens antigos desta lista.");
+      toast("Não foi possível sincronizar os itens antigos desta lista. Tentando novamente quando a conexão voltar.");
       return null;
     });
   }
