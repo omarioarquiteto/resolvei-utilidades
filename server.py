@@ -1334,6 +1334,35 @@ def party_suggest(req: PartyRequest, authorization: str | None = Header(default=
     return result
 
 
+@app.post("/api/shopping/lists/{list_id}/cleanup")
+def shopping_cleanup_empty_list(list_id: str, authorization: str | None = Header(default=None)) -> dict[str, Any]:
+    """
+    Exclui uma lista somente quando ela não possui nenhum item.
+    Pode ser chamado por qualquer membro autenticado, porque a operação
+    é limitada a uma lista da qual o usuário já participa.
+    """
+    user = _verify_firebase_token(authorization)
+    if not _firebase_admin:
+        raise HTTPException(status_code=503, detail="Firebase indisponível.")
+    from firebase_admin import firestore as firebase_firestore
+
+    ref = firebase_firestore.client().collection("shoppingLists").document(list_id)
+    snap = ref.get()
+    if not snap.exists:
+        return {"ok": True, "deleted": True, "reason": "not_found"}
+
+    data = snap.to_dict() or {}
+    members = data.get("memberIds") or []
+    if user["uid"] not in members:
+        raise HTTPException(status_code=403, detail="Você não participa desta lista.")
+
+    items = list(ref.collection("items").limit(1).stream())
+    if items:
+        return {"ok": True, "deleted": False, "reason": "has_items"}
+
+    ref.delete()
+    return {"ok": True, "deleted": True, "reason": "empty"}
+
 @app.get("/api/risk/state")
 def risk_state_get(authorization: str | None = Header(default=None)) -> dict[str, Any]:
     user = _verify_firebase_token(authorization)
