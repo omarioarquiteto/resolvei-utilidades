@@ -357,7 +357,7 @@
       '</button>' +
       '<div class="shopping-history-side-actions">' +
         (finalized ? '<button class="shopping-history-reuse" type="button" title="Reaproveitar lista" aria-label="Reaproveitar lista" data-action="reuse-list" data-list-id="' + esc(x.id) + '">↻</button>' : '') +
-        '<button class="shopping-history-delete" type="button" title="Excluir lista" aria-label="Excluir lista" data-action="delete-list" data-list-id="' + esc(x.id) + '">×</button>' +
+        (x.ownerId === uid() ? '<button class="shopping-history-delete" type="button" title="Excluir lista" aria-label="Excluir lista" data-action="delete-list" data-list-id="' + esc(x.id) + '">×</button>' : '') +
       '</div>' +
     '</div>';
   }
