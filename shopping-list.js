@@ -342,7 +342,7 @@
         '<div class="shopping-big-icon">🛒</div>' +
         '<span class="eyebrow">LISTA COLABORATIVA</span>' +
         '<h2>Entre no Resolvei para criar e compartilhar listas</h2>' +
-        '<p>As listas compartilhadas ficam salvas na conta e são atualizadas em tempo real. A organização é feita por regras próprias; a IA é opcional para sugerir uma classificação quando você solicitar.</p>' +
+        '<p>As listas compartilhadas ficam salvas na conta e são atualizadas em tempo real. O Resolvei organiza os produtos por regras próprias e aprende as correções que você fizer.</p>' +
         '<div class="actions"><a class="btn primary" href="#/conta">Entrar / Criar conta</a></div>' +
       '</section>';
   }
@@ -386,7 +386,7 @@
     root().innerHTML =
       '<div class="shopping-header-block">' +
         '<div><span class="eyebrow">LISTA DE COMPRAS</span><h2>Monte sua lista e vá às compras</h2><p>Digite os produtos como você fala no dia a dia. O Resolvei organiza tudo por setor automaticamente.</p></div>' +
-        '<span class="shopping-no-ai">⚡ IA opcional</span>' +
+        '<span class="shopping-no-ai">🧠 Aprende suas classificações</span>' +
       '</div>' +
       '<div class="shopping-create-grid">' +
         '<section class="card panel shopping-create-card">' +
@@ -423,9 +423,7 @@
           '</select></label>' +
         '</div>' +
         '<div class="shopping-edit-actions">' +
-          '<button class="btn" type="button" data-action="ai-category" data-item-id="' + esc(item.id) + '">✨ Sugerir com IA</button>' +
           '<button class="btn primary" type="button" data-action="save-edit-item" data-item-id="' + esc(item.id) + '">Salvar</button><button class="btn ghost" type="button" data-action="cancel-edit">Cancelar</button></div>' +
-        '<div class="shopping-edit-ai-msg" data-ai-msg hidden></div>' +
       '</div>';
     }
     return '<div class="shopping-item-row' + doneClass + '" data-item-row="' + esc(item.id) + '">' +
@@ -578,7 +576,9 @@
       item.brand = String(item.brand || "");
       item.qty = Number(item.qty) > 0 ? Number(item.qty) : 1;
       item.unit = item.unit || "un.";
-      item.categoryId = categoryFor(item.name).id;
+      item.categoryId = state.classificationRules[normalize(item.name)]
+        || item.categoryId
+        || categoryFor(item.name).id;
       item.done = !!item.done;
       item.position = typeof item.position === "number" ? item.position : 999999;
       return item;
@@ -1109,10 +1109,15 @@
         return items;
       });
     }).then(function (items) {
-      applyEmbeddedItems(items);
       return learnClassification(productName, category.id).then(function () {
         state.editingId = null;
-        toast("✅ Item salvo. O Resolvei vai lembrar essa classificação.");
+        applyEmbeddedItems(items);
+        toast("✅ Item salvo em " + category.title + ". O Resolvei vai lembrar essa classificação.");
+      }).catch(function (ruleError) {
+        console.error("Resolvei save classification rule:", ruleError);
+        state.editingId = null;
+        applyEmbeddedItems(items);
+        toast("✅ Item salvo em " + category.title + ". Não consegui memorizar a regra para novas listas.");
       });
     }).catch(function (error) {
       toast("Não foi possível editar o item.");
@@ -1121,42 +1126,6 @@
   }
 
 
-
-  function suggestAiCategory(id) {
-    var item = state.items.find(function (x) { return x.id === id; });
-    var row = document.querySelector('[data-item-row="' + CSS.escape(id) + '"]');
-    if (!item || !row) return;
-    var nameInput = row.querySelector("[data-edit-name]");
-    var categorySelect = row.querySelector("[data-edit-category]");
-    var msg = row.querySelector("[data-ai-msg]");
-    var name = nameInput ? nameInput.value.trim() : item.name;
-    if (!name || !categorySelect) return;
-
-    var button = row.querySelector('[data-action="ai-category"]');
-    if (button) { button.disabled = true; button.textContent = "⏳ Analisando..."; }
-    if (msg) { msg.hidden = false; msg.textContent = "Consultando a IA para sugerir o setor..."; }
-
-    resolveiToken().then(function (token) {
-      return fetch("/api/shopping/classify", {
-        method: "POST",
-        headers: {"Content-Type":"application/json","Authorization":"Bearer " + token},
-        body: JSON.stringify({item:name})
-      });
-    }).then(function (response) {
-      return response.json().then(function (data) {
-        if (!response.ok) throw new Error(data.detail || "Não foi possível consultar a IA.");
-        return data;
-      });
-    }).then(function (data) {
-      if (data.categoryId) categorySelect.value = data.categoryId;
-      if (msg) msg.hidden = false, msg.textContent = "✨ Sugestão: " + (data.categoryTitle || data.categoryId) + (data.confidence ? " · confiança " + Math.round(Number(data.confidence) * 100) + "%" : "") + (data.reason ? " — " + data.reason : "");
-    }).catch(function (error) {
-      if (msg) { msg.hidden = false; msg.textContent = "⚠️ " + (error.message || "A IA não conseguiu classificar."); }
-      console.error("Resolvei AI shopping category:", error);
-    }).finally(function () {
-      if (button) { button.disabled = false; button.textContent = "✨ Sugerir com IA"; }
-    });
-  }
 
   function deleteItem(id) {
     if (!window.confirm("Excluir este produto da lista?")) return;
@@ -1409,7 +1378,6 @@
       else if (action === "toggle-market") { state.marketMode = !state.marketMode; renderList(); }
       else if (action === "toggle-item") {}
       else if (action === "edit-item") editItem(el.getAttribute("data-item-id"));
-      else if (action === "ai-category") suggestAiCategory(el.getAttribute("data-item-id"));
       else if (action === "save-edit-item") saveEditItem(el.getAttribute("data-item-id"));
       else if (action === "cancel-edit") cancelEdit();
       else if (action === "delete-item") deleteItem(el.getAttribute("data-item-id"));
