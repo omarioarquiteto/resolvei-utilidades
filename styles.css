@@ -431,3 +431,14 @@ button, input, select { font: inherit; }
   .shopping-add-row input { grid-column:1/-1; }
   .shopping-bottom-actions { flex-direction:column; }
 }
+
+.shopping-edit-card { padding:14px 16px; border:1px solid color-mix(in srgb,var(--accent) 30%,var(--line)); background:var(--accent-soft); }
+.shopping-edit-title { font-size:12px; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; margin-bottom:10px; }
+.shopping-edit-grid { display:grid; grid-template-columns:minmax(0,1fr) 140px 150px; gap:10px; }
+.shopping-edit-grid .field { gap:5px; }
+.shopping-edit-grid .field > input, .shopping-edit-grid .field > select { background:var(--surface); }
+.shopping-edit-actions { display:flex; gap:8px; justify-content:flex-end; margin-top:11px; }
+@media (max-width:760px) {
+  .shopping-edit-grid { grid-template-columns:1fr 1fr; }
+  .shopping-edit-grid .field:first-child { grid-column:1/-1; }
+}
