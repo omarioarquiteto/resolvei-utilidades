@@ -115,10 +115,6 @@ class ShoppingPriceRequest(BaseModel):
     state: str = "MT"
 
 
-class ShoppingClassifyRequest(BaseModel):
-    item: str
-
-
 class SalesPriceRequest(BaseModel):
     product: str
     type: str = "outro"
@@ -1375,87 +1371,6 @@ def shopping_cleanup_empty_list(list_id: str, authorization: str | None = Header
 
     ref.delete()
     return {"ok": True, "deleted": True, "reason": "empty"}
-
-@app.post("/api/shopping/classify")
-def shopping_classify(req: ShoppingClassifyRequest, authorization: str | None = Header(default=None)) -> dict[str, Any]:
-    """
-    Sugere uma categoria de supermercado para um único produto.
-    A IA só pode escolher entre as categorias fechadas do Resolvei.
-    """
-    if not req.item.strip():
-        raise HTTPException(status_code=400, detail="Informe o produto.")
-
-    allowed = {
-        "hortifruti": "Hortifruti",
-        "carnes": "Carnes e peixes",
-        "frios-laticinios": "Frios e laticínios",
-        "padaria": "Padaria e café",
-        "mercearia": "Mercearia",
-        "bebidas": "Bebidas",
-        "congelados": "Congelados",
-        "limpeza": "Limpeza",
-        "higiene": "Higiene pessoal",
-        "casa": "Casa e descartáveis",
-        "pet": "Pets",
-        "outros": "Outros",
-    }
-
-    provider, api_key, model = _resolve_ai_credentials(authorization, "")
-    categories_text = "\n".join(f"- {key}: {title}" for key, title in allowed.items())
-    prompt = f"""
-Você é um classificador de produtos de supermercado do Resolvei.
-Classifique o produto abaixo em EXATAMENTE UMA das categorias permitidas.
-
-Produto: {req.item.strip()}
-
-Categorias permitidas:
-{categories_text}
-
-Regras:
-- "shoyu", molho de soja, temperos, condimentos e molhos prontos -> mercearia.
-- alimentos frescos, frutas, verduras e legumes -> hortifruti.
-- carne, frango, peixe e frutos do mar frescos -> carnes.
-- leite, queijo, manteiga, requeijão e iogurte -> frios-laticínios.
-- pão, café e produtos de padaria -> padaria.
-- refrigerante, água, suco e outras bebidas -> bebidas.
-- produtos congelados -> congelados.
-- produtos de limpeza -> limpeza.
-- higiene pessoal -> higiene.
-- itens domésticos e descartáveis -> casa.
-- ração e produtos para animais -> pet.
-- use "outros" somente quando nenhuma categoria fizer sentido.
-
-Responda SOMENTE JSON válido neste formato:
-{{"categoryId":"mercearia","confidence":0.95,"reason":"É um condimento/molho de uso culinário."}}
-"""
-    try:
-        raw = _provider_call(provider, api_key, model, prompt)
-        match = re.search(r"{[\s\S]*}", raw or "")
-        if not match:
-            raise RuntimeError("A IA não retornou JSON válido.")
-        data = json.loads(match.group(0))
-    except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"Não foi possível classificar com a IA: {exc}") from exc
-
-    category_id = str(data.get("categoryId") or "").strip()
-    if category_id not in allowed:
-        raise HTTPException(status_code=502, detail="A IA retornou uma categoria inválida.")
-
-    try:
-        confidence = max(0.0, min(1.0, float(data.get("confidence", 0.0))))
-    except (TypeError, ValueError):
-        confidence = 0.0
-
-    return {
-        "ok": True,
-        "provider": provider,
-        "model": model or "",
-        "categoryId": category_id,
-        "categoryTitle": allowed[category_id],
-        "confidence": confidence,
-        "reason": str(data.get("reason") or "").strip()[:300],
-    }
-
 
 @app.get("/api/risk/state")
 def risk_state_get(authorization: str | None = Header(default=None)) -> dict[str, Any]:
