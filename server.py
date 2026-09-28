@@ -72,6 +72,14 @@ if FIREBASE_PROJECT_ID and FIREBASE_CLIENT_EMAIL and FIREBASE_PRIVATE_KEY:
 
 app = FastAPI(title="Resolvei API", version="3.0.0")
 
+# GURÚ DOS SINAIS: análise técnica independente via TradingView webhook.
+try:
+    from guru_sinais_api import router as guru_sinais_router
+    app.include_router(guru_sinais_router)
+except Exception as _guru_import_error:
+    # Mantém o Resolvei principal inicializável caso o módulo opcional tenha problema.
+    guru_sinais_router = None
+
 # O frontend atualmente é servido pelo próprio FastAPI, portanto as requisições
 # são same-origin. Mantemos CORS configurável para o domínio próprio e futuros
 # clientes externos sem expor credenciais.
@@ -1398,43 +1406,3 @@ def risk_state_save(req: RiskProgressRequest, authorization: str | None = Header
         raise HTTPException(status_code=503, detail="Firebase indisponível.")
     state = req.state if isinstance(req.state, dict) else {}
     try:
-        encoded = json.dumps(state, ensure_ascii=False, separators=(",", ":"))
-    except (TypeError, ValueError) as exc:
-        raise HTTPException(status_code=400, detail="Estado do plano inválido.") from exc
-    if len(encoded) > 500_000:
-        raise HTTPException(status_code=413, detail="O histórico do plano está muito grande.")
-    from firebase_admin import firestore as firebase_firestore
-    ref = (
-        firebase_firestore.client()
-        .collection("users").document(user["uid"])
-        .collection("riskProgress").document("capitalEvolution")
-    )
-    ref.set({
-        "state": state,
-        "schemaVersion": 1,
-        "updatedAt": firebase_firestore.SERVER_TIMESTAMP
-    }, merge=True)
-    return {"ok": True, "saved": True}
-
-
-@app.post("/api/prices/search")
-def prices_search(req: ShoppingPriceRequest) -> dict[str, Any]:
-    item=req.item.strip()
-    if not item:
-        raise HTTPException(status_code=400, detail="Informe um item.")
-    options=search_price(item,req.city,req.state.upper())
-    return {"item":item,"city":req.city,"state":req.state.upper(),"options":options}
-
-
-@app.get("/{path:path}")
-def static_files(path: str = ""):
-    # Serve normal files; for browser routes return index.html.
-    target=(BASE_DIR/path).resolve()
-    try:
-        target.relative_to(BASE_DIR.resolve())
-    except ValueError:
-        raise HTTPException(status_code=404, detail="Arquivo não encontrado")
-    if path and target.is_file():
-        return FileResponse(target)
-    index=BASE_DIR/"index.html"
-    return FileResponse(index)
