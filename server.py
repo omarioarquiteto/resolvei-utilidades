@@ -1356,8 +1356,17 @@ def shopping_cleanup_empty_list(list_id: str, authorization: str | None = Header
     if user["uid"] not in members:
         raise HTTPException(status_code=403, detail="Você não participa desta lista.")
 
-    items = list(ref.collection("items").limit(1).stream())
-    if items:
+    # O modelo atual mantém os itens dentro do próprio documento da lista.
+    # Para listas antigas, ainda verificamos a subcoleção legada.
+    if "items" in data:
+        embedded_items = data.get("items") or []
+        if embedded_items:
+            return {"ok": True, "deleted": False, "reason": "has_items"}
+        ref.delete()
+        return {"ok": True, "deleted": True, "reason": "empty"}
+
+    legacy_items = list(ref.collection("items").limit(1).stream())
+    if legacy_items:
         return {"ok": True, "deleted": False, "reason": "has_items"}
 
     ref.delete()
