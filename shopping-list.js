@@ -37,6 +37,7 @@
     marketMode: false,
     itemsLoaded: false,
     editingId: null,
+    editingTitle: false,
     toastTimer: null
   };
   window.resolveiShoppingState = state;
@@ -202,7 +203,7 @@
         match = text.match(/^(\d+(?:[.,]\d+)?)\s+(.+)$/);
         if (match && normalize(match[2]).split(" ").length >= 1) {
           qty = parseNumber(match[1]);
-          text = match[2].trim();
+          text = match[2].trim().replace(/^de\s+/i, "");
         }
       }
     }
@@ -457,10 +458,9 @@
           '<button class="btn ghost" type="button" data-action="back-home">← Minhas listas</button>' +
           '<div class="shopping-list-title">' +
             '<span class="eyebrow">LISTA DE COMPRAS</span>' +
-            '<div class="shopping-title-edit-wrap">' +
-              '<h2>' + esc(state.list.title || "Lista de compras") + '</h2>' +
-              '<button class="shopping-title-edit" type="button" data-action="rename-list" aria-label="Editar nome da lista">✎</button>' +
-            '</div>' +
+            (state.editingTitle
+              ? '<div class="shopping-title-inline-edit"><input id="shoppingTitleEdit" type="text" maxlength="80" value="' + esc(state.list.title || "Lista de compras") + '" aria-label="Nome da lista"><button class="shopping-inline-save" type="button" data-action="save-title">Salvar</button><button class="shopping-inline-cancel" type="button" data-action="cancel-title">Cancelar</button></div>'
+              : '<div class="shopping-title-edit-wrap"><h2>' + esc(state.list.title || "Lista de compras") + '</h2><button class="shopping-title-edit" type="button" data-action="rename-list" aria-label="Editar nome da lista">✎</button></div>') +
             '<p>' + memberCount + ' ' + (memberCount === 1 ? "pessoa" : "pessoas") + ' com acesso</p>' +
           '</div>' +
           '<div class="shopping-list-top-actions">' +
@@ -946,21 +946,35 @@
   }
 
   function renameList() {
-    var current = state.list && state.list.title ? state.list.title : "Compras";
-    var value = window.prompt("Digite o novo nome da lista:", current);
-    if (value === null) return;
-    value = value.trim().slice(0, 80);
+    state.editingTitle = true;
+    renderList();
+    setTimeout(function () {
+      var input = document.getElementById("shoppingTitleEdit");
+      if (input) { input.focus(); input.select(); }
+    }, 0);
+  }
+
+  function cancelTitleEdit() {
+    state.editingTitle = false;
+    renderList();
+  }
+
+  function saveTitle() {
+    var input = document.getElementById("shoppingTitleEdit");
+    var value = input ? input.value.trim().slice(0, 80) : "";
     if (!value) {
       toast("Digite um nome para a lista.");
+      if (input) input.focus();
       return;
     }
     db().collection("shoppingLists").doc(state.listId).update({
       title: value,
       updatedAt: firebase.firestore.FieldValue.serverTimestamp()
     }).then(function () {
+      state.editingTitle = false;
       toast("✅ Nome da lista atualizado.");
     }).catch(function (error) {
-      toast("Não foi possível renomear a lista. " + (error.message || ""));
+      toast("Não foi possível renomear a lista.");
       console.error(error);
     });
   }
@@ -1122,6 +1136,8 @@
       else if (action === "delete-item") deleteItem(el.getAttribute("data-item-id"));
       else if (action === "clear-done") clearDone();
       else if (action === "rename-list") renameList();
+      else if (action === "save-title") saveTitle();
+      else if (action === "cancel-title") cancelTitleEdit();
       else if (action === "share") share();
       else if (action === "join-list") joinList();
       else if (action === "delete-list") deleteList(el.getAttribute("data-list-id"));
@@ -1138,7 +1154,9 @@
     shell.addEventListener("keydown", function (event) {
       if (event.key !== "Enter") return;
       var input = event.target.closest("#shoppingAddInput");
-      if (input) { event.preventDefault(); addItem(); }
+      if (input) { event.preventDefault(); addItem(); return; }
+      var title = event.target.closest("#shoppingTitleEdit");
+      if (title) { event.preventDefault(); saveTitle(); }
     });
   }
 
