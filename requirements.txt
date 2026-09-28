@@ -19,5 +19,5 @@ cryptography>=43,<46
 pandas>=2.2,<3
 numpy>=1.26,<3
 
-websocket-client==0.56.0
+websocket-client>=1.5,<2
 git+https://github.com/victalejo/iqoptionapi.git
