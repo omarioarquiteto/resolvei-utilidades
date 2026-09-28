@@ -457,3 +457,43 @@ button, input, select { font: inherit; }
 .shopping-history-delete, .shopping-history-reuse { width:34px; height:34px; border:1px solid var(--line); border-radius:10px; background:var(--surface); color:var(--muted); cursor:pointer; font-weight:800; }
 .shopping-history-delete:hover { color:var(--danger); border-color:color-mix(in srgb,var(--danger) 40%,var(--line)); }
 .shopping-history-reuse:hover { color:var(--accent); border-color:var(--accent); }
+
+/* UX — Lista de Compras simples para qualquer usuário */
+.shopping-create-card, .shopping-history-card { min-height:100%; }
+.shopping-step { display:flex; align-items:center; gap:11px; margin:2px 0 12px; }
+.shopping-step > span { width:30px; height:30px; display:grid; place-items:center; flex:0 0 auto; border-radius:50%; background:var(--brand); color:var(--surface); font-weight:900; font-size:13px; }
+.shopping-step > div { display:flex; flex-direction:column; }
+.shopping-step strong { font-size:14px; }
+.shopping-step small { color:var(--muted); font-size:12px; }
+.shopping-primary-action { margin-top:14px; }
+.btn.full { width:100%; justify-content:center; }
+.shopping-add-card { border:1px solid var(--line); border-radius:16px; background:var(--surface); padding:14px; margin-bottom:10px; }
+.shopping-add-heading { display:flex; align-items:baseline; justify-content:space-between; gap:12px; margin-bottom:9px; }
+.shopping-add-heading strong { font-size:15px; }
+.shopping-add-heading span { color:var(--muted); font-size:12px; }
+.shopping-add-row { margin-bottom:0; }
+.shopping-bulk-details { margin-top:11px; border-top:1px solid var(--line); padding-top:10px; }
+.shopping-bulk-details summary { cursor:pointer; color:var(--text); font-size:12px; font-weight:750; }
+.shopping-bulk-details textarea { margin-top:10px; min-height:110px; resize:vertical; }
+.shopping-list-toolbar { display:flex; align-items:center; justify-content:space-between; gap:14px; min-height:30px; margin-bottom:13px; }
+.shopping-list-toolbar .shopping-note-line { margin:0; }
+.shopping-title-edit-wrap { display:flex; align-items:center; gap:6px; }
+.shopping-title-edit-wrap h2 { margin:0; }
+.shopping-title-edit { width:32px; height:32px; border:1px solid var(--line); border-radius:9px; background:var(--surface); color:var(--muted); cursor:pointer; }
+.shopping-title-edit:hover { color:var(--text); border-color:var(--accent); }
+.shopping-title-inline-edit { display:grid; grid-template-columns:minmax(180px,1fr) auto auto; gap:6px; align-items:center; }
+.shopping-title-inline-edit input { min-height:40px; border:1px solid var(--accent); border-radius:10px; background:var(--surface); color:var(--text); padding:8px 10px; outline:none; }
+.shopping-inline-save, .shopping-inline-cancel { min-height:40px; border:1px solid var(--line); border-radius:10px; background:var(--surface); color:var(--text); padding:7px 11px; cursor:pointer; font-weight:750; }
+.shopping-inline-save { background:var(--brand); color:var(--surface); border-color:var(--brand); }
+.shopping-inline-cancel:hover { border-color:var(--accent); }
+.shopping-history-group-title span { font-size:13px; }
+.shopping-empty-history strong, .shopping-empty-history span { display:block; }
+.shopping-empty-history strong { color:var(--text); margin-bottom:3px; }
+.sr-only { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
+@media (max-width:760px) {
+  .shopping-add-heading { display:block; }
+  .shopping-add-heading span { display:block; margin-top:2px; }
+  .shopping-list-toolbar { align-items:flex-start; flex-direction:column; }
+  .shopping-title-inline-edit { grid-template-columns:1fr 1fr; }
+  .shopping-title-inline-edit input { grid-column:1/-1; }
+}
