@@ -124,20 +124,58 @@
     localStorage.setItem(MARKET_KEY, currentMarket);
   }
 
-  function loginMarkup(message = "") {
+  function loginMarkup(message = "", step = "credentials") {
+    const twoFa = step === "2fa";
     return `
       <div class="binary-login-screen">
-        <div class="binary-login-card">
-          <div class="binary-login-title">ANÁLISE DE OPÇÕES BINÁRIAS</div>
-          <h1>Conectar à IQ Option</h1>
-          <p>Use sua conta para receber candles e sinais técnicos. A ferramenta não envia ordens.</p>
-          <div class="binary-login-grid">
-            <label>Usuário / e-mail<input id="binEmail" type="email" autocomplete="username"></label>
-            <label>Senha<input id="binPassword" type="password" autocomplete="current-password"></label>
-            <label>Conta<select id="binAccount"><option value="PRACTICE">PRACTICE — Demo</option><option value="REAL">REAL — Conta real</option></select></label>
+        <div class="binary-login-card binary-login-card-modern">
+          <div class="binary-login-brand">
+            <span class="binary-login-shield">IQ</span>
+            <div>
+              <div class="binary-login-kicker">RESOLVEI · ANÁLISE DE MERCADO</div>
+              <div class="binary-login-title">CONEXÃO IQ OPTION</div>
+            </div>
           </div>
-          <button class="binary-primary-btn" id="binLogin">🔐 Conectar</button>
+
+          <h1>${twoFa ? "Confirme sua identidade" : "Conecte sua conta"}</h1>
+          <p class="binary-login-intro">${twoFa
+            ? "A IQ Option enviou um código de verificação. Digite o código abaixo para concluir a conexão."
+            : "A conexão é feita pelo servidor do Resolvei. Sua senha não é armazenada no navegador e a ferramenta não envia ordens."}</p>
+
+          ${twoFa ? `
+            <div class="binary-login-2fa-box">
+              <div class="binary-login-2fa-icon">✓</div>
+              <div><strong>Código de verificação enviado</strong><span>Confira o SMS/e-mail ou método de autenticação configurado na sua conta.</span></div>
+            </div>
+            <label class="binary-login-field">Código de verificação
+              <input id="bin2faCode" inputmode="numeric" autocomplete="one-time-code" maxlength="12" placeholder="Digite o código">
+            </label>
+            <button class="binary-primary-btn binary-login-submit" id="bin2faSubmit" type="button">✓ Validar código</button>
+            <button class="binary-secondary-btn binary-login-back" id="bin2faBack" type="button">← Voltar ao login</button>
+          ` : `
+            <div class="binary-login-fields">
+              <label class="binary-login-field">E-mail
+                <input id="binEmail" type="email" autocomplete="username" placeholder="seu@email.com">
+              </label>
+              <label class="binary-login-field">Senha
+                <input id="binPassword" type="password" autocomplete="current-password" placeholder="Sua senha da IQ Option">
+              </label>
+              <label class="binary-login-field">Tipo de conta
+                <select id="binAccount">
+                  <option value="PRACTICE">PRACTICE — Conta demo</option>
+                  <option value="REAL">REAL — Conta real</option>
+                </select>
+              </label>
+            </div>
+            <button class="binary-primary-btn binary-login-submit" id="binLogin" type="button">🔐 Conectar com a IQ Option</button>
+          `}
+
           <div class="binary-login-message" id="binLoginMessage">${esc(message)}</div>
+
+          <div class="binary-login-security">
+            <span>🔒</span>
+            <div><strong>Conexão protegida</strong><small>O Resolvei usa uma API comunitária não oficial da IQ Option. Nunca compartilhe sua senha ou código fora desta tela.</small></div>
+          </div>
         </div>
       </div>`;
   }
@@ -410,27 +448,76 @@
     const msg = document.getElementById("binLoginMessage");
     const button = document.getElementById("binLogin");
     if (!msg || !button) return;
-    msg.textContent = "⏳ Conectando...";
+    const email = document.getElementById("binEmail")?.value.trim() || "";
+    const password = document.getElementById("binPassword")?.value || "";
+    const account = document.getElementById("binAccount")?.value || "PRACTICE";
+    if (!email || !password) {
+      msg.textContent = "Informe o e-mail e a senha.";
+      return;
+    }
+    msg.textContent = "⏳ Estabelecendo conexão segura com a IQ Option...";
     button.disabled = true;
     try {
       const response = await fetch(API + "/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email: document.getElementById("binEmail").value.trim(),
-          password: document.getElementById("binPassword").value,
-          account: document.getElementById("binAccount").value
-        })
+        body: JSON.stringify({ email, password, account })
       });
       const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(data.detail || "Não foi possível conectar.");
-      session = data.session_id;
+      if (!response.ok) throw new Error(data.detail || "Não foi possível conectar à IQ Option.");
+      session = data.session_id || "";
+      if (!session) throw new Error("O servidor não retornou uma sessão válida.");
       sessionStorage.setItem(SESSION_KEY, session);
+
+      if (data.requires_2fa) {
+        const root = mount();
+        if (root) {
+          root.innerHTML = loginMarkup(data.message || "Informe o código de verificação.", "2fa");
+          document.getElementById("bin2faSubmit")?.addEventListener("click", login2fa);
+          document.getElementById("bin2faBack")?.addEventListener("click", () => {
+            session = "";
+            sessionStorage.removeItem(SESSION_KEY);
+            renderLogin();
+          });
+          document.getElementById("bin2faCode")?.focus();
+        }
+        return;
+      }
       await startConnected();
     } catch (error) {
       msg.textContent = "🔴 " + error.message;
     } finally {
       button.disabled = false;
+    }
+  }
+
+  async function login2fa() {
+    const msg = document.getElementById("binLoginMessage");
+    const button = document.getElementById("bin2faSubmit");
+    const code = document.getElementById("bin2faCode")?.value.trim() || "";
+    if (!code) {
+      if (msg) msg.textContent = "Digite o código recebido.";
+      return;
+    }
+    if (!session) {
+      renderLogin("A sessão de login expirou. Faça o login novamente.");
+      return;
+    }
+    if (msg) msg.textContent = "⏳ Validando o código com a IQ Option...";
+    if (button) button.disabled = true;
+    try {
+      const response = await fetch(API + "/login/2fa", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ session_id: session, code })
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.detail || "Código 2FA inválido.");
+      await startConnected();
+    } catch (error) {
+      if (msg) msg.textContent = "🔴 " + error.message;
+    } finally {
+      if (button) button.disabled = false;
     }
   }
 
@@ -861,10 +948,10 @@
     }
   }
 
-  function renderLogin(message = "") {
+  function renderLogin(message = "", step = "credentials") {
     const root = mount();
     if (!root) return;
-    root.innerHTML = loginMarkup(message);
+    root.innerHTML = loginMarkup(message, step);
     document.getElementById("binLogin")?.addEventListener("click", login);
   }
 
