@@ -15,7 +15,7 @@ WEBHOOK_SECRET = os.getenv("TRADINGVIEW_WEBHOOK_SECRET", "").strip()
 TWELVE_DATA_API_KEY = os.getenv("TWELVE_DATA_API_KEY", "").strip()
 SIGNALS = deque(maxlen=200)
 
-INTERVALS = {"1m": "1min", "5m": "5min", "15m": "15min", "30m": "30min", "1h": "1h"}
+INTERVALS = {"1m": "1min", "5m": "5min", "15m": "15min", "30m": "30min", "1h": "1h", "4h": "4h"}
 
 
 class TradingViewSignal(BaseModel):
@@ -179,6 +179,8 @@ def fetch_candles(symbol: str, timeframe: str, outputsize: int = 250) -> list[di
 def analyze_market(symbol: str, timeframe: str) -> dict[str, Any]:
     symbol = normalize_symbol(symbol)
     rows = fetch_candles(symbol, timeframe)
+    context_map = {"1m": ["5m", "15m"], "5m": ["15m", "30m"], "15m": ["30m", "1h"], "30m": ["1h"], "1h": ["4h"]}
+    context_rows = [(tf, fetch_candles(symbol, tf, 180)) for tf in context_map.get(timeframe, [])]
     closes = [x["close"] for x in rows]
     volumes = [x["volume"] for x in rows]
 
@@ -214,6 +216,23 @@ def analyze_market(symbol: str, timeframe: str) -> dict[str, Any]:
         reasons.append("Estrutura de médias alinhada para baixa.")
     else:
         warnings.append("As médias não estão em alinhamento direcional.")
+
+    context_trends = []
+    for ctx_tf, ctx in context_rows:
+        cc = [x["close"] for x in ctx]
+        c9, c21, c50 = ema(cc, 9)[-1], ema(cc, 21)[-1], ema(cc, 50)[-1]
+        ctx_trend = "ALTA" if c9 > c21 > c50 else "BAIXA" if c9 < c21 < c50 else "NEUTRA"
+        context_trends.append((ctx_tf, ctx_trend))
+    aligned_up = sum(1 for _, t in context_trends if t == "ALTA")
+    aligned_down = sum(1 for _, t in context_trends if t == "BAIXA")
+    if trend == "ALTA" and aligned_up:
+        buy += 1.5 + 0.5 * max(0, aligned_up - 1)
+        reasons.append("Timeframes superiores confirmam a tendência de alta.")
+    elif trend == "BAIXA" and aligned_down:
+        sell += 1.5 + 0.5 * max(0, aligned_down - 1)
+        reasons.append("Timeframes superiores confirmam a tendência de baixa.")
+    elif trend != "NEUTRA" and (aligned_up or aligned_down):
+        warnings.append("Há divergência entre o timeframe de entrada e o contexto superior.")
 
     if e9 > e21:
         buy += 1.5
@@ -329,6 +348,7 @@ def analyze_market(symbol: str, timeframe: str) -> dict[str, Any]:
             "breakoutUp": breakout_up,
             "breakoutDown": breakout_down,
             "atrPct": round(atr_pct(rows) * 100, 3),
+            "context": {tf: t for tf, t in context_trends},
         },
         "source": "Twelve Data",
     }
