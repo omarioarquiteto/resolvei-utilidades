@@ -266,10 +266,10 @@
 
   function renderHome() {
     var listRows = state.lists.length ? state.lists.map(function (x) {
-      var count = x.itemCount || 0;
+      var memberCount = Array.isArray(x.memberIds) ? x.memberIds.length : 1;
       return '<button class="shopping-history-row" type="button" data-action="open-list" data-list-id="' + esc(x.id) + '">' +
         '<span class="shopping-history-icon">🛒</span>' +
-        '<span class="shopping-history-main"><strong>' + esc(x.title || "Lista de compras") + '</strong><small>' + count + ' ' + (count === 1 ? "item" : "itens") + '</small></span>' +
+        '<span class="shopping-history-main"><strong>' + esc(x.title || "Lista de compras") + '</strong><small>' + memberCount + ' ' + (memberCount === 1 ? "pessoa" : "pessoas") + '</small></span>' +
         '<span class="shopping-history-arrow">›</span>' +
       '</button>';
     }).join("") : '<div class="shopping-empty-history">Nenhuma lista criada ainda.</div>';
