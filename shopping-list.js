@@ -39,7 +39,11 @@
     editingId: null,
     editingTitle: false,
     toastTimer: null,
-    legacyMigrationAttempted: {}
+    legacyMigrationAttempted: {},
+    classificationRules: {},
+    classificationRulesLoaded: false,
+    classificationRulesUserId: "",
+    unsubClassificationRules: null
   };
   window.resolveiShoppingState = state;
 
@@ -93,6 +97,10 @@
 
   function categoryFor(name) {
     var n = normalize(name);
+
+    // A classificação aprendida pelo usuário sempre vence as regras genéricas.
+    var learned = state.classificationRules[n];
+    if (learned) return categoryById(learned);
 
     // Produtos compostos devem vencer palavras genéricas.
     // Ex.: "molho de tomate" é mercearia, mesmo contendo "tomate".
@@ -403,15 +411,21 @@
     var editing = state.editingId === item.id;
     if (editing) {
       return '<div class="shopping-edit-card" data-item-row="' + esc(item.id) + '">' +
-        '<div class="shopping-edit-title">Editar produto</div>' +
+        '<div class="shopping-edit-title">Editar / reclassificar produto</div>' +
         '<div class="shopping-edit-grid">' +
           '<label class="field"><span>Produto</span><input data-edit-name type="text" value="' + esc(item.name + (item.brand ? ", " + item.brand : "")) + '" maxlength="120"></label>' +
           '<label class="field"><span>Quantidade</span><input data-edit-qty type="number" min="0.001" step="any" value="' + esc(item.qty) + '"></label>' +
           '<label class="field"><span>Unidade</span><select data-edit-unit>' +
             ["un.","kg","g","L","ml","pct.","pacote","pacotes","caixa","caixas","garrafa","garrafas","lata","latas","maço","maços","rolo","rolos","dúzia","dúzias","barra","barras","frasco","frascos","saco","sacos","pote","potes"].map(function(u){ return '<option value="' + esc(u) + '"' + (u === (item.unit || "un.") ? " selected" : "") + '>' + esc(u) + '</option>'; }).join("") +
           '</select></label>' +
+          '<label class="field"><span>Classificação</span><select data-edit-category>' +
+            CATEGORIES.map(function(cat){ return '<option value="' + esc(cat.id) + '"' + (cat.id === categoryFor(item.name).id ? " selected" : "") + '>' + cat.icon + ' ' + esc(cat.title) + '</option>'; }).join("") +
+          '</select></label>' +
         '</div>' +
-        '<div class="shopping-edit-actions"><button class="btn primary" type="button" data-action="save-edit-item" data-item-id="' + esc(item.id) + '">Salvar</button><button class="btn ghost" type="button" data-action="cancel-edit">Cancelar</button></div>' +
+        '<div class="shopping-edit-actions">' +
+          '<button class="btn" type="button" data-action="ai-category" data-item-id="' + esc(item.id) + '">✨ Sugerir com IA</button>' +
+          '<button class="btn primary" type="button" data-action="save-edit-item" data-item-id="' + esc(item.id) + '">Salvar</button><button class="btn ghost" type="button" data-action="cancel-edit">Cancelar</button></div>' +
+        '<div class="shopping-edit-ai-msg" data-ai-msg hidden></div>' +
       '</div>';
     }
     return '<div class="shopping-item-row' + doneClass + '" data-item-row="' + esc(item.id) + '">' +
@@ -421,7 +435,7 @@
         '<span class="shopping-item-text"><strong>' + esc(item.name) + (item.brand ? ' <em class="shopping-brand">(' + esc(item.brand) + ')</em>' : '') + '</strong><small>' + esc(formatQty(item.qty) + " " + (item.unit || "un.")) + '</small></span>' +
       '</label>' +
       '<div class="shopping-item-actions">' +
-        '<button class="shopping-icon-btn" type="button" title="Editar item" aria-label="Editar item" data-action="edit-item" data-item-id="' + esc(item.id) + '">✎</button>' +
+        '<button class="shopping-icon-btn" type="button" title="Editar / reclassificar item" aria-label="Editar / reclassificar item" data-action="edit-item" data-item-id="' + esc(item.id) + '">✎</button>' +
         '<button class="shopping-icon-btn danger" type="button" title="Excluir item" aria-label="Excluir item" data-action="delete-item" data-item-id="' + esc(item.id) + '">×</button>' +
       '</div>' +
     '</div>';
@@ -608,6 +622,66 @@
       toast("Não foi possível sincronizar os itens antigos desta lista. Tentando novamente quando a conexão voltar.");
       return null;
     });
+  }
+
+  function classificationRuleKey(name) {
+    return normalize(name).replace(/[^a-z0-9_-]+/g, "_").slice(0, 120) || "produto";
+  }
+
+  function ingestClassificationRules(data) {
+    var map = data && data.shoppingCategoryRules && typeof data.shoppingCategoryRules === "object"
+      ? data.shoppingCategoryRules : {};
+    state.classificationRules = {};
+    Object.keys(map).forEach(function (key) {
+      var entry = map[key];
+      if (!entry || typeof entry !== "object") return;
+      var product = normalize(entry.product || "");
+      var categoryId = String(entry.categoryId || "");
+      if (product && categoryId) state.classificationRules[product] = categoryId;
+    });
+    state.classificationRulesLoaded = true;
+  }
+
+  function subscribeClassificationRules() {
+    if (!db() || !uid()) return;
+    var currentUid = uid();
+    if (state.unsubClassificationRules) state.unsubClassificationRules();
+    state.classificationRulesUserId = currentUid;
+    state.classificationRulesLoaded = false;
+    state.unsubClassificationRules = db().collection("users").doc(currentUid).onSnapshot(function (snap) {
+      if (state.classificationRulesUserId !== currentUid) return;
+      ingestClassificationRules(snap.exists ? (snap.data() || {}) : {});
+    }, function (error) {
+      console.warn("Resolvei shopping classification rules:", error);
+      state.classificationRules = {};
+      state.classificationRulesLoaded = true;
+    });
+  }
+
+  function ensureClassificationRules() {
+    if (state.classificationRulesLoaded) return Promise.resolve();
+    if (!db() || !uid()) return Promise.resolve();
+    var currentUid = uid();
+    return db().collection("users").doc(currentUid).get().then(function (snap) {
+      if (state.classificationRulesUserId === currentUid) ingestClassificationRules(snap.exists ? (snap.data() || {}) : {});
+    }).catch(function (error) {
+      console.warn("Resolvei shopping classification rules load:", error);
+      state.classificationRulesLoaded = true;
+    });
+  }
+
+  function learnClassification(productName, categoryId) {
+    var normalized = normalize(productName);
+    if (!normalized || !categoryId || !uid() || !db()) return Promise.resolve();
+    state.classificationRules[normalized] = categoryId;
+    state.classificationRulesLoaded = true;
+    var update = {};
+    update["shoppingCategoryRules." + classificationRuleKey(normalized)] = {
+      product: normalized,
+      categoryId: categoryId,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    };
+    return db().collection("users").doc(uid()).set(update, {merge:true});
   }
 
   function applyEmbeddedItems(items) {
@@ -1002,6 +1076,7 @@
     var name = row.querySelector('[data-edit-name]')?.value?.trim() || "";
     var qty = parseNumber(row.querySelector('[data-edit-qty]')?.value);
     var unit = row.querySelector('[data-edit-unit]')?.value || "un.";
+    var selectedCategoryId = row.querySelector('[data-edit-category]')?.value || "";
     if (!name || qty <= 0) {
       toast("Informe um produto e uma quantidade válida.");
       return;
@@ -1009,7 +1084,7 @@
 
     var brandInfo = extractBrand(name);
     var productName = brandInfo.product;
-    var category = categoryFor(productName);
+    var category = categoryById(selectedCategoryId || categoryFor(productName).id);
     var listRef = db().collection("shoppingLists").doc(state.listId);
 
     db().runTransaction(function (tx) {
@@ -1035,8 +1110,10 @@
       });
     }).then(function (items) {
       applyEmbeddedItems(items);
-      state.editingId = null;
-      toast("Item atualizado.");
+      return learnClassification(productName, category.id).then(function () {
+        state.editingId = null;
+        toast("✅ Item salvo. O Resolvei vai lembrar essa classificação.");
+      });
     }).catch(function (error) {
       toast("Não foi possível editar o item.");
       console.error("Resolvei edit item:", error);
@@ -1044,6 +1121,42 @@
   }
 
 
+
+  function suggestAiCategory(id) {
+    var item = state.items.find(function (x) { return x.id === id; });
+    var row = document.querySelector('[data-item-row="' + CSS.escape(id) + '"]');
+    if (!item || !row) return;
+    var nameInput = row.querySelector("[data-edit-name]");
+    var categorySelect = row.querySelector("[data-edit-category]");
+    var msg = row.querySelector("[data-ai-msg]");
+    var name = nameInput ? nameInput.value.trim() : item.name;
+    if (!name || !categorySelect) return;
+
+    var button = row.querySelector('[data-action="ai-category"]');
+    if (button) { button.disabled = true; button.textContent = "⏳ Analisando..."; }
+    if (msg) { msg.hidden = false; msg.textContent = "Consultando a IA para sugerir o setor..."; }
+
+    resolveiToken().then(function (token) {
+      return fetch("/api/shopping/classify", {
+        method: "POST",
+        headers: {"Content-Type":"application/json","Authorization":"Bearer " + token},
+        body: JSON.stringify({item:name})
+      });
+    }).then(function (response) {
+      return response.json().then(function (data) {
+        if (!response.ok) throw new Error(data.detail || "Não foi possível consultar a IA.");
+        return data;
+      });
+    }).then(function (data) {
+      if (data.categoryId) categorySelect.value = data.categoryId;
+      if (msg) msg.hidden = false, msg.textContent = "✨ Sugestão: " + (data.categoryTitle || data.categoryId) + (data.confidence ? " · confiança " + Math.round(Number(data.confidence) * 100) + "%" : "") + (data.reason ? " — " + data.reason : "");
+    }).catch(function (error) {
+      if (msg) { msg.hidden = false; msg.textContent = "⚠️ " + (error.message || "A IA não conseguiu classificar."); }
+      console.error("Resolvei AI shopping category:", error);
+    }).finally(function () {
+      if (button) { button.disabled = false; button.textContent = "✨ Sugerir com IA"; }
+    });
+  }
 
   function deleteItem(id) {
     if (!window.confirm("Excluir este produto da lista?")) return;
@@ -1296,6 +1409,7 @@
       else if (action === "toggle-market") { state.marketMode = !state.marketMode; renderList(); }
       else if (action === "toggle-item") {}
       else if (action === "edit-item") editItem(el.getAttribute("data-item-id"));
+      else if (action === "ai-category") suggestAiCategory(el.getAttribute("data-item-id"));
       else if (action === "save-edit-item") saveEditItem(el.getAttribute("data-item-id"));
       else if (action === "cancel-edit") cancelEdit();
       else if (action === "delete-item") deleteItem(el.getAttribute("data-item-id"));
@@ -1328,7 +1442,14 @@
   function initAuthBinding() {
     if (state.authBound || !window.firebase || !firebase.apps.length) return;
     try {
-      firebase.auth().onAuthStateChanged(function () {
+      firebase.auth().onAuthStateChanged(function (firebaseUser) {
+        if (firebaseUser) subscribeClassificationRules();
+        else {
+          state.classificationRules = {};
+          state.classificationRulesLoaded = false;
+          state.classificationRulesUserId = "";
+          if (state.unsubClassificationRules) { state.unsubClassificationRules(); state.unsubClassificationRules = null; }
+        }
         subscribeLists();
         var requestedId = getQueryListId();
         if (requestedId) {
@@ -1366,6 +1487,7 @@
     }
 
     subscribeLists();
+    subscribeClassificationRules();
     var requestedId = getQueryListId();
     if (requestedId) {
       if (state.listId !== requestedId) subscribeList(requestedId);
