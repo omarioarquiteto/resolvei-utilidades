@@ -105,8 +105,6 @@ def is_connected(session_id: str):
     item=_get(session_id)
     if not item:
         return {"connected":False,"account":None}
-    if item.pending_2fa:
-        return {"connected":False,"pending_2fa":True,"account":item.account}
     try:
         connected=bool(item.client.check_connect())
     except Exception:
