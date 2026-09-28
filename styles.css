@@ -442,3 +442,5 @@ button, input, select { font: inherit; }
   .shopping-edit-grid { grid-template-columns:1fr 1fr; }
   .shopping-edit-grid .field:first-child { grid-column:1/-1; }
 }
+
+.shopping-brand { color:var(--muted); font-style:normal; font-weight:600; font-size:.92em; }
