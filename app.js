@@ -111,7 +111,7 @@ const tools = [
   {id:'festa',cat:'festas',icon:'🥳',title:'Planejador de festa',desc:'Estime comida, bebida, bolo e descartáveis.',tags:'festa aniversario convidados salgados'},
   {id:'bolo',cat:'festas',icon:'🍰',title:'Quantidade de bolo',desc:'Estime o peso do bolo pela quantidade de convidados.',tags:'bolo aniversário convidados festa'},
   {id:'gelo',cat:'festas',icon:'🧊',title:'Quantidade de gelo',desc:'Estime gelo para eventos e bebidas.',tags:'gelo festa bebida'},
-  {id:'lista-compras',cat:'outros',icon:'🛒',title:'Lista de compras',desc:'Organize listas de compras e compartilhe em tempo real com outras pessoas, sem IA.',tags:'lista compras mercado supermercado'},
+  {id:'lista-compras',cat:'outros',icon:'🛒',title:'Lista de compras',desc:'Organize listas de compras, compartilhe em tempo real e ensine suas próprias classificações; IA opcional para sugerir setores.',tags:'lista compras mercado supermercado'},
   {id:'dividir-pessoas',cat:'outros',icon:'👥',title:'Dividir qualquer valor',desc:'Distribua um valor igualmente entre pessoas.',tags:'dividir pessoas dinheiro grupo'},
 ];
 
