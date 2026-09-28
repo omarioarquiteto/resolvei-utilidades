@@ -374,7 +374,7 @@
       return '<div class="shopping-edit-card" data-item-row="' + esc(item.id) + '">' +
         '<div class="shopping-edit-title">Editar produto</div>' +
         '<div class="shopping-edit-grid">' +
-          '<label class="field"><span>Produto</span><input data-edit-name type="text" value="' + esc(item.name) + '" maxlength="120"></label>' +
+          '<label class="field"><span>Produto</span><input data-edit-name type="text" value="' + esc(item.name + (item.brand ? ", " + item.brand : "")) + '" maxlength="120"></label>' +
           '<label class="field"><span>Quantidade</span><input data-edit-qty type="number" min="0.001" step="any" value="' + esc(item.qty) + '"></label>' +
           '<label class="field"><span>Unidade</span><select data-edit-unit>' +
             ["un.","kg","g","L","ml","pct.","pacote","pacotes","caixa","caixas","garrafa","garrafas","lata","latas","maço","maços","rolo","rolos","dúzia","dúzias","barra","barras","frasco","frascos","saco","sacos","pote","potes"].map(function(u){ return '<option value="' + esc(u) + '"' + (u === (item.unit || "un.") ? " selected" : "") + '>' + esc(u) + '</option>'; }).join("") +
@@ -404,7 +404,7 @@
     var groups = {};
 
     visible.forEach(function (item) {
-      var cid = item.categoryId || categoryFor(item.name).id;
+      var cid = categoryFor(item.name).id;
       if (!groups[cid]) groups[cid] = [];
       groups[cid].push(item);
     });
