@@ -511,16 +511,6 @@ button, input, select { font: inherit; }
   white-space:nowrap;
 }
 .shopping-reclassify-btn:hover { border-color:var(--accent); color:var(--accent); }
-.shopping-edit-ai-msg {
-  margin-top:9px;
-  padding:9px 11px;
-  border-radius:10px;
-  background:var(--surface);
-  border:1px solid var(--line);
-  color:var(--muted);
-  font-size:11px;
-  line-height:1.45;
-}
 @media (max-width:760px) {
   .shopping-edit-grid { grid-template-columns:1fr 1fr; }
 }
