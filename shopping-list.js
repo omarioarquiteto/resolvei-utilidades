@@ -606,7 +606,7 @@
     }).catch(function (error) {
       console.error("Resolvei legacy shopping migration:", error);
       toast("Não foi possível sincronizar os itens antigos desta lista.");
-      return [];
+      return null;
     });
   }
 
@@ -673,7 +673,7 @@
       if (!Object.prototype.hasOwnProperty.call(data, "items")) {
         renderLoading("Sincronizando itens da lista...");
         migrateLegacyItems(listId, ref, data).then(function (items) {
-          if (state.listId !== listId) return;
+          if (state.listId !== listId || items === null) return;
           applyEmbeddedItems(items);
           if (!items.length) {
             cleanupEmptyList(listId).then(function (deleted) {
