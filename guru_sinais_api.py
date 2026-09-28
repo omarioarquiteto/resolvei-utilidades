@@ -14,6 +14,8 @@ router = APIRouter(prefix="/api/guru-sinais", tags=["GURÚ DOS SINAIS"])
 WEBHOOK_SECRET = os.getenv("TRADINGVIEW_WEBHOOK_SECRET", "").strip()
 TWELVE_DATA_API_KEY = os.getenv("TWELVE_DATA_API_KEY", "").strip()
 SIGNALS = deque(maxlen=200)
+MARKET_CACHE: dict[str, tuple[float, list[dict[str, float]]]] = {}
+CACHE_TTL_SECONDS = 20
 
 INTERVALS = {"1m": "1min", "5m": "5min", "15m": "15min", "30m": "30min", "1h": "1h", "4h": "4h"}
 
@@ -132,7 +134,7 @@ def candle_pattern(rows: list[dict[str, float]]) -> str:
     return "bullish" if b_bull else "bearish"
 
 
-def fetch_candles(symbol: str, timeframe: str, outputsize: int = 250) -> list[dict[str, float]]:
+def fetch_candles(symbol: str, timeframe: str, outputsize: int = 1000) -> list[dict[str, float]]:
     if not TWELVE_DATA_API_KEY:
         raise HTTPException(
             status_code=503,
@@ -141,6 +143,12 @@ def fetch_candles(symbol: str, timeframe: str, outputsize: int = 250) -> list[di
     interval = INTERVALS.get(timeframe)
     if not interval:
         raise HTTPException(status_code=400, detail="Timeframe não suportado.")
+
+    cache_key = f"{symbol}|{timeframe}|{outputsize}"
+    cached = MARKET_CACHE.get(cache_key)
+    if cached and time.time() - cached[0] < CACHE_TTL_SECONDS:
+        return cached[1]
+
     try:
         r = requests.get(
             "https://api.twelvedata.com/time_series",
@@ -153,12 +161,20 @@ def fetch_candles(symbol: str, timeframe: str, outputsize: int = 250) -> list[di
             },
             timeout=15,
         )
+        if r.status_code == 429:
+            retry_after = r.headers.get("Retry-After", "")
+            wait = f" Aguarde {retry_after} segundos." if retry_after.isdigit() else " Aguarde alguns segundos."
+            raise HTTPException(status_code=429, detail="Limite de consultas da fonte de mercado atingido." + wait)
         r.raise_for_status()
         data = r.json()
+    except HTTPException:
+        raise
     except requests.RequestException as exc:
         raise HTTPException(status_code=502, detail=f"Falha ao consultar dados de mercado: {exc}") from exc
+
     if data.get("status") == "error" or not data.get("values"):
         raise HTTPException(status_code=502, detail=data.get("message", "A fonte de mercado não retornou candles."))
+
     rows = []
     for x in data["values"]:
         try:
@@ -168,19 +184,52 @@ def fetch_candles(symbol: str, timeframe: str, outputsize: int = 250) -> list[di
                 "low": float(x["low"]),
                 "close": float(x["close"]),
                 "volume": float(x.get("volume") or 0),
+                "datetime": x.get("datetime", ""),
             })
         except (TypeError, ValueError, KeyError):
             continue
     if len(rows) < 60:
         raise HTTPException(status_code=502, detail="Não foram recebidos candles suficientes para uma análise técnica confiável.")
+
+    MARKET_CACHE[cache_key] = (time.time(), rows)
     return rows
+
+
+def resample_rows(rows: list[dict[str, float]], source_minutes: int, target_minutes: int) -> list[dict[str, float]]:
+    if target_minutes <= source_minutes or target_minutes % source_minutes != 0:
+        return rows
+    step = target_minutes // source_minutes
+    out = []
+    for i in range(0, len(rows), step):
+        chunk = rows[i:i + step]
+        if len(chunk) < step:
+            continue
+        out.append({
+            "open": chunk[0]["open"],
+            "high": max(x["high"] for x in chunk),
+            "low": min(x["low"] for x in chunk),
+            "close": chunk[-1]["close"],
+            "volume": sum(x.get("volume", 0) for x in chunk),
+            "datetime": chunk[-1].get("datetime", ""),
+        })
+    return out
+
+
+def timeframe_minutes(timeframe: str) -> int:
+    return {"1m": 1, "5m": 5, "15m": 15, "30m": 30, "1h": 60, "4h": 240}.get(timeframe, 1)
 
 
 def analyze_market(symbol: str, timeframe: str) -> dict[str, Any]:
     symbol = normalize_symbol(symbol)
-    rows = fetch_candles(symbol, timeframe)
-    context_map = {"1m": ["5m", "15m"], "5m": ["15m", "30m"], "15m": ["30m", "1h"], "30m": ["1h"], "1h": ["4h"]}
-    context_rows = [(tf, fetch_candles(symbol, tf, 180)) for tf in context_map.get(timeframe, [])]
+    base_minutes = timeframe_minutes(timeframe)
+    rows = fetch_candles(symbol, timeframe, 1000)
+    context_map = {"1m": ["5m", "15m"], "5m": ["15m", "30m", "1h"], "15m": ["30m", "1h"], "30m": ["1h"], "1h": ["4h"]}
+    context_rows = []
+    for ctx_tf in context_map.get(timeframe, []):
+        target_minutes = timeframe_minutes(ctx_tf)
+        ctx = resample_rows(rows, base_minutes, target_minutes)
+        if len(ctx) >= 60:
+            context_rows.append((ctx_tf, ctx))
     closes = [x["close"] for x in rows]
     volumes = [x["volume"] for x in rows]
 
@@ -350,7 +399,7 @@ def analyze_market(symbol: str, timeframe: str) -> dict[str, Any]:
             "atrPct": round(atr_pct(rows) * 100, 3),
             "context": {tf: t for tf, t in context_trends},
         },
-        "source": "Twelve Data",
+        "source": "Twelve Data · 1 consulta por análise",
     }
     SIGNALS.appendleft(result)
     return result
