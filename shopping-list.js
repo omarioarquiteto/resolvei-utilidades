@@ -522,6 +522,21 @@
     renderList();
   }
 
+  function cleanupEmptyList(id) {
+    if (!id || !uid()) return Promise.resolve(false);
+    return resolveiToken().then(function (token) {
+      return fetch("/api/shopping/lists/" + encodeURIComponent(id) + "/cleanup", {
+        method: "POST",
+        headers: { Authorization: "Bearer " + token }
+      });
+    }).then(function (response) {
+      return response.json().then(function (data) {
+        if (!response.ok) throw new Error(data.detail || "Falha ao verificar a lista.");
+        return !!data.deleted;
+      });
+    });
+  }
+
   function recalcListMeta() {
     if (!state.listId || !state.list || !db()) return;
     var total = state.items.length;
@@ -529,20 +544,24 @@
     state.list.itemCount = total;
     state.list.doneCount = done;
 
-    // Um item acabou de ser removido e a lista ficou sem itens:
-    // apagar automaticamente a lista (não há mais conteúdo para preservar).
+    // Uma lista que ficou sem itens é removida pelo backend.
+    // Isso funciona também quando quem removeu o último item foi um colaborador.
     if (state.itemsLoaded && total === 0) {
-      db().collection("shoppingLists").doc(state.listId).delete()
-        .then(function () {
+      var emptyId = state.listId;
+      cleanupEmptyList(emptyId).then(function (deleted) {
+        if (deleted && state.listId === emptyId) {
           toast("Lista vazia excluída automaticamente.");
+          if (state.unsubList) { state.unsubList(); state.unsubList = null; }
+          if (state.unsubItems) { state.unsubItems(); state.unsubItems = null; }
           state.listId = null;
           state.list = null;
           state.items = [];
+          state.itemsLoaded = false;
           goList("");
-        })
-        .catch(function (error) {
-          console.error("Resolvei auto-delete empty list:", error);
-        });
+        }
+      }).catch(function (error) {
+        console.error("Resolvei auto-delete empty list:", error);
+      });
       return;
     }
 
@@ -827,7 +846,7 @@
   }
 
   function deleteList(id) {
-    var target = state.lists.find(function (x) { return x.id === id; });
+    var target = state.lists.find(function (x) { return x.id === id; }) || (state.listId === id ? state.list : null);
     if (!target) return;
     var u = user();
     if (!u || target.ownerId !== u.uid) {
@@ -836,9 +855,17 @@
     }
     if (!window.confirm("Excluir a lista " + (target.title || "de compras") + "? Esta ação não pode ser desfeita.")) return;
 
-    db().collection("shoppingLists").doc(id).delete().then(function () {
+    var ref = db().collection("shoppingLists").doc(id);
+    ref.collection("items").get().then(function (snap) {
+      var batch = db().batch();
+      snap.docs.forEach(function (d) { batch.delete(d.ref); });
+      batch.delete(ref);
+      return batch.commit();
+    }).then(function () {
       toast("Lista excluída.");
       if (state.listId === id) {
+        if (state.unsubList) { state.unsubList(); state.unsubList = null; }
+        if (state.unsubItems) { state.unsubItems(); state.unsubItems = null; }
         state.listId = null;
         state.list = null;
         state.items = [];
