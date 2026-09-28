@@ -19,13 +19,11 @@ class IQSession:
     account: str
     created_at: float
     last_used: float
-    pending_2fa: bool = False
 
 _SESSIONS: dict[str, IQSession] = {}
 _LOCK = threading.RLock()
 _SESSION_TTL = 60 * 60 * 6
 _LOGIN_TIMEOUT = 35.0
-_2FA_TIMEOUT = 35.0
 _metadata_cache: dict[Any, dict] = {}
 
 def _call_with_timeout(fn, timeout_seconds: float, operation: str):
@@ -70,51 +68,18 @@ def connect_session(session_id: str, email: str, password: str, account: str):
         try:
             client = IQ_Option(email.strip(), password)
             ok, reason = _call_with_timeout(client.connect, _LOGIN_TIMEOUT, "login_iq_option")
-            if not ok and str(reason).upper() == "2FA":
-                _SESSIONS[session_id] = IQSession(client, account, time.time(), time.time(), True)
-                return True, "A IQ Option solicitou o código de verificação em duas etapas.", None, True
             if not ok:
                 _close_client(client)
-                return False, f"Falha na autenticação da IQ Option: {reason}", None, False
+                return False, f"Falha na autenticação da IQ Option: {reason}", None
             client.change_balance(account)
-            _SESSIONS[session_id] = IQSession(client, account, time.time(), time.time(), False)
-            return True, f"Conectado à conta {account}.", _safe_balance(client), False
+            _SESSIONS[session_id] = IQSession(client, account, time.time(), time.time())
+            return True, f"Conectado à conta {account}.", _safe_balance(client)
         except TimeoutError:
             _close_client(client)
-            return False, "A IQ Option demorou mais de 35 segundos para responder. Verifique a rede do servidor e tente novamente.", None, False
+            return False, "A IQ Option demorou mais de 35 segundos para responder. Verifique a rede do servidor e tente novamente.", None
         except Exception as exc:
             _close_client(client)
-            return False, f"Não foi possível autenticar na IQ Option: {exc}", None, False
-
-def complete_2fa(session_id: str, code: str):
-    with _LOCK:
-        item = _SESSIONS.get(session_id)
-        if not item:
-            return False, "A tentativa de login expirou. Faça o login novamente.", None
-        if not item.pending_2fa:
-            return True, "A sessão já está autenticada.", _safe_balance(item.client)
-        code = str(code or "").strip()
-        if not code or not code.isdigit():
-            return False, "Informe somente o código numérico recebido da IQ Option.", None
-        try:
-            method = getattr(item.client, "connect_2fa", None)
-            if not callable(method):
-                return False, "A biblioteca instalada não oferece suporte à segunda etapa de autenticação.", None
-            result = _call_with_timeout(lambda: method(code), _2FA_TIMEOUT, "login_iq_option_2fa")
-            if isinstance(result, tuple):
-                ok, reason = bool(result[0]), result[1] if len(result) > 1 else None
-            else:
-                ok, reason = bool(result), None
-            if not ok:
-                return False, f"Não foi possível validar o código 2FA: {reason or 'código recusado'}", None
-            item.client.change_balance(item.account)
-            item.pending_2fa = False
-            item.last_used = time.time()
-            return True, f"Conectado à conta {item.account}.", _safe_balance(item.client)
-        except TimeoutError:
-            return False, "A validação do código 2FA excedeu 35 segundos. Tente novamente.", None
-        except Exception as exc:
-            return False, f"Erro ao validar o código 2FA: {exc}", None
+            return False, f"Não foi possível autenticar na IQ Option: {exc}", None
 
 def disconnect_session(session_id: str):
     with _LOCK:
@@ -134,21 +99,19 @@ def get_client(session_id: str):
     item=_get(session_id)
     if not item:
         raise RuntimeError("Sessão da IQ Option não encontrada ou expirada.")
-    if item.pending_2fa:
-        raise RuntimeError("Conclua a verificação em duas etapas da IQ Option antes de continuar.")
     return item.client
 
 def is_connected(session_id: str):
     item=_get(session_id)
     if not item:
-        return {"connected":False,"pending_2fa":False,"account":None}
+        return {"connected":False,"account":None}
     if item.pending_2fa:
         return {"connected":False,"pending_2fa":True,"account":item.account}
     try:
         connected=bool(item.client.check_connect())
     except Exception:
         connected=True
-    return {"connected":connected,"pending_2fa":False,"account":item.account}
+    return {"connected":connected,"account":item.account}
 
 def _safe_balance(client):
     try:
