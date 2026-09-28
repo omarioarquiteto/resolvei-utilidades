@@ -367,28 +367,29 @@
 
     var activeHtml = active.length
       ? active.map(function (x) { return listHistoryRow(x, false); }).join("")
-      : '<div class="shopping-empty-history">Nenhuma lista ativa.</div>';
+      : '<div class="shopping-empty-history"><strong>Nenhuma lista ativa.</strong><span>Crie sua primeira lista ao lado.</span></div>';
 
     var finalizedHtml = finalized.length
       ? finalized.map(function (x) { return listHistoryRow(x, true); }).join("")
-      : '<div class="shopping-empty-history">Nenhuma lista finalizada.</div>';
+      : '<div class="shopping-empty-history"><strong>Nenhuma lista finalizada.</strong><span>Quando todos os itens forem comprados, a lista virá para cá.</span></div>';
 
     root().innerHTML =
       '<div class="shopping-header-block">' +
-        '<div><span class="eyebrow">LISTA COLABORATIVA</span><h2>Organize suas compras</h2><p>Digite os produtos como quiser. O Resolvei separa, classifica e coloca os itens em uma ordem prática.</p></div>' +
-        '<span class="shopping-no-ai">⚡ Sem IA</span>' +
+        '<div><span class="eyebrow">LISTA DE COMPRAS</span><h2>Monte sua lista e vá às compras</h2><p>Digite os produtos como você fala no dia a dia. O Resolvei organiza tudo por setor automaticamente.</p></div>' +
+        '<span class="shopping-no-ai">⚡ Não usa IA</span>' +
       '</div>' +
       '<div class="shopping-create-grid">' +
         '<section class="card panel shopping-create-card">' +
-          '<h3>Nova lista</h3>' +
+          '<div class="shopping-step"><span>1</span><div><strong>Crie uma lista</strong><small>Dê um nome para encontrar depois.</small></div></div>' +
           '<label class="field"><span>Nome da lista</span><input id="shoppingTitle" maxlength="80" value="Compras" placeholder="Ex.: Compras da casa"></label>' +
-          '<label class="field"><span>Digite os produtos</span><textarea id="shoppingInput" rows="12" placeholder="Arroz 5kg&#10;Feijão 2 pacotes&#10;Tomate&#10;Leite integral 1L&#10;Detergente&#10;Papel higiênico 12 rolos"></textarea></label>' +
-          '<div class="shopping-example">Uma linha por produto. Também aceitamos listas separadas por vírgulas.</div>' +
-          '<div class="actions"><button class="btn primary" type="button" data-action="create-list">🛒 Organizar minha lista</button></div>' +
+          '<div class="shopping-step"><span>2</span><div><strong>Digite ou cole os produtos</strong><small>Um produto por linha funciona melhor.</small></div></div>' +
+          '<label class="field"><span class="sr-only">Produtos</span><textarea id="shoppingInput" rows="11" placeholder="Arroz 5kg&#10;Feijão 2 pacotes&#10;Molho de tomate, Vigor&#10;Leite 1L&#10;Tomate 1kg&#10;Detergente"></textarea></label>' +
+          '<div class="shopping-example"><strong>Dica:</strong> escreva quantidade e marca quando quiser. Ex.: <em>Molho de tomate, Vigor</em>.</div>' +
+          '<div class="actions shopping-primary-action"><button class="btn primary full" type="button" data-action="create-list">🛒 Organizar e criar lista</button></div>' +
           '<div id="shoppingHomeMsg" class="notice" hidden></div>' +
         '</section>' +
         '<section class="card panel shopping-history-card">' +
-          '<div class="shopping-section-title"><div><h3>Minhas listas</h3><p>Listas compartilhadas e criadas por você.</p></div></div>' +
+          '<div class="shopping-section-title"><div><h3>Suas listas</h3><p>Você pode continuar uma lista ou reaproveitar uma finalizada.</p></div></div>' +
           '<div class="shopping-history-group"><div class="shopping-history-group-title"><span>🛒 Listas ativas</span><b>' + active.length + '</b></div><div class="shopping-history">' + activeHtml + '</div></div>' +
           '<div class="shopping-history-group"><div class="shopping-history-group-title finalized"><span>✅ Listas finalizadas</span><b>' + finalized.length + '</b></div><div class="shopping-history">' + finalizedHtml + '</div></div>' +
         '</section>' +
@@ -454,24 +455,40 @@
       '<div class="shopping-list-shell">' +
         '<div class="shopping-list-top">' +
           '<button class="btn ghost" type="button" data-action="back-home">← Minhas listas</button>' +
-          '<div class="shopping-list-title"><span class="eyebrow">LISTA COMPARTILHADA</span><h2>' + esc(state.list.title || "Lista de compras") + '</h2><p>' + memberCount + ' ' + (memberCount === 1 ? "pessoa" : "pessoas") + ' com acesso</p></div>' +
+          '<div class="shopping-list-title">' +
+            '<span class="eyebrow">LISTA DE COMPRAS</span>' +
+            '<div class="shopping-title-edit-wrap">' +
+              '<h2>' + esc(state.list.title || "Lista de compras") + '</h2>' +
+              '<button class="shopping-title-edit" type="button" data-action="rename-list" aria-label="Editar nome da lista">✎</button>' +
+            '</div>' +
+            '<p>' + memberCount + ' ' + (memberCount === 1 ? "pessoa" : "pessoas") + ' com acesso</p>' +
+          '</div>' +
           '<div class="shopping-list-top-actions">' +
-          '<button class="btn" type="button" data-action="share">🔗 Compartilhar</button>' +
-          (listIsFinalized(state.list) ? '<button class="btn" type="button" data-action="reuse-current-list">↻ Reaproveitar lista</button>' : '') +
-          (state.list.ownerId === uid() ? '<button class="btn ghost" type="button" data-action="delete-current-list">🗑 Excluir lista</button>' : '') +
-          '<button class="btn primary" type="button" data-action="new-list">＋ Nova lista</button>' +
-        '</div>' +
+            '<button class="btn" type="button" data-action="share">🔗 Compartilhar</button>' +
+            (listIsFinalized(state.list) ? '<button class="btn" type="button" data-action="reuse-current-list">↻ Reaproveitar</button>' : '') +
+            (state.list.ownerId === uid() ? '<button class="btn ghost" type="button" data-action="delete-current-list">🗑 Excluir</button>' : '') +
+          '</div>' +
         '</div>' +
         '<div class="shopping-progress-card">' +
           '<div><strong>' + doneCount + ' de ' + items.length + ' itens</strong><span>' + (items.length ? Math.round(doneCount / items.length * 100) : 0) + '% concluído</span></div>' +
           '<div class="shopping-progress"><span style="width:' + (items.length ? Math.round(doneCount / items.length * 100) : 0) + '%"></span></div>' +
         '</div>' +
-        '<div class="shopping-add-row">' +
-          '<input id="shoppingAddInput" type="text" placeholder="Adicionar produto...">' +
-          '<button class="btn primary" type="button" data-action="add-item">＋ Adicionar</button>' +
+        '<div class="shopping-add-card">' +
+          '<div class="shopping-add-heading"><strong>Adicionar produto</strong><span>Digite, toque em adicionar e continue.</span></div>' +
+          '<div class="shopping-add-row">' +
+            '<input id="shoppingAddInput" type="text" autocomplete="off" placeholder="Ex.: Café 500g, 2 pacotes de arroz, banana...">' +
+            '<button class="btn primary" type="button" data-action="add-item">＋ Adicionar</button>' +
+          '</div>' +
+          '<details class="shopping-bulk-details">' +
+            '<summary>Adicionar vários produtos de uma vez</summary>' +
+            '<textarea id="shoppingBulkInput" rows="5" placeholder="Um por linha:&#10;Arroz 5kg&#10;Feijão 2 pacotes&#10;Molho de tomate, Vigor"></textarea>' +
+            '<div class="actions"><button class="btn" type="button" data-action="add-bulk">Adicionar todos</button></div>' +
+          '</details>' +
+        '</div>' +
+        '<div class="shopping-list-toolbar">' +
+          '<div class="shopping-note-line">O Resolvei organiza os produtos automaticamente. O que não reconhecer vai para <strong>Outros</strong>.</div>' +
           '<button class="btn" type="button" data-action="toggle-market">' + (state.marketMode ? "👁 Mostrar comprados" : "🛒 Modo mercado") + '</button>' +
         '</div>' +
-        '<div class="shopping-note-line">A classificação é feita por regras do Resolvei. Itens que não forem reconhecidos entram em <strong>Outros</strong>.</div>' +
         '<div class="shopping-category-list">' + groupHtml + '</div>' +
         '<div class="shopping-bottom-actions">' +
           '<button class="btn ghost" type="button" data-action="clear-done"' + (doneCount ? "" : " disabled") + '>Limpar itens comprados</button>' +
@@ -734,6 +751,67 @@
     });
   }
 
+  function addBulkItems() {
+    var input = document.getElementById("shoppingBulkInput");
+    var raw = input ? input.value.trim() : "";
+    if (!raw) {
+      toast("Cole ou digite pelo menos um produto.");
+      if (input) input.focus();
+      return;
+    }
+    if (!state.listId || !uid() || !db()) {
+      toast("Sua sessão não está pronta. Entre novamente no Resolvei.");
+      return;
+    }
+
+    var lines = raw.split(/\r?\n/).map(function (x) { return x.trim(); }).filter(Boolean);
+    var parsed = [];
+    lines.forEach(function (line) {
+      var items = parseListText(line);
+      items.forEach(function (item) { if (item && item.name) parsed.push(item); });
+    });
+
+    if (!parsed.length) {
+      toast("Não encontrei produtos nessa lista.");
+      return;
+    }
+
+    var startPosition = state.items.length
+      ? Math.max.apply(null, state.items.map(function (x) { return typeof x.position === "number" ? x.position : 0; })) + 1
+      : 0;
+
+    var batch = db().batch();
+    parsed.forEach(function (item, index) {
+      var ref = db().collection("shoppingLists").doc(state.listId).collection("items").doc();
+      batch.set(ref, {
+        raw: item.raw,
+        name: item.name,
+        brand: item.brand || "",
+        qty: item.qty,
+        unit: item.unit,
+        categoryId: item.categoryId,
+        done: false,
+        position: startPosition + index,
+        createdBy: uid(),
+        createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+    });
+
+    var button = document.querySelector('[data-action="add-bulk"]');
+    if (button) { button.disabled = true; button.textContent = "Adicionando..."; }
+
+    batch.commit().then(function () {
+      input.value = "";
+      toast("✅ " + parsed.length + " " + (parsed.length === 1 ? "produto adicionado." : "produtos adicionados."));
+    }).catch(function (error) {
+      console.error("Resolvei add bulk:", error);
+      toast("Não foi possível adicionar os produtos. " + (error.message || ""));
+    }).finally(function () {
+      if (button) { button.disabled = false; button.textContent = "Adicionar todos"; }
+    });
+  }
+
   function addItem() {
     var input = document.getElementById("shoppingAddInput");
     if (!input) return;
@@ -869,14 +947,22 @@
 
   function renameList() {
     var current = state.list && state.list.title ? state.list.title : "Compras";
-    var value = window.prompt("Nome da lista:", current);
+    var value = window.prompt("Digite o novo nome da lista:", current);
     if (value === null) return;
     value = value.trim().slice(0, 80);
-    if (!value) return;
+    if (!value) {
+      toast("Digite um nome para a lista.");
+      return;
+    }
     db().collection("shoppingLists").doc(state.listId).update({
       title: value,
       updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-    }).catch(function (error) { toast("Não foi possível renomear a lista."); console.error(error); });
+    }).then(function () {
+      toast("✅ Nome da lista atualizado.");
+    }).catch(function (error) {
+      toast("Não foi possível renomear a lista. " + (error.message || ""));
+      console.error(error);
+    });
   }
 
   function share() {
@@ -1027,6 +1113,7 @@
       else if (action === "back-home") newList();
       else if (action === "new-list") newList();
       else if (action === "add-item") addItem();
+      else if (action === "add-bulk") addBulkItems();
       else if (action === "toggle-market") { state.marketMode = !state.marketMode; renderList(); }
       else if (action === "toggle-item") {}
       else if (action === "edit-item") editItem(el.getAttribute("data-item-id"));
