@@ -1,0 +1,44 @@
+//@version=5
+indicator("Resolvei — GURÚ DOS SINAIS", overlay=true)
+
+secret = input.string("TROQUE_PELO_SEU_SEGREDO", "Webhook secret")
+fastLen = input.int(9, "EMA rápida", minval=1)
+midLen = input.int(21, "EMA média", minval=1)
+slowLen = input.int(50, "EMA lenta", minval=1)
+rsiLen = input.int(14, "RSI", minval=2)
+bbLen = input.int(20, "Bollinger", minval=2)
+bbMult = input.float(2.0, "Desvio Bollinger", minval=0.1)
+volLen = input.int(20, "Média de volume", minval=2)
+
+ema9 = ta.ema(close, fastLen)
+ema21 = ta.ema(close, midLen)
+ema50 = ta.ema(close, slowLen)
+rsi = ta.rsi(close, rsiLen)
+[macd, macdSignal, _] = ta.macd(close, 12, 26, 9)
+[basis, upper, lower] = ta.bb(close, bbLen, bbMult)
+bbPosition = upper != lower ? (close - lower) / (upper - lower) : 0.5
+momentum = close - close[5]
+volumeRatio = volume / ta.sma(volume, volLen)
+
+trend = ema9 > ema21 and ema21 > ema50 ? "ALTA" : ema9 < ema21 and ema21 < ema50 ? "BAIXA" : "NEUTRA"
+
+support = low <= ta.lowest(low, 20) * 1.002
+resistance = high >= ta.highest(high, 20) * 0.998
+breakoutUp = close > ta.highest(high, 20)[1]
+breakoutDown = close < ta.lowest(low, 20)[1]
+
+bullish = close > open and close[1] < open[1] and close > open[1] and open < close[1]
+bearish = close < open and close[1] > open[1] and close < open[1] and open > close[1]
+pattern = bullish ? "engolfo de alta" : bearish ? "engolfo de baixa" : close > open ? "bullish" : "bearish"
+
+signalReady = barstate.isconfirmed and (trend != "NEUTRA" or breakoutUp or breakoutDown)
+
+if signalReady
+    msg = '{"secret":"' + secret + '","symbol":"' + syminfo.ticker + '","timeframe":"' + timeframe.period + '","price":' + str.tostring(close) + ',"timestamp":"' + str.tostring(time) + '","trend":"' + trend + '","rsi":' + str.tostring(rsi) + ',"macd":' + str.tostring(macd) + ',"macdSignal":' + str.tostring(macdSignal) + ',"ema9":' + str.tostring(ema9) + ',"ema21":' + str.tostring(ema21) + ',"ema50":' + str.tostring(ema50) + ',"bbPosition":' + str.tostring(bbPosition) + ',"momentum":' + str.tostring(momentum) + ',"volume":' + str.tostring(volume) + ',"volumeRatio":' + str.tostring(volumeRatio) + ',"candlePattern":"' + pattern + '","support":' + str.tostring(support) + ',"resistance":' + str.tostring(resistance) + ',"breakoutUp":' + str.tostring(breakoutUp) + ',"breakoutDown":' + str.tostring(breakoutDown) + '}'
+    alert(msg, alert.freq_once_per_bar_close)
+
+plot(ema9, "EMA 9")
+plot(ema21, "EMA 21")
+plot(ema50, "EMA 50")
+plotshape(signalReady and trend == "ALTA", title="Contexto de alta", style=shape.triangleup, location=location.belowbar, size=size.tiny)
+plotshape(signalReady and trend == "BAIXA", title="Contexto de baixa", style=shape.triangledown, location=location.abovebar, size=size.tiny)
