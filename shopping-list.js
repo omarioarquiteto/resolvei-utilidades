@@ -90,6 +90,36 @@
 
   function categoryFor(name) {
     var n = normalize(name);
+
+    // Produtos compostos devem vencer palavras genéricas.
+    // Ex.: "molho de tomate" é mercearia, mesmo contendo "tomate".
+    var phraseRules = [
+      ["molho de tomate", "mercearia"],
+      ["extrato de tomate", "mercearia"],
+      ["polpa de tomate", "mercearia"],
+      ["tomate pelado", "mercearia"],
+      ["pure de tomate", "mercearia"],
+      ["purê de tomate", "mercearia"],
+      ["geleia de fruta", "mercearia"],
+      ["doce de leite", "mercearia"],
+      ["leite condensado", "mercearia"],
+      ["creme de leite", "mercearia"],
+      ["leite em po", "mercearia"],
+      ["leite em pó", "mercearia"],
+      ["farinha de trigo", "mercearia"],
+      ["farinha de mandioca", "mercearia"],
+      ["sardinha em lata", "mercearia"],
+      ["atum em lata", "mercearia"],
+      ["hamburguer congelado", "congelados"],
+      ["hambúrguer congelado", "congelados"],
+      ["legumes congelados", "congelados"]
+    ];
+    for (var p = 0; p < phraseRules.length; p++) {
+      if (n.indexOf(normalize(phraseRules[p][0])) !== -1) {
+        return categoryById(phraseRules[p][1]);
+      }
+    }
+
     for (var i = 0; i < CATEGORIES.length; i++) {
       var cat = CATEGORIES[i];
       for (var j = 0; j < cat.words.length; j++) {
@@ -108,11 +138,49 @@
       .replace(/\s*[,;]\s*$/, "");
   }
 
+  // Marcas comuns que, quando aparecem após vírgula, não devem virar outro produto.
+  // A lista é deliberadamente simples e pode ser ampliada sem IA.
+  var KNOWN_BRANDS = [
+    "vigor","sadia","seara","perdigao","perdigão","qualy","nestle","nestlé",
+    "itambe","itam bé","itambe","piracanjuba","toddynho","nescau","ninho",
+    "coca cola","coca-cola","pepsi","guarana antarctica","guaraná antarctica",
+    "heineken","brahma","skol","itaipava","yoki","kicaldo","camil","tio joao",
+    "tio joão","urbano","predilecta","predilect a","elefante","hellmanns",
+    "hellmann's","cepêra","cepera","arisco","knorr","maggi","sazón","sazon"
+  ];
+
+  function extractBrand(text) {
+    var raw = String(text || "").trim();
+    var parts = raw.split(/\s*,\s*/).map(function (x) { return x.trim(); }).filter(Boolean);
+    if (parts.length === 2) {
+      var second = normalize(parts[1]);
+      if (KNOWN_BRANDS.indexOf(second) !== -1) {
+        return { product: parts[0], brand: parts[1] };
+      }
+    }
+    return { product: raw, brand: "" };
+  }
+
+  function looksLikeKnownBrand(text) {
+    return KNOWN_BRANDS.indexOf(normalize(text)) !== -1;
+  }
+
+  function parseCommaSeparatedProducts(input) {
+    var parts = String(input || "").split(/\s*,\s*/).map(function (x) { return x.trim(); }).filter(Boolean);
+    if (parts.length < 2) return [String(input || "").trim()];
+
+    // "Molho de tomate, Vigor" = um produto com marca, não dois produtos.
+    if (parts.length === 2 && looksLikeKnownBrand(parts[1])) return [String(input || "").trim()];
+
+    return parts;
+  }
+
   function parseShoppingLine(raw) {
     var original = cleanRawLine(raw);
     if (!original) return null;
 
-    var text = original;
+    var brandInfo = extractBrand(original);
+    var text = brandInfo.product;
     var qty = 1;
     var unit = "un.";
     var match;
@@ -152,6 +220,7 @@
     return {
       raw: original,
       name: titleCase(text),
+      brand: brandInfo.brand || "",
       qty: qty,
       unit: unit,
       categoryId: categoryFor(text).id
@@ -163,7 +232,9 @@
     if (!input) return [];
     var lines = input.split(/\r?\n/).map(function (x) { return x.trim(); }).filter(Boolean);
     if (lines.length === 1 && /[,;]/.test(lines[0])) {
-      lines = lines[0].split(/\s*[,;]\s*/).map(function (x) { return x.trim(); }).filter(Boolean);
+      lines = /;/.test(lines[0])
+        ? lines[0].split(/\s*;\s*/).map(function (x) { return x.trim(); }).filter(Boolean)
+        : parseCommaSeparatedProducts(lines[0]);
     }
     var result = [];
     lines.forEach(function (line) {
@@ -316,7 +387,7 @@
       '<label class="shopping-check-label">' +
         '<input type="checkbox" data-action="toggle-item" data-item-id="' + esc(item.id) + '"' + (item.done ? " checked" : "") + '>' +
         '<span class="shopping-check"></span>' +
-        '<span class="shopping-item-text"><strong>' + esc(item.name) + '</strong><small>' + esc(formatQty(item.qty) + " " + (item.unit || "un.")) + '</small></span>' +
+        '<span class="shopping-item-text"><strong>' + esc(item.name) + (item.brand ? ' <em class="shopping-brand">(' + esc(item.brand) + ')</em>' : '') + '</strong><small>' + esc(formatQty(item.qty) + " " + (item.unit || "un.")) + '</small></span>' +
       '</label>' +
       '<div class="shopping-item-actions">' +
         '<button class="shopping-icon-btn" type="button" title="Editar item" aria-label="Editar item" data-action="edit-item" data-item-id="' + esc(item.id) + '">✎</button>' +
@@ -516,6 +587,7 @@
       batch.set(itemRef, {
         raw: item.raw,
         name: item.name,
+        brand: item.brand || "",
         qty: item.qty,
         unit: item.unit,
         categoryId: item.categoryId,
@@ -551,6 +623,7 @@
     db().collection("shoppingLists").doc(state.listId).collection("items").add({
       raw: parsed.raw,
       name: parsed.name,
+      brand: parsed.brand || "",
       qty: parsed.qty,
       unit: parsed.unit,
       categoryId: parsed.categoryId,
@@ -606,9 +679,12 @@
       toast("Informe um produto e uma quantidade válida.");
       return;
     }
-    var category = categoryFor(name);
+    var brandInfo = extractBrand(name);
+    var productName = brandInfo.product;
+    var category = categoryFor(productName);
     db().collection("shoppingLists").doc(state.listId).collection("items").doc(id).update({
-      name: titleCase(name),
+      name: titleCase(productName),
+      brand: brandInfo.brand || "",
       qty: qty,
       unit: unit,
       raw: name + " " + formatQty(qty) + " " + unit,
