@@ -1,4 +1,4 @@
-/* Resolvei — Lista de Compras colaborativa, sem IA */
+/* Resolvei — Lista de Compras colaborativa, com classificação local e IA opcional */
 (function () {
   "use strict";
 
@@ -342,7 +342,7 @@
         '<div class="shopping-big-icon">🛒</div>' +
         '<span class="eyebrow">LISTA COLABORATIVA</span>' +
         '<h2>Entre no Resolvei para criar e compartilhar listas</h2>' +
-        '<p>As listas compartilhadas ficam salvas na conta e são atualizadas em tempo real. A organização é feita por regras do próprio Resolvei, sem IA.</p>' +
+        '<p>As listas compartilhadas ficam salvas na conta e são atualizadas em tempo real. A organização é feita por regras próprias; a IA é opcional para sugerir uma classificação quando você solicitar.</p>' +
         '<div class="actions"><a class="btn primary" href="#/conta">Entrar / Criar conta</a></div>' +
       '</section>';
   }
@@ -386,7 +386,7 @@
     root().innerHTML =
       '<div class="shopping-header-block">' +
         '<div><span class="eyebrow">LISTA DE COMPRAS</span><h2>Monte sua lista e vá às compras</h2><p>Digite os produtos como você fala no dia a dia. O Resolvei organiza tudo por setor automaticamente.</p></div>' +
-        '<span class="shopping-no-ai">⚡ Não usa IA</span>' +
+        '<span class="shopping-no-ai">⚡ IA opcional</span>' +
       '</div>' +
       '<div class="shopping-create-grid">' +
         '<section class="card panel shopping-create-card">' +
@@ -435,7 +435,7 @@
         '<span class="shopping-item-text"><strong>' + esc(item.name) + (item.brand ? ' <em class="shopping-brand">(' + esc(item.brand) + ')</em>' : '') + '</strong><small>' + esc(formatQty(item.qty) + " " + (item.unit || "un.")) + '</small></span>' +
       '</label>' +
       '<div class="shopping-item-actions">' +
-        '<button class="shopping-icon-btn" type="button" title="Editar / reclassificar item" aria-label="Editar / reclassificar item" data-action="edit-item" data-item-id="' + esc(item.id) + '">✎</button>' +
+        '<button class="shopping-reclassify-btn" type="button" title="Reclassificar produto" aria-label="Reclassificar produto" data-action="edit-item" data-item-id="' + esc(item.id) + '">↕ Classificar</button>' +
         '<button class="shopping-icon-btn danger" type="button" title="Excluir item" aria-label="Excluir item" data-action="delete-item" data-item-id="' + esc(item.id) + '">×</button>' +
       '</div>' +
     '</div>';
@@ -501,7 +501,7 @@
           '</details>' +
         '</div>' +
         '<div class="shopping-list-toolbar">' +
-          '<div class="shopping-note-line">O Resolvei organiza os produtos automaticamente. O que não reconhecer vai para <strong>Outros</strong>.</div>' +
+          '<div class="shopping-note-line">O Resolvei aprende suas correções. O que ainda não reconhecer vai para <strong>Outros</strong>; você pode reclassificar e ensinar a lista.</div>' +
           '<button class="btn" type="button" data-action="toggle-market">' + (state.marketMode ? "👁 Mostrar comprados" : "🛒 Modo mercado") + '</button>' +
         '</div>' +
         '<div class="shopping-category-list">' + groupHtml + '</div>' +
