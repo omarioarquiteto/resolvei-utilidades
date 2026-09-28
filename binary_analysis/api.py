@@ -9,7 +9,6 @@ from pydantic import BaseModel
 from .engine import analyze_asset, get_chart_data, strategy_catalog, walkforward_asset
 from .service import (
     connect_session,
-    complete_2fa,
     disconnect_session,
     get_balance,
     get_market_status,
@@ -26,10 +25,6 @@ class IQLoginRequest(BaseModel):
     email: str
     password: str
     account: str = "PRACTICE"
-
-class IQ2FARequest(BaseModel):
-    session_id: str
-    code: str
 
 
 @router.get("/health")
@@ -51,7 +46,7 @@ def iq_login(request: IQLoginRequest):
     if account not in ("PRACTICE", "REAL"):
         raise HTTPException(400, "A conta deve ser PRACTICE (demo) ou REAL.")
     session_id = secrets.token_urlsafe(32)
-    ok, message, balance, requires_2fa = connect_session(session_id, email, request.password, account)
+    ok, message, balance = connect_session(session_id, email, request.password, account)
     if not ok:
         disconnect_session(session_id)
         raise HTTPException(502, message)
@@ -61,26 +56,7 @@ def iq_login(request: IQLoginRequest):
         "message": message,
         "account": account,
         "balance": balance,
-        "requires_2fa": requires_2fa,
     }
-
-@router.post("/login/2fa")
-def iq_login_2fa(request: IQ2FARequest):
-    if not request.session_id:
-        raise HTTPException(400, "Sessão de login ausente.")
-    ok, message, balance = complete_2fa(request.session_id, request.code)
-    if not ok:
-        raise HTTPException(502, message)
-    status = is_connected(request.session_id)
-    return {
-        "ok": True,
-        "session_id": request.session_id,
-        "message": message,
-        "account": status.get("account"),
-        "balance": balance,
-        "requires_2fa": False,
-    }
-
 
 @router.post("/logout")
 def iq_logout(x_iq_session: str | None = Header(default=None)):
