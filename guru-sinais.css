@@ -1,0 +1,29 @@
+/* GURÚ DOS SINAIS */
+.guru-shell{display:grid;gap:18px}
+.guru-hero-card{padding:24px;display:flex;align-items:center;justify-content:space-between;gap:20px}
+.guru-hero-card h2{margin:4px 0 6px;font-size:30px;letter-spacing:-.04em}
+.guru-hero-card p{margin:0;color:var(--muted);max-width:760px}
+.guru-status{padding:10px 14px;border-radius:999px;background:var(--accent-soft);color:var(--accent);font-size:12px;font-weight:800;white-space:nowrap}
+.guru-check{display:flex;align-items:center;gap:8px;padding:11px 12px;border:1px solid var(--line);border-radius:12px;background:var(--surface);font-size:13px}
+.guru-result-card{min-height:100%}
+.guru-signal{font-size:64px;font-weight:950;letter-spacing:-.07em;line-height:1;margin:12px 0}
+.guru-call{color:var(--success)}
+.guru-put{color:var(--danger)}
+.guru-wait{color:var(--muted)}
+.guru-score{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-top:20px;font-size:13px}
+.guru-score span{color:var(--muted)}
+.guru-score strong{font-size:24px}
+.guru-meter{height:10px;border-radius:999px;background:var(--surface-2);overflow:hidden;margin:9px 0 18px}
+.guru-meter span{display:block;height:100%;background:var(--accent);border-radius:inherit}
+.guru-analysis-list{margin-top:18px;padding-top:15px;border-top:1px solid var(--line)}
+.guru-analysis-list h3{font-size:14px;margin:0 0 8px}
+.guru-analysis-list ul{margin:0;padding-left:18px;font-size:13px}
+.guru-analysis-list li{margin:6px 0}
+.guru-warnings{color:var(--danger)}
+.guru-history{overflow:hidden}
+.guru-history-body{display:grid;gap:8px}
+.guru-history-row{display:grid;grid-template-columns:100px 1fr 80px 80px 1fr;gap:10px;align-items:center;padding:11px 12px;border:1px solid var(--line);border-radius:10px;font-size:12px}
+.guru-steps{margin:0;padding-left:22px;color:var(--muted);font-size:13px}
+.guru-steps li{margin:8px 0}
+.guru-tool-card{border-color:color-mix(in srgb,var(--accent) 35%,var(--line))}
+@media(max-width:700px){.guru-hero-card{align-items:flex-start;flex-direction:column}.guru-signal{font-size:52px}.guru-history-row{grid-template-columns:1fr 1fr}.guru-history-row span:last-child{grid-column:1/-1}}
