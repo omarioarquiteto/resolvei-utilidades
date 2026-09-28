@@ -31,7 +31,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, Response
 from pydantic import BaseModel, Field
 
-from binary_analysis.api import router as binary_analysis_router
 
 load_dotenv()
 
@@ -72,8 +71,6 @@ if FIREBASE_PROJECT_ID and FIREBASE_CLIENT_EMAIL and FIREBASE_PRIVATE_KEY:
         _firebase_admin = None
 
 app = FastAPI(title="Resolvei API", version="3.0.0")
-
-app.include_router(binary_analysis_router)
 
 # O frontend atualmente é servido pelo próprio FastAPI, portanto as requisições
 # são same-origin. Mantemos CORS configurável para o domínio próprio e futuros
