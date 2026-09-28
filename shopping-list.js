@@ -537,61 +537,73 @@
     });
   }
 
-  function recalcListMeta() {
-    if (!state.listId || !state.list || !db()) return;
-    var total = state.items.length;
-    var done = state.items.filter(function (x) { return !!x.done; }).length;
-    state.list.itemCount = total;
-    state.list.doneCount = done;
-
-    // Uma lista que ficou sem itens é removida pelo backend.
-    // Isso funciona também quando quem removeu o último item foi um colaborador.
-    if (state.itemsLoaded && total === 0) {
-      var emptyId = state.listId;
-      cleanupEmptyList(emptyId).then(function (deleted) {
-        if (deleted && state.listId === emptyId) {
-          toast("Lista vazia excluída automaticamente.");
-          if (state.unsubList) { state.unsubList(); state.unsubList = null; }
-          if (state.unsubItems) { state.unsubItems(); state.unsubItems = null; }
-          state.listId = null;
-          state.list = null;
-          state.items = [];
-          state.itemsLoaded = false;
-          goList("");
-        }
-      }).catch(function (error) {
-        console.error("Resolvei auto-delete empty list:", error);
-      });
-      return;
-    }
-
-    db().collection("shoppingLists").doc(state.listId).update({
-      itemCount: total,
-      doneCount: done,
-      updatedAt: firebase.firestore.FieldValue.serverTimestamp()
-    }).catch(function (error) {
-      console.error("Resolvei list counters:", error);
-    });
-  }
-
   function subscribeItems() {
     if (state.unsubItems) { state.unsubItems(); state.unsubItems = null; }
-    if (!state.listId || !uid()) return;
-    var ref = db().collection("shoppingLists").doc(state.listId).collection("items");
+    if (!state.listId || !uid() || !db()) return;
+
+    var listId = state.listId;
+    var ref = db().collection("shoppingLists").doc(listId).collection("items");
     state.itemsLoaded = false;
+
     state.unsubItems = ref.onSnapshot(function (snap) {
+      // Ignore a late snapshot from an old list after navigation.
+      if (state.listId !== listId) return;
+
       state.items = snap.docs.map(function (d) {
         var x = d.data() || {};
         x.id = d.id;
         return x;
       }).sort(sortItems);
+
+      var wasLoaded = state.itemsLoaded;
       state.itemsLoaded = true;
+
       if (state.list) {
-        recalcListMeta();
-        if (state.listId) renderCurrent();
+        var total = state.items.length;
+        var done = state.items.filter(function (x) { return !!x.done; }).length;
+        state.list.itemCount = total;
+        state.list.doneCount = done;
+
+        // Only persist counters when they actually changed. This avoids
+        // a list snapshot -> item resubscription loop.
+        var storedTotal = Number(state.list._storedItemCount);
+        var storedDone = Number(state.list._storedDoneCount);
+        if (storedTotal !== total || storedDone !== done) {
+          state.list._storedItemCount = total;
+          state.list._storedDoneCount = done;
+          db().collection("shoppingLists").doc(listId).set({
+            itemCount: total,
+            doneCount: done,
+            updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+          }, {merge:true}).catch(function (error) {
+            console.error("Resolvei list counters:", error);
+          });
+        }
+
+        // Only auto-delete after a list that was already loaded becomes empty.
+        if (wasLoaded && total === 0) {
+          cleanupEmptyList(listId).then(function (deleted) {
+            if (deleted && state.listId === listId) {
+              toast("Lista vazia excluída automaticamente.");
+              if (state.unsubList) { state.unsubList(); state.unsubList = null; }
+              if (state.unsubItems) { state.unsubItems(); state.unsubItems = null; }
+              state.listId = null;
+              state.list = null;
+              state.items = [];
+              state.itemsLoaded = false;
+              goList("");
+            }
+          }).catch(function (error) {
+            console.error("Resolvei auto-delete empty list:", error);
+          });
+          return;
+        }
+
+        renderCurrent();
       }
-    }, function () {
-      toast("Não foi possível sincronizar os itens desta lista.");
+    }, function (error) {
+      console.error("Resolvei shopping items:", error);
+      toast("Não foi possível sincronizar os produtos. " + (error.message || ""));
     });
   }
 
@@ -602,25 +614,44 @@
     state.list = null;
     state.items = [];
     state.itemsLoaded = false;
-    if (!id || !db() || !uid()) { renderCurrent(); return; }
+
+    if (!id || !db() || !uid()) {
+      renderCurrent();
+      return;
+    }
 
     renderLoading("Abrindo lista...");
+    var listId = id;
     var ref = db().collection("shoppingLists").doc(id);
+
     state.unsubList = ref.onSnapshot(function (snap) {
+      if (state.listId !== listId) return;
+
       if (!snap.exists) {
         state.list = null;
+        state.items = [];
+        if (state.unsubItems) { state.unsubItems(); state.unsubItems = null; }
         renderLoading("Esta lista não existe ou foi removida.");
         return;
       }
-      state.list = snap.data() || {};
-      state.list.id = snap.id;
-      var members = Array.isArray(state.list.memberIds) ? state.list.memberIds : [];
-      if (members.indexOf(uid()) >= 0) subscribeItems();
-      else if (state.unsubItems) { state.unsubItems(); state.unsubItems = null; }
-      renderCurrent();
+
+      var data = snap.data() || {};
+      data.id = snap.id;
+      data._storedItemCount = Number(data.itemCount || 0);
+      data._storedDoneCount = Number(data.doneCount || 0);
+      state.list = data;
+
+      var members = Array.isArray(data.memberIds) ? data.memberIds : [];
+      if (members.indexOf(uid()) >= 0) {
+        if (!state.unsubItems) subscribeItems();
+        renderCurrent();
+      } else {
+        if (state.unsubItems) { state.unsubItems(); state.unsubItems = null; }
+        renderCurrent();
+      }
     }, function (error) {
       console.error("Resolvei shopping list:", error);
-      renderLoading("Não foi possível abrir esta lista. Verifique o login e o link compartilhado.");
+      renderLoading("Não foi possível abrir esta lista. " + (error.message || "Verifique o login e o link compartilhado."));
     });
   }
 
@@ -706,9 +737,34 @@
   function addItem() {
     var input = document.getElementById("shoppingAddInput");
     if (!input) return;
-    var parsed = parseShoppingLine(input.value);
-    if (!parsed || !parsed.name || !state.listId || !uid() || !db()) return;
-    var position = state.items.length ? Math.max.apply(null, state.items.map(function (x) { return typeof x.position === "number" ? x.position : 0; })) + 1 : 0;
+
+    var raw = input.value.trim();
+    if (!raw) {
+      toast("Digite o nome do produto.");
+      input.focus();
+      return;
+    }
+
+    if (!state.listId || !uid() || !db()) {
+      toast("Sua sessão não está pronta. Entre novamente no Resolvei.");
+      return;
+    }
+
+    var parsed = parseShoppingLine(raw);
+    if (!parsed || !parsed.name) {
+      toast("Não consegui identificar esse produto. Tente escrever de outra forma.");
+      return;
+    }
+
+    var position = state.items.length
+      ? Math.max.apply(null, state.items.map(function (x) {
+          return typeof x.position === "number" ? x.position : 0;
+        })) + 1
+      : 0;
+
+    var button = document.querySelector('[data-action="add-item"]');
+    if (button) { button.disabled = true; button.textContent = "Adicionando..."; }
+
     db().collection("shoppingLists").doc(state.listId).collection("items").add({
       raw: parsed.raw,
       name: parsed.name,
@@ -723,10 +779,14 @@
       updatedAt: firebase.firestore.FieldValue.serverTimestamp()
     }).then(function () {
       input.value = "";
-      toast("Item adicionado.");
+      input.focus();
+      toast("✅ Produto adicionado à lista.");
     }).catch(function (error) {
-      toast("Não foi possível adicionar o item.");
-      console.error(error);
+      console.error("Resolvei add item:", error);
+      var detail = error && error.code ? error.code + ": " : "";
+      toast("Não foi possível adicionar. " + detail + (error.message || "Verifique sua conexão."));
+    }).finally(function () {
+      if (button) { button.disabled = false; button.textContent = "＋ Adicionar"; }
     });
   }
 
