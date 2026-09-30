@@ -6,7 +6,7 @@ from collections import deque
 from typing import Any
 
 import requests
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Header
 from pydantic import BaseModel
 
 router = APIRouter(prefix="/api/guru-sinais", tags=["GURÚ DOS SINAIS"])
@@ -605,7 +605,7 @@ def analyze_market(symbol: str, timeframe: str, strategy: str = "automatica", au
 
 
 @router.post("/market-analysis")
-def market_analysis(req: MarketAnalysisRequest, authorization: str | None = None) -> dict[str, Any]:
+def market_analysis(req: MarketAnalysisRequest, authorization: str | None = Header(default=None)) -> dict[str, Any]:
     return {"ok": True, "analysis": analyze_market(req.symbol, req.timeframe, req.strategy, authorization)}
 
 rom __future__ import annotations
