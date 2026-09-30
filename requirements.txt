@@ -19,3 +19,4 @@ cryptography>=43,<46
 
 # Integração comunitária com a IQ Option (uso para estudo)
 git+https://github.com/iqoptionapi/iqoptionapi.git@master#egg=iqoptionapi
+websocket-client==0.56
