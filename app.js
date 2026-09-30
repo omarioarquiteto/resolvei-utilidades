@@ -1167,7 +1167,7 @@ function resolveiAccountPage(){
  const savedTheme=localStorage.getItem("resolvei_theme")||"light";
  return `<div class="account-page">
   <aside class="account-sidebar">
-   <div class="account-profile"><div class="account-avatar">👤</div><div><strong>\${esc(resolveiUser.displayName||"Minha conta")}</strong><span>\${esc(resolveiUser.email||"")}</span></div></div>
+   <div class="account-profile"><div class="account-avatar">👤</div><div><strong>${esc(resolveiUser.displayName||"Minha conta")}</strong><span>${esc(resolveiUser.email||"")}</span></div></div>
    <div class="account-menu">
     <button type="button" class="active" data-account-section="ia">🤖 Minha IA</button>
     <button type="button" data-account-section="perfil">👤 Perfil</button>
@@ -1177,13 +1177,13 @@ function resolveiAccountPage(){
   </aside>
   <section class="account-main">
    <div class="account-heading"><div><span class="eyebrow">MINHA CONTA</span><h1 id="accountSectionTitle">Configuração da IA</h1><p id="accountSectionDesc">Gerencie seus provedores e modelos de inteligência artificial.</p></div><div class="account-status">🟢 Conta ativa</div></div>
-   <div class="account-section" data-account-content="ia"><div class="account-ai-settings">\${resolveiApiPage()}</div></div>
+   <div class="account-section" data-account-content="ia"><div class="account-ai-settings">${resolveiApiPage()}</div></div>
    <div class="account-section" data-account-content="perfil" hidden>
     <section class="card panel account-inner-card">
      <h2>Meu perfil</h2><p class="muted">Atualize as informações básicas da sua conta do Resolvei.</p>
      <div class="form-grid account-profile-form">
-      <div class="field"><label for="profileName">Nome</label><input id="profileName" type="text" value="\${esc(resolveiUser.displayName||"")}" placeholder="Como você quer ser chamado?"></div>
-      <div class="field"><label for="profileEmail">E-mail</label><input id="profileEmail" type="email" value="\${esc(resolveiUser.email||"")}" disabled></div>
+      <div class="field"><label for="profileName">Nome</label><input id="profileName" type="text" value="${esc(resolveiUser.displayName||"")}" placeholder="Como você quer ser chamado?"></div>
+      <div class="field"><label for="profileEmail">E-mail</label><input id="profileEmail" type="email" value="${esc(resolveiUser.email||"")}" disabled></div>
      </div>
      <div class="row-actions"><button class="btn primary" id="saveProfileBtn">Salvar perfil</button></div>
      <div id="profileMsg" class="notice" hidden></div>
@@ -1193,7 +1193,7 @@ function resolveiAccountPage(){
     <section class="card panel account-inner-card">
      <h2>Preferências</h2><p class="muted">Escolha como o Resolvei deve aparecer para você neste navegador.</p>
      <div class="preference-list">
-      <label class="preference-option"><span><strong>Tema escuro</strong><small>Ative o modo escuro do Resolvei.</small></span><input id="preferenceDark" type="checkbox" \${savedTheme==="dark"?"checked":""}></label>
+      <label class="preference-option"><span><strong>Tema escuro</strong><small>Ative o modo escuro do Resolvei.</small></span><input id="preferenceDark" type="checkbox" ${savedTheme==="dark"?"checked":""}></label>
      </div>
      <div class="row-actions"><button class="btn primary" id="savePreferencesBtn">Salvar preferências</button></div>
      <div id="preferencesMsg" class="notice" hidden></div>
