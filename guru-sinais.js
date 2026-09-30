@@ -157,12 +157,6 @@
     }
   }
 
-  function injectCard() {
-    if (document.querySelector(".guru-tool-card")) return;
-    const grids = [...document.querySelectorAll(".grid")];
-    if (grids.length) grids[0].insertAdjacentHTML("beforeend", card());
-  }
-
   function renderRoute() {
     const hash = location.hash || "";
     if (!hash.includes("/ferramenta/" + TOOL_ID)) return;
@@ -175,10 +169,8 @@
   }
 
   function boot() {
-    injectCard();
     renderRoute();
     window.addEventListener("hashchange", () => setTimeout(() => {
-      injectCard();
       renderRoute();
     }, 0));
   }
