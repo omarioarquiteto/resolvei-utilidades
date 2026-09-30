@@ -17,6 +17,7 @@ firebase-admin>=6.5,<7
 cryptography>=43,<46
 
 
-# Integração comunitária com a IQ Option (uso para estudo)
-git+https://github.com/iqoptionapi/iqoptionapi.git@master#egg=iqoptionapi
-websocket-client==0.56
+# Cliente comunitário atualizado para a integração de dados da IQ Option
+git+https://github.com/victalejo/iqoptionapi.git@master#egg=iqoptionapi
+aiohttp>=3.9,<4
+websockets>=12,<16
