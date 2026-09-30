@@ -193,17 +193,22 @@
     try {
       const headers = {"Content-Type":"application/json"};
       try {
-        if (typeof resolveiUser !== "undefined" && resolveiUser) {
-          headers.Authorization = "Bearer " + await resolveiUser.getIdToken();
+        if (typeof resolveiUser !== "undefined" && resolveiUser && typeof resolveiUser.getIdToken === "function") {
+          const token = await resolveiUser.getIdToken();
+          if (typeof token === "string" && /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(token)) {
+            headers.Authorization = "Bearer " + token;
+          }
         }
       } catch(_) {}
 
-      const r = await fetch(API + "/market-analysis", {
+      const endpoint = new URL(API + "/market-analysis", window.location.origin).toString();
+      const r = await fetch(endpoint, {
         method:"POST",
         headers,
         body:JSON.stringify({symbol,timeframe,strategy})
       });
-      const d = await r.json();
+      const contentType = r.headers.get("content-type") || "";
+      const d = contentType.includes("application/json") ? await r.json() : {detail: await r.text()};
       if (!r.ok) throw new Error(d.detail || "Não foi possível analisar o mercado.");
       result.innerHTML = resultHtml(d.analysis);
       document.getElementById("guruNewAnalysis")?.addEventListener("click", () => window.scrollTo({top:0,behavior:"smooth"}));
