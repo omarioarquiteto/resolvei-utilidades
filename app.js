@@ -34,6 +34,7 @@ const tools = [
   {id:'poder-compra',cat:'dinheiro',icon:'🛒',title:'Poder de compra',desc:'Compare o valor nominal com uma inflação estimada.',tags:'inflação poder de compra dinheiro'},
   {id:'gerenciamento-risco',cat:'dinheiro',icon:'🛡️',title:'Gerenciamento de risco e evolução de capital',desc:'Modele entradas progressivas por seção, exposição a perdas, evolução do patrimônio e acompanhe resultados.',tags:'gerenciamento risco gestão de banca capital patrimonio evolução capital entrada payout perdas chances seção progressão risco financeiro'},
   {id:'laboratorio-estatistico',cat:'dinheiro',icon:'🧠',title:'Laboratório estatístico de opções',desc:'Valide taxa de acerto, payout, valor esperado, amostra, sizing conservador, drawdown e circuito de proteção.',tags:'opções binárias estatística probabilidade payout valor esperado EV kelly risco banca drawdown backtest laboratório'},
+  {id:'gerador-de-senhas',cat:'outros',icon:'🔐',title:'Gerador de senhas',desc:'Crie senhas fortes, frases-senha e PINs usando geração criptograficamente segura no navegador.',tags:'senha senhas password gerador segurança pin frase-senha criptografia segurança online'}
   {id:'guru-dos-sinais',cat:'dinheiro',icon:'🧙',title:'GURÚ DOS SINAIS',desc:'Analista técnico automático: informe o par e o timeframe e receba a leitura de mercado.',tags:'guru sinais análise técnica mercado forex call put tendência indicadores tradingview'},
   {id:'combustivel-viagem',cat:'carro',icon:'⛽',title:'Combustível da viagem',desc:'Estime litros necessários e custo da viagem.',tags:'gasolina etanol combustível viagem litros km'},
   {id:'custo-km',cat:'carro',icon:'🛣️',title:'Custo por km',desc:'Descubra quanto seu carro custa a cada quilômetro.',tags:'custo km carro combustível consumo'},
@@ -815,6 +816,7 @@ function toolUI(id){
     case 'posicao-solar': return solarCalculatorUI();
     case 'gerenciamento-risco': return riskEvolutionUI();
     case 'laboratorio-estatistico': return statisticalRiskUI();
+    case 'gerador-de-senhas': return window.resolveiPasswordGeneratorUI ? window.resolveiPasswordGeneratorUI() : '<div class="empty">Carregando gerador de senhas…</div>';
     case 'area-retangulo': return panel(input('length','Comprimento',{suffix:'m',value:'5'})+input('width','Largura',{suffix:'m',value:'4'}));
     case 'area-triangulo': return panel(input('base','Base',{suffix:'m',value:'5'})+input('height','Altura',{suffix:'m',value:'3'}));
     case 'area-circulo': return panel(input('radius','Raio',{suffix:'m',value:'2'}));
@@ -1088,6 +1090,7 @@ function bind(){
   if(['placas-solares','posicao-solar'].includes(rid)){bindSolarCalculatorInteractions();}
   if(rid==='gerenciamento-risco'){bindRiskEvolutionTool();}
   if(rid==='laboratorio-estatistico'){bindStatisticalRiskTool();}
+  if(rid==='gerador-de-senhas'){window.resolveiBindPasswordGenerator?.();}
   if(rid==='festa'){const type=document.getElementById('partyType');if(type)type.addEventListener('change',()=>{const a=document.getElementById('age'); if(a)a.closest('.field').style.display=type.value.startsWith('aniversario-')?'':'none';}); if(type&&!type.value.startsWith('aniversario-')){const a=document.getElementById('age');if(a)a.closest('.field').style.display='none';} const ai=document.getElementById('aiPartyBtn');if(ai)ai.addEventListener('click',refinePartyAI); }
   const reset=document.getElementById('resetBtn'); if(reset)reset.addEventListener('click',()=>{location.reload();});
   const add=document.getElementById('addItem');if(add)add.addEventListener('click',addShoppingItem);
