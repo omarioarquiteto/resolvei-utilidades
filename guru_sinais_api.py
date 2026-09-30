@@ -14,6 +14,7 @@ router = APIRouter(prefix="/api/guru-sinais", tags=["GURÚ DOS SINAIS"])
 
 WEBHOOK_SECRET = os.getenv("TRADINGVIEW_WEBHOOK_SECRET", "").strip()
 TWELVE_DATA_API_KEY = os.getenv("TWELVE_DATA_API_KEY", "").strip()
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
 SIGNALS = deque(maxlen=200)
 MARKET_CACHE: dict[str, tuple[float, list[dict[str, float]]]] = {}
 CACHE_TTL_SECONDS = 20
@@ -50,6 +51,7 @@ class MarketAnalysisRequest(BaseModel):
     symbol: str
     timeframe: str
     strategy: str = "automatica"
+    analyze_with_ai: bool = False
 
 
 def normalize_symbol(symbol: str) -> str:
@@ -576,7 +578,7 @@ def _mtf_score(context: dict[str, Any], setup: dict[str, Any], trigger: dict[str
     signal = s if s in {"CALL", "PUT"} and score >= 65 else "AGUARDAR"
     return signal, round(score, 1), notes
 
-def analyze_market(symbol: str, timeframe: str, strategy: str = "automatica", authorization: str | None = None) -> dict[str, Any]:
+def analyze_market(symbol: str, timeframe: str, strategy: str = "automatica", authorization: str | None = None, analyze_with_ai: bool = False) -> dict[str, Any]:
     symbol = normalize_symbol(symbol)
     if timeframe not in INTERVALS:
         raise HTTPException(status_code=400, detail="Timeframe não suportado.")
@@ -619,7 +621,7 @@ def analyze_market(symbol: str, timeframe: str, strategy: str = "automatica", au
         setup_rows[-1]["close"],
         setup_rows,
         authorization,
-    )
+    ) if analyze_with_ai else {"available": False, "reason": "Análise com IA desativada."}
 
     gem_signal = gemini.get("signal") if gemini.get("available") else None
     gem_conf = float(gemini.get("confidence", 0)) if gem_signal else 0.0
@@ -692,7 +694,7 @@ def analyze_market(symbol: str, timeframe: str, strategy: str = "automatica", au
 
 @router.post("/market-analysis")
 def market_analysis(req: MarketAnalysisRequest, authorization: str | None = Header(default=None)) -> dict[str, Any]:
-    return {"ok": True, "analysis": analyze_market(req.symbol, req.timeframe, req.strategy, authorization)}
+    return {"ok": True, "analysis": analyze_market(req.symbol, req.timeframe, req.strategy, authorization, req.analyze_with_ai)}
 
 def receive_webhook(data: TradingViewSignal) -> dict[str, Any]:
     if WEBHOOK_SECRET and data.secret != WEBHOOK_SECRET:
