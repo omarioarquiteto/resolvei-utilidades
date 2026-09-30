@@ -466,33 +466,119 @@ def _gemini_review(symbol: str, timeframe: str, selected_strategy: str, strategi
             _, api_key, stored_model = _resolve_ai_credentials(authorization, "gemini")
             model = stored_model or model
         except Exception:
-            if not api_key: raise
+            if not api_key:
+                raise
     if not api_key:
-        return {"available":False,"reason":"Gemini não configurado."}
+        return {"available": False, "reason": "Gemini não configurado."}
+
     selected = next((x for x in strategies if x["strategy"] == selected_strategy), strategies[0])
-    compact = [{"strategy":x["strategyLabel"],"direction":x["direction"],"confidence":x["confidence"],"indicators":x["indicators"]} for x in strategies]
-    recent = [{"o":round(x["open"],6),"h":round(x["high"],6),"l":round(x["low"],6),"c":round(x["close"],6)} for x in rows[-12:]]
+    compact = [
+        {
+            "strategy": x["strategyLabel"],
+            "direction": x["direction"],
+            "confidence": x["confidence"],
+            "indicators": x["indicators"],
+        }
+        for x in strategies
+    ]
+    recent = [
+        {
+            "o": round(x["open"], 6),
+            "h": round(x["high"], 6),
+            "l": round(x["low"], 6),
+            "c": round(x["close"], 6),
+        }
+        for x in rows[-12:]
+    ]
     prompt = (
         "Valide um estudo técnico de opções binárias de curtíssimo prazo. Não invente dados. "
         "Use apenas os indicadores, confluências e candles fornecidos. Cada estratégia tem 12 indicadores. "
         "Compare famílias diferentes e penalize contradições. Responda SOMENTE JSON: "
         "{\"signal\":\"CALL|PUT|AGUARDAR\",\"confidence\":0-100,\"reason\":\"texto curto\",\"risk\":\"baixo|medio|alto\"}. "
         f"Par={symbol}; timeframe={timeframe}; preço={price}; estratégia={selected_strategy}. "
-        f"Estratégias={json.dumps(compact,ensure_ascii=False,separators=(',',':'))}. "
-        f"Valores da estratégia selecionada={json.dumps(selected['values'],ensure_ascii=False,separators=(',',':'))}. "
-        f"Candles={json.dumps(recent,separators=(',',':'))}. "
+        f"Estratégias={json.dumps(compact, ensure_ascii=False, separators=(',', ':'))}. "
+        f"Valores da estratégia selecionada={json.dumps(selected['values'], ensure_ascii=False, separators=(',', ':'))}. "
+        f"Candles={json.dumps(recent, separators=(',', ':'))}. "
         "Só use CALL/PUT quando houver confluência clara; caso contrário AGUARDAR."
     )
-    try:
-        url="https://generativelanguage.googleapis.com/v1beta/models/"+model+":generateContent"
-        payload={"contents":[{"parts":[{"text":prompt}]}],"generationConfig":{"responseMimeType":"application/json","temperature":0.1,"maxOutputTokens":180}}
-        resp=requests.post(url,headers={"x-goog-api-key":api_key,"Content-Type":"application/json"},json=payload,timeout=3.5)
-        if not resp.ok: return {"available":False,"reason":f"Gemini HTTP {resp.status_code}"}
-        parsed=json.loads(resp.json()["candidates"][0]["content"]["parts"][0]["text"])
-        return {"available":True,"signal":parsed.get("signal","AGUARDAR"),"confidence":float(parsed.get("confidence",0)),"reason":str(parsed.get("reason",""))[:300],"risk":str(parsed.get("risk","alto")),"model":model}
-    except Exception as exc:
-        return {"available":False,"reason":str(exc)[:220]}
 
+    url = "https://generativelanguage.googleapis.com/v1beta/models/" + model + ":generateContent"
+    payload = {
+        "contents": [{"parts": [{"text": prompt}]}],
+        "generationConfig": {
+            "responseMimeType": "application/json",
+            "temperature": 0.1,
+            "maxOutputTokens": 180,
+        },
+    }
+
+    last_reason = ""
+    retryable = {429, 500, 502, 503, 504}
+
+    for attempt in range(3):
+        try:
+            resp = requests.post(
+                url,
+                headers={
+                    "x-goog-api-key": api_key,
+                    "Content-Type": "application/json",
+                },
+                json=payload,
+                timeout=12,
+            )
+
+            if resp.ok:
+                data = resp.json()
+                text = data["candidates"][0]["content"]["parts"][0]["text"]
+                parsed = json.loads(text)
+                signal = str(parsed.get("signal", "AGUARDAR")).upper()
+                if signal not in {"CALL", "PUT", "AGUARDAR"}:
+                    signal = "AGUARDAR"
+                return {
+                    "available": True,
+                    "signal": signal,
+                    "confidence": float(parsed.get("confidence", 0)),
+                    "reason": str(parsed.get("reason", ""))[:300],
+                    "risk": str(parsed.get("risk", "alto")),
+                    "model": model,
+                }
+
+            try:
+                err = resp.json().get("error", {})
+                message = str(err.get("message") or resp.text[:300]).strip()
+            except Exception:
+                message = resp.text[:300].strip()
+
+            last_reason = f"Gemini HTTP {resp.status_code}: {message}"
+
+            if resp.status_code not in retryable or attempt >= 2:
+                break
+
+            time.sleep(1.5 * (2 ** attempt))
+
+        except requests.RequestException as exc:
+            last_reason = f"Falha de conexão com Gemini: {exc}"
+            if attempt >= 2:
+                break
+            time.sleep(1.5 * (2 ** attempt))
+        except (KeyError, IndexError, TypeError, ValueError) as exc:
+            return {
+                "available": False,
+                "reason": f"Resposta do Gemini em formato inesperado: {exc}",
+                "model": model,
+            }
+        except Exception as exc:
+            return {
+                "available": False,
+                "reason": str(exc)[:220],
+                "model": model,
+            }
+
+    return {
+        "available": False,
+        "reason": last_reason or "Gemini temporariamente indisponível.",
+        "model": model,
+    }
 
 
 def _mtf_plan(timeframe: str) -> tuple[str, str, str]:
