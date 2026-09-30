@@ -139,14 +139,12 @@ async def login(req: LoginRequest):
 
 
 @router.get("/session")
-async def session_status(x_binomo_session: str | None = Header(default=None)):
-    _session(x_binomo_session)
-    return {"ok": True, "connected": True, "market_data": "Binomo candles API"}
+async def session_status():
+    return {"ok": True, "connected": True, "market_data": "Binomo candles API", "login_required": False}
 
 
 @router.get("/assets")
-async def assets(x_binomo_session: str | None = Header(default=None)):
-    _session(x_binomo_session)
+async def assets():
     BinomoAPI = _binomo_class()
     all_assets = [_asset_payload(x) for x in BinomoAPI.get_assets()]
     return {
@@ -411,10 +409,8 @@ def _engine(symbol, timeframe, strategy, mtf, plan, analyze_with_ai, authorizati
 @router.post("/market-analysis")
 async def market_analysis(
     req: MarketAnalysisRequest,
-    x_binomo_session: str | None = Header(default=None),
     authorization: str | None = Header(default=None),
 ):
-    item = _session(x_binomo_session)
     if req.timeframe not in NATIVE_TIMEFRAMES and req.timeframe not in DERIVED_TIMEFRAMES:
         raise HTTPException(status_code=400, detail="Timeframe não suportado.")
 
