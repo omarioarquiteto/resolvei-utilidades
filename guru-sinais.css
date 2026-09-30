@@ -40,3 +40,21 @@
 .guru-foot-note{text-align:center;color:var(--muted);font-size:11px;padding:2px 10px 10px}
 .guru-tool-card{border-color:color-mix(in srgb,var(--accent) 38%,var(--line))}
 @media(max-width:700px){.guru-control-grid,.guru-columns{grid-template-columns:1fr}.guru-mini-grid{grid-template-columns:1fr 1fr}.guru-result{padding:20px}.guru-result-top{flex-direction:column}.guru-result-bottom{align-items:flex-start;flex-direction:column}}
+
+.guru-control-grid-3{grid-template-columns:repeat(3,1fr)}
+.guru-ai-box{display:grid;gap:5px;margin-top:20px;padding:14px;border:1px solid var(--line);border-radius:14px;background:var(--surface-2)}
+.guru-ai-box span,.guru-ai-box small{color:var(--muted);font-size:12px}
+.guru-strategy-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin-top:18px}
+.guru-strategy-card{padding:12px;border:1px solid var(--line);border-radius:12px;background:var(--surface-2)}
+.guru-strategy-card div{display:flex;justify-content:space-between;gap:8px;font-size:12px}
+.guru-strategy-card span{font-weight:900}
+.guru-strategy-card small{display:block;margin-top:6px;color:var(--muted)}
+.guru-strategy-call{border-color:color-mix(in srgb,var(--success) 45%,var(--line))}
+.guru-strategy-put{border-color:color-mix(in srgb,var(--danger) 45%,var(--line))}
+.guru-indicators-details{margin-top:20px;border-top:1px solid var(--line);padding-top:16px}
+.guru-indicators-details summary{cursor:pointer;font-weight:800;font-size:13px}
+.guru-indicator-list{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:12px}
+.guru-indicator-row{display:flex;justify-content:space-between;gap:10px;padding:9px 10px;border:1px solid var(--line);border-radius:9px;font-size:11px}
+.guru-indicator-row strong{font-weight:900}
+@media(max-width:850px){.guru-control-grid-3,.guru-strategy-grid{grid-template-columns:1fr 1fr}}
+@media(max-width:700px){.guru-control-grid-3,.guru-strategy-grid,.guru-indicator-list{grid-template-columns:1fr}}
