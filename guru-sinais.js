@@ -25,23 +25,32 @@
   }
 
   function shell() {
-    return `
+    return \`
       <div class="guru-simple">
         <section class="guru-simple-head">
-          <span class="eyebrow">ANALISTA TÉCNICO</span>
+          <span class="eyebrow">ANALISTA TÉCNICO + IA</span>
           <h1>🧙 GURÚ DOS SINAIS</h1>
-          <p>Escolha o par e o timeframe. O GURÚ faz o restante.</p>
+          <p>Confluência de indicadores + estratégias específicas + validação do Gemini.</p>
         </section>
 
         <section class="card guru-control-card">
-          <div class="guru-control-grid">
+          <div class="guru-control-grid guru-control-grid-3">
             <div class="field">
               <label for="guruPair">Par de moedas</label>
-              <select id="guruPair">${pairs.map(([v,t]) => `<option value="${v}">${t}</option>`).join("")}</select>
+              <select id="guruPair">\${pairs.map(([v,t]) => \`<option value="\${v}">\${t}</option>\`).join("")}</select>
             </div>
             <div class="field">
               <label for="guruTimeframe">Timeframe</label>
-              <select id="guruTimeframe">${timeframes.map(([v,t]) => `<option value="${v}">${t}</option>`).join("")}</select>
+              <select id="guruTimeframe">\${timeframes.map(([v,t]) => \`<option value="\${v}">\${t}</option>\`).join("")}</select>
+            </div>
+            <div class="field">
+              <label for="guruStrategy">Estratégia</label>
+              <select id="guruStrategy">
+                <option value="automatica">🤖 Automática — maior confluência</option>
+                <option value="tendencia">📈 Tendência + confluência</option>
+                <option value="reversao">↩️ Reversão à média</option>
+                <option value="rompimento">🚀 Rompimento + momentum</option>
+              </select>
             </div>
           </div>
           <button class="guru-analyze-btn" id="guruAnalyzeBtn">🔍 ANALISAR MERCADO</button>
@@ -52,15 +61,15 @@
           <div class="card guru-empty">
             <div class="guru-empty-icon">📊</div>
             <strong>Pronto para analisar</strong>
-            <span>Escolha o par e o timeframe acima.</span>
+            <span>O motor calcula as estratégias antes de consultar o Gemini, reduzindo o tempo de resposta.</span>
           </div>
         </section>
 
         <section class="guru-foot-note">
-          <span>O resultado é uma leitura técnica de mercado para estudo. O sistema não executa operações.</span>
+          <span>Ferramenta de estudo. Indicadores técnicos não garantem resultado futuro e o sistema não executa operações.</span>
         </section>
       </div>
-    `;
+    \`;
   }
 
   function classFor(signal) {
@@ -68,52 +77,76 @@
   }
 
   function resultHtml(a) {
-    const reasons = (a.reasons || []).slice(0,6).map(x => `<li>✓ ${esc(x)}</li>`).join("");
-    const warnings = (a.warnings || []).slice(0,4).map(x => `<li>⚠ ${esc(x)}</li>`).join("");
+    const reasons = (a.reasons || []).slice(0,7).map(x => \`<li>✓ \${esc(x)}</li>\`).join("");
+    const warnings = (a.warnings || []).slice(0,5).map(x => \`<li>⚠ \${esc(x)}</li>\`).join("");
     const score = Math.max(0, Math.min(100, Number(a.score || 0)));
-    return `
+    const strategyRows = (a.strategies || []).map(s => \`
+      <div class="guru-strategy-card \${s.direction === "CALL" ? "guru-strategy-call" : s.direction === "PUT" ? "guru-strategy-put" : ""}">
+        <div><strong>\${esc(s.strategyLabel)}</strong><span>\${esc(s.direction)}</span></div>
+        <small>\${Number(s.confidence || 0).toFixed(0)}% · \${Number(s.indicators?.length || 0)} indicadores</small>
+      </div>\`).join("");
+    const indicators = (a.strategies || []).find(s => s.strategy === a.strategy)?.indicators || [];
+    const indicatorRows = indicators.map(i => \`
+      <div class="guru-indicator-row">
+        <span>\${esc(i.name)}</span><strong>\${esc(i.signal)}</strong>
+      </div>\`).join("");
+    const gemini = a.gemini || {};
+    return \`
       <div class="card guru-result">
         <div class="guru-result-top">
           <div>
-            <span class="eyebrow">${esc(a.symbol)} · ${esc(a.timeframe)}</span>
+            <span class="eyebrow">\${esc(a.symbol)} · \${esc(a.timeframe)} · \${esc(a.strategyLabel || "estratégia")}</span>
             <div class="guru-result-title">SINAL DE ENTRADA</div>
           </div>
-          <div class="guru-price">${a.price != null ? esc(Number(a.price).toFixed(5)) : "—"}</div>
+          <div class="guru-price">\${a.price != null ? esc(Number(a.price).toFixed(5)) : "—"}</div>
         </div>
 
-        <div class="guru-big-signal ${classFor(a.signal)}">${esc(a.signal)}</div>
-        <div class="guru-quality">${esc(a.quality)}</div>
+        <div class="guru-big-signal \${classFor(a.signal)}">\${esc(a.signal)}</div>
+        <div class="guru-quality">\${esc(a.quality)}</div>
 
         <div class="guru-score-line">
-          <span>Força da confluência técnica</span>
-          <strong>${score}%</strong>
+          <span>Confluência final</span>
+          <strong>\${score}%</strong>
         </div>
-        <div class="guru-meter"><span style="width:${score}%"></span></div>
+        <div class="guru-meter"><span style="width:\${score}%"></span></div>
+
+        <div class="guru-ai-box">
+          <strong>✨ Gemini</strong>
+          <span>\${gemini.available ? "Validação da leitura técnica concluída." : "Validação IA indisponível; sinal calculado pelo motor técnico."}</span>
+          \${gemini.reason ? \`<small>\${esc(gemini.reason)}</small>\` : ""}
+        </div>
+
+        <div class="guru-strategy-grid">\${strategyRows}</div>
 
         <div class="guru-columns">
           <div>
             <h3>Leitura do GURÚ</h3>
-            <ul>${reasons || "<li>Sem confirmação suficiente.</li>"}</ul>
+            <ul>\${reasons || "<li>Sem confirmação suficiente.</li>"}</ul>
           </div>
           <div>
             <h3>Pontos de atenção</h3>
-            <ul>${warnings || "<li>Nenhum alerta relevante detectado.</li>"}</ul>
+            <ul>\${warnings || "<li>Nenhum alerta relevante detectado.</li>"}</ul>
           </div>
         </div>
 
+        <details class="guru-indicators-details">
+          <summary>Ver os indicadores da estratégia (\${indicatorRows ? indicators.length : 0})</summary>
+          <div class="guru-indicator-list">\${indicatorRows}</div>
+        </details>
+
         <div class="guru-mini-grid">
-          <div><span>Tendência</span><strong>${esc(a.indicators?.trend || "—")}</strong></div>
-          <div><span>RSI</span><strong>${a.indicators?.rsi ?? "—"}</strong></div>
-          <div><span>MACD</span><strong>${a.indicators?.macd != null ? (a.indicators.macd > a.indicators.macdSignal ? "Positivo" : "Negativo") : "—"}</strong></div>
-          <div><span>Candle</span><strong>${esc(a.indicators?.candlePattern || "—")}</strong></div>
+          <div><span>RSI</span><strong>\${a.indicators?.RSI != null ? Number(a.indicators.RSI).toFixed(1) : "—"}</strong></div>
+          <div><span>ADX</span><strong>\${a.indicators?.ADX != null ? Number(a.indicators.ADX).toFixed(1) : "—"}</strong></div>
+          <div><span>Stochastic</span><strong>\${a.indicators?.StochasticK != null ? Number(a.indicators.StochasticK).toFixed(1) : "—"}</strong></div>
+          <div><span>ATR</span><strong>\${a.indicators?.ATRpct != null ? Number(a.indicators.ATRpct).toFixed(3) + "%" : "—"}</strong></div>
         </div>
 
         <div class="guru-result-bottom">
           <button class="btn primary" id="guruNewAnalysis">Nova análise</button>
-          <span>Atualizado: ${esc(a.timestamp)}</span>
+          <span>Atualizado: \${esc(a.timestamp)}</span>
         </div>
       </div>
-    `;
+    \`;
   }
 
   async function analyze() {
@@ -122,35 +155,43 @@
     const msg = document.getElementById("guruMessage");
     const symbol = document.getElementById("guruPair")?.value;
     const timeframe = document.getElementById("guruTimeframe")?.value;
-
+    const strategy = document.getElementById("guruStrategy")?.value || "automatica";
     if (!symbol || !timeframe) return;
+
     btn.disabled = true;
-    btn.textContent = "⏳ ANALISANDO MERCADO…";
+    btn.textContent = "⏳ CALCULANDO…";
     if(msg){msg.hidden=true;msg.textContent="";}
 
-    result.innerHTML = `
+    result.innerHTML = \`
       <div class="card guru-loading">
         <div class="guru-spinner"></div>
-        <strong>Analisando ${esc(symbol)}</strong>
-        <span>O GURÚ está cruzando tendência, momentum, indicadores e estrutura de preço.</span>
-      </div>`;
+        <strong>Analisando \${esc(symbol)}</strong>
+        <span>12 indicadores por estratégia + múltiplas estratégias + validação Gemini.</span>
+      </div>\`;
 
     try {
+      const headers = {"Content-Type":"application/json"};
+      try {
+        if (typeof resolveiUser !== "undefined" && resolveiUser) {
+          headers.Authorization = "Bearer " + await resolveiUser.getIdToken();
+        }
+      } catch(_) {}
+
       const r = await fetch(API + "/market-analysis", {
         method:"POST",
-        headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({symbol,timeframe})
+        headers,
+        body:JSON.stringify({symbol,timeframe,strategy})
       });
       const d = await r.json();
       if (!r.ok) throw new Error(d.detail || "Não foi possível analisar o mercado.");
       result.innerHTML = resultHtml(d.analysis);
       document.getElementById("guruNewAnalysis")?.addEventListener("click", () => window.scrollTo({top:0,behavior:"smooth"}));
     } catch (e) {
-      result.innerHTML = `
+      result.innerHTML = \`
         <div class="card guru-error">
           <strong>Não foi possível concluir a análise.</strong>
-          <span>${esc(e.message)}</span>
-        </div>`;
+          <span>\${esc(e.message)}</span>
+        </div>\`;
     } finally {
       btn.disabled = false;
       btn.textContent = "🔍 ANALISAR MERCADO";
