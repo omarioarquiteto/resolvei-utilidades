@@ -76,6 +76,10 @@ app = FastAPI(title="Resolvei API", version="3.0.0")
 from guru_sinais_api import router as guru_sinais_router
 app.include_router(guru_sinais_router)
 
+# GURÚ DOS SINAIS IQOPTION: integração isolada; o Guru original permanece intacto.
+from guru_sinais_iqoption_api import router as guru_sinais_iqoption_router
+app.include_router(guru_sinais_iqoption_router)
+
 # O frontend atualmente é servido pelo próprio FastAPI, portanto as requisições
 # são same-origin. Mantemos CORS configurável para o domínio próprio e futuros
 # clientes externos sem expor credenciais.
