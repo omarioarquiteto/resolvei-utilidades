@@ -80,6 +80,10 @@ app.include_router(guru_sinais_router)
 from guru_sinais_iqoption_api import router as guru_sinais_iqoption_router
 app.include_router(guru_sinais_iqoption_router)
 
+# GURÚ DOS SINAIS BINOMO: integração isolada; não altera os outros Gurus.
+from guru_sinais_binomo_api import router as guru_sinais_binomo_router
+app.include_router(guru_sinais_binomo_router)
+
 # O frontend atualmente é servido pelo próprio FastAPI, portanto as requisições
 # são same-origin. Mantemos CORS configurável para o domínio próprio e futuros
 # clientes externos sem expor credenciais.
