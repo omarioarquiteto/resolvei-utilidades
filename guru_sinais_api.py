@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import time
 from collections import deque
@@ -491,42 +492,199 @@ def _gemini_review(symbol: str, timeframe: str, selected_strategy: str, strategi
         return {"available":False,"reason":str(exc)[:220]}
 
 
+
+def _mtf_plan(timeframe: str) -> tuple[str, str, str]:
+    # Contexto = TF maior, setup = TF escolhido, gatilho = TF menor.
+    plans = {
+        "1m": ("15m", "5m", "1m"),
+        "5m": ("15m", "5m", "1m"),
+        "15m": ("1h", "15m", "5m"),
+        "30m": ("4h", "30m", "15m"),
+        "1h": ("4h", "1h", "15m"),
+    }
+    return plans.get(timeframe, ("15m", timeframe, "5m"))
+
+
+def _mtf_rows(symbol: str, timeframe: str) -> tuple[dict[str, list[dict[str, float]]], tuple[str, str, str]]:
+    context_tf, setup_tf, trigger_tf = _mtf_plan(timeframe)
+    base_tf = min((context_tf, setup_tf, trigger_tf), key=timeframe_minutes)
+
+    # Uma chamada é suficiente quando o TF escolhido é a menor granularidade:
+    # os TFs maiores são agregados localmente, reduzindo latência e consumo da API.
+    base_rows = fetch_candles(symbol, base_tf, 1000)
+    rows: dict[str, list[dict[str, float]]] = {base_tf: base_rows}
+
+    for tf in {context_tf, setup_tf, trigger_tf}:
+        if tf in rows:
+            continue
+        rows[tf] = resample_rows(
+            base_rows,
+            timeframe_minutes(base_tf),
+            timeframe_minutes(tf),
+        )
+
+    # Para 15m/30m/1h, o gatilho é menor que o TF escolhido.
+    # Nesse caso buscamos somente esse TF menor e mantemos o contexto/setup
+    # derivados do mesmo conjunto temporal quando possível.
+    if not rows.get(trigger_tf) or len(rows[trigger_tf]) < 60:
+        trigger_rows = fetch_candles(symbol, trigger_tf, 1000)
+        rows[trigger_tf] = trigger_rows
+        if setup_tf == timeframe:
+            rows[setup_tf] = fetch_candles(symbol, setup_tf, 1000)
+        else:
+            rows[setup_tf] = resample_rows(
+                trigger_rows,
+                timeframe_minutes(trigger_tf),
+                timeframe_minutes(setup_tf),
+            )
+        if len(rows.get(context_tf, [])) < 60:
+            rows[context_tf] = resample_rows(
+                rows[setup_tf],
+                timeframe_minutes(setup_tf),
+                timeframe_minutes(context_tf),
+            )
+
+    return rows, (context_tf, setup_tf, trigger_tf)
+
+
+def _mtf_score(context: dict[str, Any], setup: dict[str, Any], trigger: dict[str, Any]) -> tuple[str, float, list[str]]:
+    # O TF maior filtra a direção; o escolhido confirma o setup; o menor
+    # apenas temporiza a entrada. Não fazemos "votação" simples dos indicadores.
+    c, s, t = context["direction"], setup["direction"], trigger["direction"]
+    score = float(setup["confidence"])
+    notes: list[str] = []
+
+    if c == s and c in {"CALL", "PUT"}:
+        score += 12
+        notes.append(f"Contexto {context['strategyLabel']} confirma {c}.")
+    elif c in {"CALL", "PUT"} and s in {"CALL", "PUT"} and c != s:
+        score -= 14
+        notes.append("O timeframe de contexto diverge do setup.")
+    else:
+        score -= 4
+
+    if t == s and t in {"CALL", "PUT"}:
+        score += 8
+        notes.append(f"Gatilho {trigger['strategyLabel']} acompanha {t}.")
+    elif t in {"CALL", "PUT"} and s in {"CALL", "PUT"} and t != s:
+        score -= 10
+        notes.append("O timeframe de gatilho ainda não confirma o setup.")
+    else:
+        score -= 3
+
+    score = max(0.0, min(99.0, score))
+    signal = s if s in {"CALL", "PUT"} and score >= 65 else "AGUARDAR"
+    return signal, round(score, 1), notes
+
 def analyze_market(symbol: str, timeframe: str, strategy: str = "automatica", authorization: str | None = None) -> dict[str, Any]:
-    symbol=normalize_symbol(symbol)
-    if timeframe not in INTERVALS: raise HTTPException(status_code=400,detail="Timeframe não suportado.")
-    rows=fetch_candles(symbol,timeframe,1000)
-    strategies=[_strategy_pack(rows,s) for s in ("tendencia","reversao","rompimento")]
-    if strategy=="automatica":
-        selected=max(strategies,key=lambda x:x["confidence"] if x["direction"]!="NEUTRA" else 0)
+    symbol = normalize_symbol(symbol)
+    if timeframe not in INTERVALS:
+        raise HTTPException(status_code=400, detail="Timeframe não suportado.")
+
+    mtf, plan = _mtf_rows(symbol, timeframe)
+    context_tf, setup_tf, trigger_tf = plan
+    setup_rows = mtf[setup_tf]
+    if len(setup_rows) < 60 or len(mtf[context_tf]) < 60 or len(mtf[trigger_tf]) < 60:
+        raise HTTPException(status_code=502, detail="Não foram recebidos candles suficientes para a análise em múltiplos timeframes.")
+
+    # Cada timeframe usa a mesma família de estratégia, evitando misturar
+    # indicadores incompatíveis. O contexto filtra, o setup decide e o gatilho temporiza.
+    context_strategies = [_strategy_pack(mtf[context_tf], s) for s in ("tendencia", "reversao", "rompimento")]
+    setup_strategies = [_strategy_pack(setup_rows, s) for s in ("tendencia", "reversao", "rompimento")]
+    trigger_strategies = [_strategy_pack(mtf[trigger_tf], s) for s in ("tendencia", "reversao", "rompimento")]
+
+    if strategy == "automatica":
+        candidates = []
+        for s in setup_strategies:
+            c = next(x for x in context_strategies if x["strategy"] == s["strategy"])
+            t = next(x for x in trigger_strategies if x["strategy"] == s["strategy"])
+            sig, sc, _ = _mtf_score(c, s, t)
+            candidates.append((sc if sig != "AGUARDAR" else 0, s))
+        selected = max(candidates, key=lambda x: x[0])[1]
     else:
-        selected=next((x for x in strategies if x["strategy"]==strategy),None)
-        if not selected: raise HTTPException(status_code=400,detail="Estratégia não suportada.")
-    gemini=_gemini_review(symbol,timeframe,selected["strategy"],strategies,rows[-1]["close"],rows,authorization)
-    base_signal,base_conf=selected["direction"],selected["confidence"]
-    gem_signal=gemini.get("signal") if gemini.get("available") else None
-    gem_conf=float(gemini.get("confidence",0)) if gem_signal else 0.0
-    if gem_signal in {"CALL","PUT"} and gem_signal==base_signal:
-        signal=base_signal; score=round(min(99.0,.65*base_conf+.35*gem_conf))
-        quality="MUITO FORTE" if score>=82 else "FORTE" if score>=72 else "MODERADA"
-    elif gem_signal in {"CALL","PUT"} and base_signal in {"CALL","PUT"}:
-        signal=gem_signal if gem_conf>=base_conf+8 else base_signal
-        score=round(min(90.0,.55*base_conf+.25*gem_conf))
-        quality="CONFLUÊNCIA PARCIAL"
+        selected = next((x for x in setup_strategies if x["strategy"] == strategy), None)
+        if not selected:
+            raise HTTPException(status_code=400, detail="Estratégia não suportada.")
+
+    ctx = next(x for x in context_strategies if x["strategy"] == selected["strategy"])
+    trg = next(x for x in trigger_strategies if x["strategy"] == selected["strategy"])
+    mtf_signal, mtf_score, mtf_notes = _mtf_score(ctx, selected, trg)
+
+    # Gemini recebe somente o resumo MTF + candles do setup/gatilho para continuar rápido.
+    gemini = _gemini_review(
+        symbol,
+        f"{context_tf} → {setup_tf} → {trigger_tf}",
+        selected["strategy"],
+        setup_strategies,
+        setup_rows[-1]["close"],
+        setup_rows,
+        authorization,
+    )
+
+    gem_signal = gemini.get("signal") if gemini.get("available") else None
+    gem_conf = float(gemini.get("confidence", 0)) if gem_signal else 0.0
+    base_signal = mtf_signal
+    base_conf = mtf_score
+
+    if base_signal in {"CALL", "PUT"} and gem_signal == base_signal:
+        signal = base_signal
+        score = round(min(99.0, .72 * base_conf + .28 * gem_conf))
+        quality = "MUITO FORTE" if score >= 82 else "FORTE" if score >= 72 else "MODERADA"
+    elif base_signal in {"CALL", "PUT"} and gem_signal in {"CALL", "PUT"}:
+        signal = base_signal
+        score = round(max(50.0, min(90.0, .82 * base_conf + .18 * gem_conf - 8)))
+        quality = "CONFLUÊNCIA PARCIAL"
     else:
-        signal=base_signal if base_signal in {"CALL","PUT"} else "AGUARDAR"; score=round(base_conf)
-        quality="FORTE" if score>=75 else "MODERADA" if score>=65 else "BAIXA"
-    reasons=[f"{x['strategyLabel']}: {x['direction']} com {x['confidence']:.0f}% de confluência." for x in strategies if x["direction"] in {"CALL","PUT"}]
-    if gemini.get("available"): reasons.append("Gemini: "+(gemini.get("reason") or "validação concluída."))
-    warnings=[]
-    dirs={x["direction"] for x in strategies if x["direction"] in {"CALL","PUT"}}
-    if len(dirs)>1: warnings.append("As estratégias divergem; o sinal foi tratado com maior cautela.")
-    if gemini.get("available") and gem_signal in {"CALL","PUT"} and gem_signal!=base_signal: warnings.append("O Gemini divergiu do motor técnico principal.")
-    if gemini.get("available") and gemini.get("risk")=="alto": warnings.append("O Gemini classificou o contexto como risco alto.")
-    result={
-        "signal":signal,"score":score,"quality":quality,"symbol":symbol,"timeframe":timeframe,"price":rows[-1]["close"],
-        "timestamp":time.strftime("%Y-%m-%dT%H:%M:%SZ",time.gmtime()),"buyScore":selected["buy"],"sellScore":selected["sell"],
-        "reasons":reasons[:8],"warnings":warnings[:6],"strategy":selected["strategy"],"strategyLabel":selected["strategyLabel"],
-        "strategies":strategies,"gemini":gemini,"indicators":selected["values"],"source":"Twelve Data + motor técnico + Gemini"
+        signal = base_signal
+        score = round(base_conf)
+        quality = "FORTE" if score >= 75 else "MODERADA" if score >= 65 else "BAIXA"
+
+    reasons = [
+        f"Contexto {context_tf}: {ctx['direction']} com {ctx['confidence']:.0f}% de confluência.",
+        f"Setup {setup_tf}: {selected['direction']} com {selected['confidence']:.0f}% de confluência.",
+        f"Gatilho {trigger_tf}: {trg['direction']} com {trg['confidence']:.0f}% de confluência.",
+    ] + mtf_notes
+    if gemini.get("available"):
+        reasons.append("Gemini: " + (gemini.get("reason") or "validação concluída."))
+
+    warnings = []
+    if ctx["direction"] in {"CALL", "PUT"} and selected["direction"] in {"CALL", "PUT"} and ctx["direction"] != selected["direction"]:
+        warnings.append("Contexto e setup estão em direções opostas.")
+    if trg["direction"] in {"CALL", "PUT"} and selected["direction"] in {"CALL", "PUT"} and trg["direction"] != selected["direction"]:
+        warnings.append("O gatilho de entrada ainda diverge do setup.")
+    if gemini.get("available") and gem_signal in {"CALL", "PUT"} and gem_signal != base_signal:
+        warnings.append("O Gemini divergiu da leitura técnica em múltiplos timeframes.")
+    if gemini.get("available") and gemini.get("risk") == "alto":
+        warnings.append("O Gemini classificou o contexto como risco alto.")
+    if signal == "AGUARDAR":
+        warnings.append("Sem alinhamento suficiente entre contexto, setup e gatilho.")
+
+    result = {
+        "signal": signal,
+        "score": score,
+        "quality": quality,
+        "symbol": symbol,
+        "timeframe": timeframe,
+        "analysisTimeframes": {"context": context_tf, "setup": setup_tf, "trigger": trigger_tf},
+        "price": setup_rows[-1]["close"],
+        "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "buyScore": selected["buy"],
+        "sellScore": selected["sell"],
+        "reasons": reasons[:10],
+        "warnings": warnings[:8],
+        "strategy": selected["strategy"],
+        "strategyLabel": selected["strategyLabel"],
+        "strategies": setup_strategies,
+        "mtf": {
+            "context": {"timeframe": context_tf, "direction": ctx["direction"], "confidence": ctx["confidence"]},
+            "setup": {"timeframe": setup_tf, "direction": selected["direction"], "confidence": selected["confidence"]},
+            "trigger": {"timeframe": trigger_tf, "direction": trg["direction"], "confidence": trg["confidence"]},
+            "score": mtf_score,
+            "notes": mtf_notes,
+        },
+        "gemini": gemini,
+        "indicators": selected["values"],
+        "source": "Twelve Data + motor técnico MTF + Gemini",
     }
     SIGNALS.appendleft(result)
     return result
