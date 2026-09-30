@@ -53,6 +53,7 @@
               </select>
             </div>
           </div>
+          <label class="guru-ai-toggle"><input type="checkbox" id="guruAnalyzeWithAI"><span>Analisar com I.A.</span><small>Usa o Gemini para validar o sinal.</small></label>
           <button class="guru-analyze-btn" id="guruAnalyzeBtn">🔍 ANALISAR MERCADO</button>
           <div id="guruMessage" class="notice" hidden></div>
         </section>
@@ -177,6 +178,7 @@
     const symbol = document.getElementById("guruPair")?.value;
     const timeframe = document.getElementById("guruTimeframe")?.value;
     const strategy = document.getElementById("guruStrategy")?.value || "automatica";
+    const analyzeWithAI = !!document.getElementById("guruAnalyzeWithAI")?.checked;
     if (!symbol || !timeframe) return;
 
     btn.disabled = true;
@@ -187,7 +189,7 @@
       <div class="card guru-loading">
         <div class="guru-spinner"></div>
         <strong>Analisando ${esc(symbol)}</strong>
-        <span>12 indicadores por estratégia + contexto maior + setup + gatilho + validação Gemini.</span>
+        <span>12 indicadores por estratégia + contexto maior + setup + gatilho${analyzeWithAI ? " + validação Gemini." : "."}</span>
       </div>`;
 
     try {
@@ -205,7 +207,7 @@
       const r = await fetch(endpoint, {
         method:"POST",
         headers,
-        body:JSON.stringify({symbol,timeframe,strategy})
+        body:JSON.stringify({symbol,timeframe,strategy,analyze_with_ai:analyzeWithAI})
       });
       const contentType = r.headers.get("content-type") || "";
       const d = contentType.includes("application/json") ? await r.json() : {detail: await r.text()};
