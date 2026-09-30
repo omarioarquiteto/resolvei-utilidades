@@ -58,3 +58,16 @@
 .guru-indicator-row strong{font-weight:900}
 @media(max-width:850px){.guru-control-grid-3,.guru-strategy-grid{grid-template-columns:1fr 1fr}}
 @media(max-width:700px){.guru-control-grid-3,.guru-strategy-grid,.guru-indicator-list{grid-template-columns:1fr}}
+
+
+.guru-mtf-box{margin-top:18px;padding:16px;border:1px solid var(--border,#e5e7eb);border-radius:16px;background:var(--surface,#fff)}
+.guru-mtf-head{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:12px}
+.guru-mtf-head strong{font-size:15px}.guru-mtf-head span{font-size:12px;opacity:.65}
+.guru-mtf-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.guru-mtf-item{display:grid;grid-template-columns:1fr auto;gap:3px 8px;padding:12px;border-radius:12px;background:var(--surface-2,#f7f8fa)}
+.guru-mtf-item span{grid-column:1/-1;font-size:10px;font-weight:700;letter-spacing:.08em;opacity:.6}
+.guru-mtf-item strong{font-size:14px}.guru-mtf-item em{font-style:normal;font-weight:800;font-size:13px}
+.guru-mtf-item small{grid-column:1/-1;font-size:11px;opacity:.65}
+.guru-call-text{color:#16803c}.guru-put-text{color:#c62828}
+.guru-mtf-note{display:block;margin-top:10px;font-size:11px;line-height:1.45;opacity:.65}
+@media (max-width:700px){.guru-mtf-grid{grid-template-columns:1fr}.guru-mtf-head{align-items:flex-start;flex-direction:column}}
