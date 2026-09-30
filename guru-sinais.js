@@ -40,7 +40,7 @@
               <select id="guruPair">${pairs.map(([v,t]) => `<option value="${v}">${t}</option>`).join("")}</select>
             </div>
             <div class="field">
-              <label for="guruTimeframe">Timeframe</label>
+              <label for="guruTimeframe">Timeframe de entrada</label>
               <select id="guruTimeframe">${timeframes.map(([v,t]) => `<option value="${v}">${t}</option>`).join("")}</select>
             </div>
             <div class="field">
@@ -91,6 +91,18 @@
         <span>${esc(i.name)}</span><strong>${esc(i.signal)}</strong>
       </div>`).join("");
     const gemini = a.gemini || {};
+    const mtf = a.mtf || {};
+    const tf = a.analysisTimeframes || {};
+    const tfLabel = x => x === "1m" ? "1 min" : x === "5m" ? "5 min" : x === "15m" ? "15 min" : x === "30m" ? "30 min" : x === "1h" ? "1 hora" : x === "4h" ? "4 horas" : x;
+    const mtfRows = [
+      ["CONTEXTO", tf.context || mtf.context?.timeframe, mtf.context?.direction, mtf.context?.confidence],
+      ["SETUP", tf.setup || mtf.setup?.timeframe, mtf.setup?.direction, mtf.setup?.confidence],
+      ["GATILHO", tf.trigger || mtf.trigger?.timeframe, mtf.trigger?.direction, mtf.trigger?.confidence]
+    ].map(([label,timeframe,direction,confidence]) =>
+      '<div class="guru-mtf-item"><span>' + label + '</span><strong>' + esc(tfLabel(timeframe || "—")) + '</strong><em class="' +
+      (direction === "CALL" ? "guru-call-text" : direction === "PUT" ? "guru-put-text" : "") + '">' +
+      esc(direction || "—") + '</em><small>' + (confidence != null ? Number(confidence).toFixed(0) + "%" : "—") + '</small></div>'
+    ).join("");
     return `
       <div class="card guru-result">
         <div class="guru-result-top">
@@ -117,6 +129,15 @@
         </div>
 
         <div class="guru-strategy-grid">${strategyRows}</div>
+
+        <div class="guru-mtf-box">
+          <div class="guru-mtf-head">
+            <strong>Leitura em múltiplos timeframes</strong>
+            <span>Contexto → Setup → Gatilho</span>
+          </div>
+          <div class="guru-mtf-grid">${mtfRows}</div>
+          <small class="guru-mtf-note">O timeframe maior filtra a direção, o selecionado confirma o setup e o menor procura o momento de entrada.</small>
+        </div>
 
         <div class="guru-columns">
           <div>
@@ -166,7 +187,7 @@
       <div class="card guru-loading">
         <div class="guru-spinner"></div>
         <strong>Analisando ${esc(symbol)}</strong>
-        <span>12 indicadores por estratégia + múltiplas estratégias + validação Gemini.</span>
+        <span>12 indicadores por estratégia + contexto maior + setup + gatilho + validação Gemini.</span>
       </div>`;
 
     try {
