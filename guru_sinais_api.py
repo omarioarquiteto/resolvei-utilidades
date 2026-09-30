@@ -6,7 +6,7 @@ from collections import deque
 from typing import Any
 
 import requests
-from fastapi import APIRouter, HTTPException, Header
+from fastapi import APIRouter, HTTPException, Header, Header
 from pydantic import BaseModel
 
 router = APIRouter(prefix="/api/guru-sinais", tags=["GURÚ DOS SINAIS"])
