@@ -411,8 +411,9 @@ async def iq_login(req: IQLoginRequest) -> dict[str, Any]:
 
     try:
         await asyncio.wait_for(client.connect(), timeout=LOGIN_TIMEOUT_SECONDS)
-        # Garante que o WebSocket já está autenticado e recebeu dados de perfil.
-        await asyncio.wait_for(client.get_profile(), timeout=10)
+        # O cliente assíncrono considera a autenticação concluída quando
+        # recebe "authenticated=true" no WebSocket. Não exigimos um broadcast
+        # de perfil aqui, pois ele não é enviado automaticamente pela plataforma.
     except asyncio.TimeoutError as exc:
         try:
             await client.close()
@@ -448,17 +449,14 @@ async def iq_login(req: IQLoginRequest) -> dict[str, Any]:
 async def iq_session(x_iq_session: str | None = Header(default=None)) -> dict[str, Any]:
     item = _get_session(x_iq_session)
     client = item["client"]
-    try:
-        profile = await asyncio.wait_for(client.get_profile(), timeout=8)
-    except asyncio.TimeoutError as exc:
-        raise HTTPException(status_code=504, detail="A IQ Option não respondeu à verificação da sessão.") from exc
-    except Exception as exc:
-        raise HTTPException(status_code=401, detail="A conexão com a IQ Option foi encerrada. Faça login novamente.") from exc
+    ws = getattr(client, "_ws", None)
+    connected = ws is not None and not bool(getattr(ws, "_closed", False))
+    if not connected:
+        raise HTTPException(status_code=401, detail="A conexão com a IQ Option foi encerrada. Faça login novamente.")
 
     return {
         "ok": True,
         "connected": True,
-        "profile_loaded": bool(profile),
     }
 
 
