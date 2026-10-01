@@ -10,3 +10,16 @@
 .guru-entry-meta strong{opacity:1}
 .guru-entry-disclaimer{margin-top:10px;font-size:11px;opacity:.68}
 @media(max-width:720px){.guru-entry-head{align-items:flex-start;flex-direction:column}.guru-entry-instruction{font-size:14px}}
+
+.guru-backtest-box{margin:18px 0;padding:18px;border:1px solid var(--border,#e5e7eb);border-radius:16px;background:var(--surface-soft,#f8fafc)}
+.guru-backtest-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}
+.guru-backtest-head strong{font-size:13px;letter-spacing:.03em}
+.guru-backtest-head span{font-size:11px;opacity:.65}
+.guru-backtest-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px}
+.guru-backtest-grid>div{padding:10px;border:1px solid var(--border,#e5e7eb);border-radius:10px;background:var(--surface,#fff)}
+.guru-backtest-grid span{display:block;font-size:10px;opacity:.65;margin-bottom:4px}
+.guru-backtest-grid strong{font-size:18px}
+.guru-backtest-note{margin-top:12px;font-size:12px;line-height:1.45}
+.guru-backtest-method{margin-top:8px;font-size:10px;opacity:.62;line-height:1.4}
+@media(max-width:900px){.guru-backtest-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:520px){.guru-backtest-head{align-items:flex-start;flex-direction:column}.guru-backtest-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
