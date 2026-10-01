@@ -134,6 +134,12 @@
 
         <div class="guru-big-signal ${classFor(a.signal)}">${esc(a.signal)}</div>
         <div class="guru-quality">${esc(a.quality)}</div>
+        <div class="guru-entry-box ${a.entry?.ready ? "ready" : "wait"}">
+          <div class="guru-entry-head"><strong>⏱ MOMENTO DA ENTRADA</strong><span class="guru-entry-status">${esc(a.entry?.status || "AGUARDE O GATILHO")}</span></div>
+          <div class="guru-entry-instruction">${esc(a.entry?.instruction || (a.signal === "CALL" ? "Aguarde a confirmação do gatilho antes de clicar no CALL." : a.signal === "PUT" ? "Aguarde a confirmação do gatilho antes de clicar no PUT." : "Aguarde uma direção técnica clara."))}</div>
+          <div class="guru-entry-meta"><span>Direção: <strong>${esc(a.signal)}</strong></span><span>Gatilho: <strong>${esc(tfLabel(a.entry?.triggerTimeframe || tf.trigger || "1m"))}</strong></span><span>Tempo da vela: <strong>${Number(a.entry?.secondsRemaining || 0)}s</strong></span></div>
+          <div class="guru-entry-disclaimer">O sinal e o timing são uma leitura técnica de estudo. A condição pode mudar rapidamente e não garante o resultado da operação.</div>
+        </div>
 
         <div class="guru-score-line">
           <span>Confluência final</span>
