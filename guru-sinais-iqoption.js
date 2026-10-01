@@ -68,32 +68,32 @@
 
   function shell(assets){
     const hasAssets=(assets?.normal?.length||0)+(assets?.otc?.length||0)>0;
-    return \`<div class="guru-simple">
+    return `<div class="guru-simple">
       <section class="guru-simple-head"><span class="eyebrow">IQ OPTION · DADOS DIRETOS</span>
         <h1>🧙‍♂️ GURÚ DOS SINAIS IQOPTION</h1>
         <p>Motor técnico exclusivo do IQOPTION: período da vela, tempo de expiração e tipo de opção são analisados separadamente.</p>
       </section>
       <section class="card guru-control-card">
-        <div class="iq-connected-bar"><span><strong>● CONECTADO À IQ OPTION</strong><small>\${hasAssets?"Ativos de opções disponíveis agora.":"Nenhum ativo de opções está aberto agora."}</small></span>
+        <div class="iq-connected-bar"><span><strong>● CONECTADO À IQ OPTION</strong><small>${hasAssets?"Ativos de opções disponíveis agora.":"Nenhum ativo de opções está aberto agora."}</small></span>
           <button class="btn ghost small" id="iqRefreshAssets">↻ Atualizar ativos</button><button class="btn ghost small" id="iqLogout">Sair</button>
         </div>
         <div class="guru-control-grid guru-control-grid-4">
-          <div class="field"><label for="guruIqOptionType">Tipo de opção</label><select id="guruIqOptionType">\${optionTypes.map(([v,t])=>\`<option value="\${v}">\${t}</option>\`).join("")}</select></div>
-          <div class="field"><label for="guruIqPair">Par de moedas</label><select id="guruIqPair">\${assetOptions(assets)}</select></div>
-          <div class="field"><label for="guruIqCandlePeriod">Período da vela</label><select id="guruIqCandlePeriod">\${candlePeriods.map(([v,t])=>\`<option value="\${v}">\${t}</option>\`).join("")}</select></div>
+          <div class="field"><label for="guruIqOptionType">Tipo de opção</label><select id="guruIqOptionType">${optionTypes.map(([v,t])=>`<option value="${v}">${t}</option>`).join("")}</select></div>
+          <div class="field"><label for="guruIqPair">Par de moedas</label><select id="guruIqPair">${assetOptions(assets)}</select></div>
+          <div class="field"><label for="guruIqCandlePeriod">Período da vela</label><select id="guruIqCandlePeriod">${candlePeriods.map(([v,t])=>`<option value="${v}">${t}</option>`).join("")}</select></div>
           <div class="field"><label for="guruIqExpiry">Tempo de expiração</label><select id="guruIqExpiry"></select></div>
         </div>
         <div class="guru-control-grid guru-control-grid-2">
-          <div class="field"><label for="guruIqStrategy">Estratégia</label><select id="guruIqStrategy">\${strategies.map(([v,t])=>\`<option value="\${v}">\${t}</option>\`).join("")}</select></div>
+          <div class="field"><label for="guruIqStrategy">Estratégia</label><select id="guruIqStrategy">${strategies.map(([v,t])=>`<option value="${v}">${t}</option>`).join("")}</select></div>
           <label class="guru-ai-toggle"><input type="checkbox" id="guruIqAnalyzeWithAI"><span>Analisar com I.A.</span><small>Valida somente a estratégia selecionada.</small></label>
         </div>
         <div id="guruIqOptionHint" class="guru-option-hint"></div>
-        <button class="guru-analyze-btn" id="guruIqAnalyzeBtn" \${hasAssets?"":"disabled"}>🔍 ANALISAR MERCADO</button>
+        <button class="guru-analyze-btn" id="guruIqAnalyzeBtn" ${hasAssets?"":"disabled"}>🔍 ANALISAR MERCADO</button>
         <div id="guruIqMessage" class="notice" hidden></div>
       </section>
       <section id="guruIqResult"><div class="card guru-empty"><div class="guru-empty-icon">📊</div><strong>Pronto para analisar</strong><span>Escolha separadamente o tipo da opção, o período das velas e o vencimento.</span></div></section>
       <section class="guru-foot-note"><span>Ferramenta de estudo. A API comunitária da IQ Option é não oficial; o Resolvei não executa operações e os indicadores não garantem resultados futuros.</span></section>
-    </div>\`;
+    </div>`;
   }
 
   function syncOptionControls(){
@@ -102,7 +102,7 @@
     const hint=document.getElementById("guruIqOptionHint");
     const current=expiry?.value||"";
     if(expiry){
-      expiry.innerHTML=(expiryOptions[type]||expiryOptions.binary).map(([v,t])=>\`<option value="\${v}">\${t}</option>\`).join("");
+      expiry.innerHTML=(expiryOptions[type]||expiryOptions.binary).map(([v,t])=>`<option value="${v}">${t}</option>`).join("");
       if([...expiry.options].some(o=>o.value===current))expiry.value=current;
     }
     if(hint){
@@ -175,21 +175,21 @@
         </div>
         <div class="guru-meter"><span style="width:${score}%"></span></div>
         <div class="guru-backtest-box">
-          <div class="guru-backtest-head"><strong>📊 TESTE HISTÓRICO DA CONFIGURAÇÃO</strong><span>\${esc(optionLabel)} · expiração \${esc(expiryLabel)}</span></div>
-          \${a.backtest?.available === false ? \`
-            <div class="guru-backtest-unavailable"><strong>Backtest específico indisponível</strong><span>\${esc(a.backtest?.instrumentModel || "Não foi possível reproduzir esta expiração com os dados históricos disponíveis.")}</span></div>
-          \` : \`
+          <div class="guru-backtest-head"><strong>📊 TESTE HISTÓRICO DA CONFIGURAÇÃO</strong><span>${esc(optionLabel)} · expiração ${esc(expiryLabel)}</span></div>
+          ${a.backtest?.available === false ? `
+            <div class="guru-backtest-unavailable"><strong>Backtest específico indisponível</strong><span>${esc(a.backtest?.instrumentModel || "Não foi possível reproduzir esta expiração com os dados históricos disponíveis.")}</span></div>
+          ` : `
             <div class="guru-backtest-grid">
-              <div><span>Sinais testados</span><strong>\${Number(a.backtest?.testedSignals || 0)}</strong></div>
-              <div><span>Acertos</span><strong>\${Number(a.backtest?.wins || 0)}</strong></div>
-              <div><span>Erros</span><strong>\${Number(a.backtest?.losses || 0)}</strong></div>
-              <div><span>Taxa de acerto</span><strong>\${Number(a.backtest?.hitRate || 0).toFixed(1)}%</strong></div>
-              <div><span>Parte anterior</span><strong>\${Number(a.backtest?.olderHitRate || 0).toFixed(1)}%</strong></div>
-              <div><span>Parte recente</span><strong>\${Number(a.backtest?.recentHitRate || 0).toFixed(1)}%</strong></div>
+              <div><span>Sinais testados</span><strong>${Number(a.backtest?.testedSignals || 0)}</strong></div>
+              <div><span>Acertos</span><strong>${Number(a.backtest?.wins || 0)}</strong></div>
+              <div><span>Erros</span><strong>${Number(a.backtest?.losses || 0)}</strong></div>
+              <div><span>Taxa de acerto</span><strong>${Number(a.backtest?.hitRate || 0).toFixed(1)}%</strong></div>
+              <div><span>Parte anterior</span><strong>${Number(a.backtest?.olderHitRate || 0).toFixed(1)}%</strong></div>
+              <div><span>Parte recente</span><strong>${Number(a.backtest?.recentHitRate || 0).toFixed(1)}%</strong></div>
             </div>
-            <div class="guru-backtest-note">\${Number(a.backtest?.testedSignals || 0) >= 100 ? "Foram simulados 100 sinais históricos da mesma estratégia e do mesmo vencimento." : "Foram encontrados " + Number(a.backtest?.testedSignals || 0) + " sinais históricos válidos no conjunto disponível para esta configuração."} \${a.backtest?.consistent ? "O desempenho ficou acima de 50% nas duas metades da amostra." : "A amostra não mostrou consistência suficiente entre as duas metades."}</div>
-          \`}
-          <div class="guru-backtest-method">Modelo: entrada hipotética na abertura do candle seguinte ao gatilho e resultado no fechamento correspondente ao vencimento selecionado.\${a.optionType === "digital" ? " Para Digital, o strike não está disponível nesta integração; o teste reproduz somente a direção." : ""}</div>
+            <div class="guru-backtest-note">${Number(a.backtest?.testedSignals || 0) >= 100 ? "Foram simulados 100 sinais históricos da mesma estratégia e do mesmo vencimento." : "Foram encontrados " + Number(a.backtest?.testedSignals || 0) + " sinais históricos válidos no conjunto disponível para esta configuração."} ${a.backtest?.consistent ? "O desempenho ficou acima de 50% nas duas metades da amostra." : "A amostra não mostrou consistência suficiente entre as duas metades."}</div>
+          `}
+          <div class="guru-backtest-method">Modelo: entrada hipotética na abertura do candle seguinte ao gatilho e resultado no fechamento correspondente ao vencimento selecionado.${a.optionType === "digital" ? " Para Digital, o strike não está disponível nesta integração; o teste reproduz somente a direção." : ""}</div>
         </div>
 
         <div class="guru-ai-box">
