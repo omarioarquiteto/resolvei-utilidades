@@ -177,7 +177,16 @@ def _asset_list() -> dict[str, Any]:
     }
 
 
-async def _candles(client: Any, session_id: str, symbol: str, timeframe: str, count: int = 1000) -> list[dict[str, float]]:
+async def _candles(
+    client: Any,
+    session_id: str,
+    symbol: str,
+    timeframe: str,
+    count: int = 1000,
+    include_forming: bool = False,
+    cache_ttl: float = 8.0,
+    request_timeout: float = REQUEST_TIMEOUT_SECONDS,
+) -> list[dict[str, float]]:
     size = INTERVALS.get(timeframe)
     if not size:
         raise HTTPException(status_code=400, detail="Timeframe não suportado.")
@@ -186,15 +195,16 @@ async def _candles(client: Any, session_id: str, symbol: str, timeframe: str, co
     if not symbol:
         raise HTTPException(status_code=400, detail="Informe o ativo da IQ Option.")
 
-    key = f"{session_id}|{symbol}|{timeframe}|{count}"
+    cache_mode = "live" if include_forming else "closed"
+    key = f"{session_id}|{symbol}|{timeframe}|{count}|{cache_mode}"
     cached = CANDLE_CACHE.get(key)
-    if cached and time.time() - cached[0] < 8:
+    if cached and time.time() - cached[0] < cache_ttl:
         return cached[1]
 
     try:
         raw = await asyncio.wait_for(
             client.get_candles(symbol, size, count, int(time.time())),
-            timeout=REQUEST_TIMEOUT_SECONDS,
+            timeout=request_timeout,
         )
     except asyncio.TimeoutError as exc:
         raise HTTPException(
@@ -229,15 +239,23 @@ async def _candles(client: Any, session_id: str, symbol: str, timeframe: str, co
             continue
 
     rows.sort(key=lambda x: x["datetime"])
-    rows = _closed_candle_rows(rows, size)
-    if len(rows) < 60:
+    closed_rows = _closed_candle_rows(rows, size)
+    if len(closed_rows) < 60:
         raise HTTPException(
             status_code=502,
-            detail=f"A IQ Option retornou somente {len(rows)} candles para {symbol}; são necessários pelo menos 60.",
+            detail=f"A IQ Option retornou somente {len(closed_rows)} candles para {symbol}; são necessários pelo menos 60.",
         )
 
-    CANDLE_CACHE[key] = (time.time(), rows)
-    return rows
+    selected_rows = closed_rows
+    if include_forming and rows:
+        now = time.time()
+        last = rows[-1]
+        if float(last.get("datetime") or 0) + size > now - 1:
+            if not closed_rows or float(last.get("datetime") or 0) > float(closed_rows[-1].get("datetime") or 0):
+                selected_rows = closed_rows + [last]
+
+    CANDLE_CACHE[key] = (time.time(), selected_rows)
+    return selected_rows
 
 
 
@@ -301,6 +319,7 @@ async def _mtf_for_symbol(
     expiry_minutes: int,
     option_type: str,
     count: int = 1000,
+    fast_mode: bool = False,
 ) -> tuple[dict[str, list[dict[str, float]]], tuple[str, str, str], bool]:
     plan = _iq_mtf_plan(timeframe, expiry_minutes, option_type)
     rows: dict[str, list[dict[str, float]]] = {}
@@ -308,18 +327,36 @@ async def _mtf_for_symbol(
     unique_tfs = list(dict.fromkeys(plan))
     safe_count = max(80, min(int(count or 1000), 1000))
     results = await asyncio.gather(
-        *[_candles(client, session_id, symbol, tf, safe_count) for tf in unique_tfs]
+        *[
+            _candles(
+                client,
+                session_id,
+                symbol,
+                tf,
+                safe_count,
+                include_forming=(fast_mode and tf == plan[2]),
+                cache_ttl=2.0 if fast_mode else 8.0,
+                request_timeout=6.0 if fast_mode else REQUEST_TIMEOUT_SECONDS,
+            )
+            for tf in unique_tfs
+        ]
     )
 
     for tf, data in zip(unique_tfs, results):
         rows[tf] = data
 
     context_tf, setup_tf, trigger_tf = plan
-    live_trigger = await _latest_realtime_candle(client, symbol, trigger_tf)
+    live_trigger = None
+    if not fast_mode:
+        live_trigger = await _latest_realtime_candle(client, symbol, trigger_tf)
 
     # O histórico é calculado somente com candles fechados. O candle em formação
     # entra apenas no timeframe de gatilho, para que o sinal reflita o preço atual.
-    live_used = False
+    live_used = bool(
+        fast_mode
+        and rows.get(trigger_tf)
+        and float(rows[trigger_tf][-1].get("datetime") or 0) + INTERVALS.get(trigger_tf, 60) > time.time() - 1
+    )
     if live_trigger:
         trigger_rows = rows.get(trigger_tf) or []
         last_ts = trigger_rows[-1]["datetime"] if trigger_rows else 0.0
@@ -1090,7 +1127,8 @@ async def _analyze(
         timeframe,
         expiry_minutes,
         option_type,
-        220 if fast_mode else 1000,
+        140 if fast_mode else 1000,
+        fast_mode,
     )
     context_tf, setup_tf, trigger_tf = plan
     setup_rows = mtf[setup_tf]
