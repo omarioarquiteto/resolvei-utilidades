@@ -703,7 +703,8 @@ def _iq_mtf_score(
 ) -> tuple[str, float, list[str], dict[str, Any]]:
     """
     Contexto define o regime; setup define a oportunidade; gatilho define o
-    momento da entrada. O gatilho não precisa repetir todos os indicadores do setup.
+    momento da entrada. O monitor usa proximity como distância técnica
+    até os critérios configurados, nunca como probabilidade de vitória.
     """
     strategy = setup["strategy"]
     s = setup["direction"]
@@ -711,6 +712,12 @@ def _iq_mtf_score(
     t = trigger["direction"]
     option_type = str(option_type or "binary").lower()
     expiry_minutes = int(expiry_minutes or 5)
+
+    min_confidence = float(setup.get("minConfidence", 60.0) or 60.0)
+    required_groups = int(setup.get("requiredGroups", 1) or 1)
+    active_groups = int(setup.get("activeGroups", 0) or 0)
+    setup_eligible = bool(setup.get("signalEligible", False))
+
     score = float(setup["confidence"])
     notes: list[str] = []
 
@@ -731,66 +738,94 @@ def _iq_mtf_score(
             score += 2
         min_signal_score = 67
 
-    if s not in {"CALL", "PUT"} or float(setup.get("confidence", 0)) < 60:
-        return "AGUARDAR", max(0.0, score - 5), ["O setup ainda não apresenta direção técnica suficiente."], {
+    directional = s in {"CALL", "PUT"}
+    if not directional:
+        notes.append("A estratégia ainda não apresenta uma direção dominante.")
+
+    if directional:
+        if c == s and context.get("signalEligible", context["confidence"] >= 64):
+            score += 11
+            notes.append(f"Contexto {c} confirma o setup.")
+        elif c == s:
+            score += 6
+            notes.append(f"Contexto acompanha {s}, mas ainda não é uma confirmação máxima.")
+        elif c in {"CALL", "PUT"} and c != s:
+            score -= 16 if context["confidence"] >= 72 else 9
+            notes.append("Contexto maior está contra o setup.")
+        else:
+            score -= 2
+            notes.append("Contexto maior está neutro.")
+
+        if t == s:
+            score += 7
+            notes.append(f"Gatilho acompanha {s}.")
+        elif t in {"CALL", "PUT"} and t != s:
+            score -= 10
+            notes.append("Gatilho atual está contra o setup.")
+        else:
+            notes.append("Gatilho ainda está em transição.")
+
+    eligible = (
+        directional
+        and setup_eligible
+        and score >= min_signal_score
+        and not (
+            c in {"CALL", "PUT"}
+            and c != s
+            and context["confidence"] >= (80 if strategy == "reversao" else 82)
+        )
+    )
+
+    if eligible:
+        trigger_state = _trigger_state(trigger_rows or [], trigger_tf, s)
+    else:
+        trigger_state = {
             "ready": False,
-            "status": "SEM DIREÇÃO",
-            "instruction": "A leitura ainda está dividida; aguarde uma direção mais clara.",
+            "status": "SEM SETUP" if directional else "SEM DIREÇÃO",
+            "instruction": (
+                "Direção técnica identificada; monitorando confiança, grupos mínimos "
+                "e confirmação do gatilho."
+                if directional
+                else "A leitura ainda está dividida; procurando uma direção técnica dominante."
+            ),
             "secondsRemaining": 0,
             "elapsedSeconds": 0,
-            "candleCloseAt": 0,
         }
 
-    # Contexto é filtro de regime; não precisa ficar 100% idêntico ao setup para
-    # permitir a direção, mas uma divergência forte reduz o score.
-    if c == s and context.get("signalEligible", context["confidence"] >= 64):
-        score += 11
-        notes.append(f"Contexto {c} confirma o setup.")
-    elif c == s:
-        score += 6
-        notes.append(f"Contexto acompanha {s}, mas ainda não é uma confirmação máxima.")
-    elif c in {"CALL", "PUT"} and c != s:
-        score -= 16 if context["confidence"] >= 72 else 9
-        notes.append("Contexto maior está contra o setup.")
+    conf_target = max(min_confidence, min_signal_score, 1.0)
+    conf_progress = min(1.0, max(0.0, score / conf_target))
+    group_progress = min(1.0, active_groups / max(required_groups, 1))
+    if directional:
+        context_progress = 1.0 if c == s else 0.55 if c == "NEUTRA" else 0.15
+        trigger_progress = 1.0 if t == s else 0.45 if t == "NEUTRA" else 0.10
     else:
-        score -= 2
-        notes.append("Contexto maior está neutro.")
+        context_progress = 0.35 if c in {"CALL", "PUT"} else 0.20
+        trigger_progress = 0.30 if t in {"CALL", "PUT"} else 0.20
 
-    # O gatilho é confirmação de timing, não um novo voto de tendência.
-    if t == s:
-        score += 7
-        notes.append(f"Gatilho acompanha {s}.")
-    elif t in {"CALL", "PUT"} and t != s:
-        score -= 10
-        notes.append("Gatilho atual está contra o setup.")
+    proximity = round(min(99.0, 100.0 * (
+        0.48 * conf_progress
+        + 0.22 * group_progress
+        + 0.16 * context_progress
+        + 0.14 * trigger_progress
+    )), 1)
+
+    if trigger_state.get("ready"):
+        proximity = 100.0
+        trigger_state["state"] = "ENTRADA CONFIRMADA"
+        trigger_state["status"] = "ENTRADA CONFIRMADA"
+    elif proximity >= 82:
+        trigger_state["state"] = "SINAL PRÓXIMO"
+        trigger_state["status"] = "SINAL PRÓXIMO"
+    elif proximity >= 65:
+        trigger_state["state"] = "ATENÇÃO"
+        trigger_state["status"] = "ATENÇÃO"
     else:
-        notes.append("Gatilho ainda está em transição.")
+        trigger_state["state"] = "ANALISANDO MERCADO"
+        trigger_state["status"] = "ANALISANDO MERCADO"
 
-    if strategy == "reversao":
-        eligible = (
-            s in {"CALL", "PUT"}
-            and score >= min_signal_score
-            and not (c in {"CALL", "PUT"} and c != s and context["confidence"] >= 80)
-        )
-    else:
-        eligible = (
-            s in {"CALL", "PUT"}
-            and score >= 67
-            and not (c in {"CALL", "PUT"} and c != s and context["confidence"] >= 82)
-        )
-
-    trigger_state = _trigger_state(trigger_rows or [], trigger_tf, s) if eligible else {
-        "ready": False,
-        "status": "SEM SETUP",
-        "instruction": "Aguarde o setup atingir os critérios mínimos da estratégia.",
-        "secondsRemaining": 0,
-        "elapsedSeconds": 0,
-    }
-
-    # Não devolvemos AGUARDAR como sinal principal quando existe uma direção
-    # técnica suficientemente estruturada. A indicação de timing fica separada.
-    return (s if eligible else "AGUARDAR"), round(max(0.0, min(99.0, score)), 1), notes, trigger_state
-
+    trigger_state["proximity"] = proximity
+    signal = s if directional else "AGUARDAR"
+    return signal, round(max(0.0, min(99.0, score)), 1), notes, trigger_state
 
 def _wilson_lower_bound(wins: int, total: int, z: float = 1.96) -> float:
     if total <= 0:
