@@ -22,7 +22,9 @@ function riskDefaults(){
       entryPct: 0.5,
       payout: 85,
       chances: 7,
-      goal: 10000
+      goal: 10000,
+      winRate: 80,
+      maxExposurePct: 20
     },
     session: {
       capital: 500,
@@ -368,38 +370,96 @@ function riskEvolutionRowsHtml(plan){
   </div>` : '<div class="risk-section-more">…</div>').join('');
 }
 
+function riskActualEvolutionSvg(){
+  const history=Array.isArray(resolveiRiskState.history)?resolveiRiskState.history.slice(-30):[];
+  if(!history.length){
+    return `<div class="risk-chart-empty">
+      <div class="risk-chart-empty-icon">↗</div>
+      <strong>Seu gráfico começa aqui</strong>
+      <span>Registre o primeiro WIN ou LOSS para visualizar a evolução real do capital.</span>
+    </div>`;
+  }
+  const series=[
+    {value:Number(resolveiRiskState.config.initialCapital)||0,result:'START',at:'Capital inicial'},
+    ...history.map(x=>({value:Number(x.after)||0,result:x.result,at:x.at,section:x.section,chance:x.chance,stake:Number(x.stake)||0}))
+  ];
+  const values=series.map(x=>x.value);
+  let min=Math.min(...values),max=Math.max(...values);
+  if(Math.abs(max-min)<0.01){min=Math.max(0,min-1);max=max+1;}
+  else{
+    const pad=Math.max(1,(max-min)*0.12);
+    min=Math.max(0,min-pad);max+=pad;
+  }
+  const width=760,height=260,left=48,right=22,top=20,bottom=42;
+  const innerW=width-left-right,innerH=height-top-bottom;
+  const xAt=i=>left+(series.length===1?innerW/2:(i/(series.length-1))*innerW);
+  const yAt=v=>top+((max-v)/(max-min))*innerH;
+  const grid=[0,1,2,3,4].map(i=>{
+    const y=top+(i/4)*innerH;
+    const value=max-((max-min)*(i/4));
+    return `<line x1="${left}" y1="${y.toFixed(1)}" x2="${width-right}" y2="${y.toFixed(1)}" stroke="var(--line)" stroke-dasharray="3 5"/>
+      <text x="${left-8}" y="${(y+4).toFixed(1)}" fill="var(--muted)" text-anchor="end" font-size="10">${riskMoney(value)}</text>`;
+  }).join('');
+  const segments=series.slice(1).map((item,i)=>{
+    const a=series[i],b=item;
+    const stroke=item.result==='WIN'?'var(--success)':'var(--danger)';
+    return `<line x1="${xAt(i).toFixed(1)}" y1="${yAt(a.value).toFixed(1)}" x2="${xAt(i+1).toFixed(1)}" y2="${yAt(b.value).toFixed(1)}" stroke="${stroke}" stroke-width="4" stroke-linecap="round"/>`;
+  }).join('');
+  const points=series.map((item,i)=>{
+    const color=item.result==='WIN'?'var(--success)':item.result==='LOSS'?'var(--danger)':'var(--accent)';
+    const label=item.result==='START'?'Capital inicial':`${item.result} · ${item.at}`;
+    return `<circle cx="${xAt(i).toFixed(1)}" cy="${yAt(item.value).toFixed(1)}" r="${i===series.length-1?6:4.5}" fill="${color}" stroke="var(--surface)" stroke-width="2"><title>${label} — ${riskMoney(item.value)}</title></circle>`;
+  }).join('');
+  const labels=series.map((item,i)=>{
+    if(!(i===0 || i===series.length-1 || i%5===0)) return '';
+    const textLabel=i===0?'Início':`#${i}`;
+    return `<text x="${xAt(i).toFixed(1)}" y="${height-14}" fill="var(--muted)" text-anchor="${i===0?'start':i===series.length-1?'end':'middle'}" font-size="10">${textLabel}</text>`;
+  }).join('');
+  const last=series[series.length-1];
+  const delta=last.value-series[0].value;
+  return `<svg class="risk-chart risk-chart-real" viewBox="0 0 ${width} ${height}" role="img" aria-label="Evolução real do capital, com ganhos em verde e perdas em vermelho">
+    ${grid}
+    <line x1="${left}" y1="${yAt(series[0].value).toFixed(1)}" x2="${width-right}" y2="${yAt(series[0].value).toFixed(1)}" stroke="var(--muted)" stroke-dasharray="6 6" opacity=".45"/>
+    ${segments}${points}${labels}
+  </svg>`;
+}
+
 function riskProjectionSvg(plan){
   const vals=plan.sections.slice(0,24).map(s=>s.target);
   const start=plan.cfg.initialCapital;
   const max=Math.max(...vals,start);
-  const width=700,height=170,pad=18;
+  const width=700,height=150,pad=18;
   const points=vals.map((v,i)=>{
     const x=pad + (vals.length===1?0:(i/(vals.length-1))*(width-pad*2));
     const y=height-pad - ((v-start)/Math.max(1,max-start))*(height-pad*2);
     return `${x.toFixed(1)},${y.toFixed(1)}`;
   }).join(' ');
-  return `<svg class="risk-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="Projeção do capital por seção">
+  return `<svg class="risk-chart risk-chart-projection" viewBox="0 0 ${width} ${height}" role="img" aria-label="Projeção do capital por seção">
     <line x1="${pad}" y1="${height-pad}" x2="${width-pad}" y2="${height-pad}" stroke="var(--line)"/>
-    <polyline fill="none" stroke="var(--accent)" stroke-width="3" points="${points}"/>
+    <polyline fill="none" stroke="var(--accent)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" points="${points}"/>
     <text x="${pad}" y="${height-2}" fill="var(--muted)">Início</text>
     <text x="${width-pad}" y="${height-2}" fill="var(--muted)" text-anchor="end">Seções</text>
   </svg>`;
 }
 
-function riskSummaryHtml(plan,current){
+function riskSummaryHtml(plan,current,currentRow){
   const worst=current.remainingAfterAllLosses;
   const worstPct=current.maxDrawdownPct;
   const growthPct=plan.cfg.entryPct/100*(plan.cfg.payout/100)*100;
-  const target=plan.sections[Math.max(0,resolveiRiskState.session.section-1)] || current;
   const status=resolveiRiskState.session.status;
   const pLossAll=Math.pow(Math.max(0,Math.min(1,1-plan.cfg.winRate/100)),plan.cfg.chances);
   const pAdvance=1-pLossAll;
   const exposureFlag=worstPct>plan.cfg.maxExposurePct;
+  const history=resolveiRiskState.history||[];
+  const last=history.length?history[history.length-1]:null;
+  const latestLabel=last?`${last.result==='WIN'?'✅ WIN':'❌ LOSS'} registrado em ${last.at} · capital ${riskMoney(last.after)}`:'Nenhum resultado registrado ainda.';
   return `<div class="risk-kpis">
-    <div class="risk-kpi"><span>Capital atual</span><strong>${riskMoney(resolveiRiskState.session.capital)}</strong><small>Seção ${resolveiRiskState.session.section} · chance ${status==='busted'?'encerrada':resolveiRiskState.session.chance}</small></div>
-    <div class="risk-kpi"><span>Próximo alvo</span><strong>${riskMoney(current.target)}</strong><small>Lucro-alvo da seção: ${riskMoney(current.growth)}</small></div>
-    <div class="risk-kpi"><span>Exposição em ${plan.cfg.chances} perdas</span><strong>${riskPct(worstPct)}</strong><small>Sobra: ${riskMoney(worst)}</small></div>
+    <div class="risk-kpi risk-kpi-primary"><span>Capital atual</span><strong>${riskMoney(resolveiRiskState.session.capital)}</strong><small>Seção ${resolveiRiskState.session.section} · chance ${status==='busted'?'encerrada':resolveiRiskState.session.chance}</small></div>
+    <div class="risk-kpi"><span>Entrada agora</span><strong>${status==='active'&&currentRow?riskMoney(currentRow.stake):'—'}</strong><small>${status==='active'?(`Chance ${resolveiRiskState.session.chance} de ${plan.cfg.chances}`):'Seção encerrada'}</small></div>
+    <div class="risk-kpi"><span>Próximo alvo</span><strong>${riskMoney(current.target)}</strong><small>Lucro-alvo: ${riskMoney(current.growth)}</small></div>
+    <div class="risk-kpi"><span>Exposição máxima</span><strong>${riskPct(worstPct)}</strong><small>Sobra após ${plan.cfg.chances} LOSS: ${riskMoney(worst)}</small></div>
   </div>
+  <div class="risk-latest-result"><span>Último movimento</span><strong>${latestLabel}</strong></div>
   <div class="risk-alert ${exposureFlag?'risk-alert-high':'risk-alert-low'}">
     <strong>${exposureFlag?'⚠️ Acima do limite de exposição':'✓ Dentro do limite configurado'}</strong>
     <span>O plano pode expor até ${riskPct(worstPct)} do capital-base nesta seção. Seu limite de referência está em ${riskPct(plan.cfg.maxExposurePct)}.</span>
@@ -407,69 +467,118 @@ function riskSummaryHtml(plan,current){
   <div class="risk-mini-grid">
     <div><span>Crescimento por seção</span><strong>+${riskPct(growthPct)}</strong></div>
     <div><span>Chance estimada de avançar</span><strong>${riskPct(pAdvance*100)}</strong><small>Com taxa de acerto de ${riskPct(plan.cfg.winRate)}</small></div>
-    <div><span>7 perdas consecutivas</span><strong>${riskPct(pLossAll*100)}</strong><small>Modelo probabilístico, não previsão</small></div>
+    <div><span>Perder todas as chances</span><strong>${riskPct(pLossAll*100)}</strong><small>Modelo probabilístico, não previsão</small></div>
   </div>
-  <div class="risk-note"><strong>Como a planilha trabalha:</strong> a vitória em qualquer chance leva o capital da seção ao mesmo próximo alvo. As probabilidades acima são apenas aritmética baseada na taxa de acerto que você informou; elas não estimam desempenho futuro nem garantem resultados.</div>`;
+  <div class="risk-note"><strong>Como a planilha trabalha:</strong> a vitória em qualquer chance leva o capital da seção ao mesmo próximo alvo. As probabilidades são apenas aritmética baseada na taxa informada; não estimam desempenho futuro nem garantem resultados.</div>`;
+}
+
+function riskEvolutionRowsHtml(plan){
+  const maxRows=14;
+  let arr=plan.sections.slice(0,maxRows);
+  const currentSec=resolveiRiskState.session.section;
+  if(currentSec>maxRows){
+    const current=plan.sections[currentSec-1];
+    if(current) arr=arr.concat([null,current]);
+  }
+  return arr.map((s)=>s ? `<div class="risk-section-row">
+    <div><strong>Seção ${plan.sections.indexOf(s)+1}</strong>${s===plan.sections[currentSec-1]?'<span class="risk-tag">Atual</span>':''}</div>
+    <div>${riskMoney(s.baseCapital)}</div>
+    <div>+${riskMoney(s.growth)}</div>
+    <div>${riskMoney(s.target)}</div>
+    <div>${riskMoney(s.totalExposure)}</div>
+  </div>` : '<div class="risk-section-more">…</div>').join('');
 }
 
 function riskEvolutionUI(){
   const cfg=resolveiRiskState.config || riskDefaults().config;
   return `<div class="risk-tool-shell">
-    <section class="risk-control-card card">
-      <h2>⚙️ Configuração do plano</h2>
-      <div class="notice"><strong>Modelo da sua planilha.</strong> Cada seção tem um número definido de chances. A primeira entrada é calculada sobre o capital da seção; as demais crescem para recuperar as perdas anteriores e ainda atingir o próximo alvo.</div>
-      <div class="form-grid risk-form-grid">
-        <div class="field"><label for="riskInitialCapital">Capital inicial</label><div class="input-wrap"><span class="prefix">R$</span><input id="riskInitialCapital" type="number" step="0.01" min="0.01" value="${cfg.initialCapital}"></div></div>
-        <div class="field"><label for="riskEntryPct">Entrada-base</label><div class="input-wrap"><input id="riskEntryPct" type="number" step="0.01" min="0.001" max="50" value="${cfg.entryPct}"><span class="suffix">%</span></div></div>
-        <div class="field"><label for="riskPayout">Payout / retorno líquido da vitória</label><div class="input-wrap"><input id="riskPayout" type="number" step="0.1" min="0.1" max="100" value="${cfg.payout}"><span class="suffix">%</span></div><small>85% significa lucro de R$ 0,85 para cada R$ 1,00 de entrada vencedora.</small></div>
-        <div class="field"><label for="riskChances">Chances por seção</label><div class="input-wrap"><input id="riskChances" type="number" step="1" min="1" max="30" value="${cfg.chances}"></div><small>O padrão da sua planilha é 7.</small></div>
-        <div class="field"><label for="riskWinRate">Taxa de acerto para simulação</label><div class="input-wrap"><input id="riskWinRate" type="number" step="0.1" min="0" max="100" value="${cfg.winRate}"><span class="suffix">%</span></div><small>Usada somente para calcular probabilidades matemáticas da seção.</small></div>
-        <div class="field"><label for="riskMaxExposurePct">Limite de exposição de referência</label><div class="input-wrap"><input id="riskMaxExposurePct" type="number" step="1" min="0.1" max="100" value="${cfg.maxExposurePct}"><span class="suffix">%</span></div><small>Não altera as entradas; serve para sinalizar quando o modelo ultrapassa seu limite.</small></div>
-        <div class="field full"><label for="riskGoal">Meta de patrimônio</label><div class="input-wrap"><span class="prefix">R$</span><input id="riskGoal" type="number" step="0.01" min="0.01" value="${cfg.goal}"></div></div>
+    <div class="risk-tool-titlebar">
+      <div>
+        <div class="risk-eyebrow">PLANEJAMENTO DE BANCA</div>
+        <h1>Gerenciamento de risco e evolução de capital</h1>
+        <p>Controle a entrada atual, registre o resultado e acompanhe a evolução da sua banca sem precisar percorrer uma página longa.</p>
       </div>
-      <div class="actions">
-        <button class="btn primary" id="riskApplyBtn" type="button">Recalcular plano</button>
-        <button class="btn ghost" id="riskResetBtn" type="button">Zerar plano</button>
-      </div>
-      <div class="risk-formula">
-        <strong>Fórmula central</strong>
-        <span>Entrada 1 = capital × entrada-base</span>
-        <span>Entrada seguinte = (alvo − capital restante após perdas) ÷ payout</span>
-        <span>Alvo da seção = capital + lucro da entrada-base vencedora</span>
-      </div>
+      <div class="risk-title-meta"><span>Plano ativo</span><small>Dados locais + sincronização da conta</small></div>
+    </div>
+
+    <div class="risk-main-grid">
+      <section class="risk-main-card card">
+        <div class="risk-section-head">
+          <div><h2>🎯 Operação atual</h2><p>Use os botões abaixo depois de cada resultado real.</p></div>
+          <div class="risk-status-pill" id="riskStatusPill">${resolveiRiskState.session.status==='active'?'EM ANDAMENTO':'SEÇÃO ENCERRADA'}</div>
+        </div>
+        <div id="riskDashboard"></div>
+        <div id="riskCurrentSection"></div>
+        <div class="actions risk-actions">
+          <button class="btn primary risk-result-btn risk-win-btn" id="riskWinBtn" type="button">✅ Registrar WIN</button>
+          <button class="btn risk-result-btn risk-loss-btn" id="riskLossBtn" type="button">❌ Registrar LOSS</button>
+          <button class="btn ghost" id="riskRestartBtn" type="button">↻ Recomeçar com capital restante</button>
+        </div>
+        <div class="notice risk-cloud-status" id="riskCloudStatus">💾 Aguardando sincronização</div>
+      </section>
+
+      <details class="risk-config-card card">
+        <summary>
+          <div><strong>⚙️ Configuração do plano</strong><small>Capital, entrada-base, payout, chances, taxa e meta</small></div>
+          <span class="risk-summary-action">Editar</span>
+        </summary>
+        <div class="risk-config-content">
+          <div class="notice"><strong>Modelo da sua planilha.</strong> Cada seção tem um número definido de chances. A primeira entrada usa o capital da seção; as seguintes recuperam perdas anteriores e ainda buscam o próximo alvo.</div>
+          <div class="form-grid risk-form-grid">
+            <div class="field"><label for="riskInitialCapital">Capital inicial</label><div class="input-wrap"><span class="prefix">R$</span><input id="riskInitialCapital" type="number" step="0.01" min="0.01" value="${cfg.initialCapital}"></div></div>
+            <div class="field"><label for="riskEntryPct">Entrada-base</label><div class="input-wrap"><input id="riskEntryPct" type="number" step="0.01" min="0.001" max="50" value="${cfg.entryPct}"><span class="suffix">%</span></div></div>
+            <div class="field"><label for="riskPayout">Payout / retorno líquido</label><div class="input-wrap"><input id="riskPayout" type="number" step="0.1" min="0.1" max="100" value="${cfg.payout}"><span class="suffix">%</span></div><small>85% = lucro de R$ 0,85 por R$ 1,00 em uma vitória.</small></div>
+            <div class="field"><label for="riskChances">Chances por seção</label><div class="input-wrap"><input id="riskChances" type="number" step="1" min="1" max="30" value="${cfg.chances}"></div><small>Padrão: 7.</small></div>
+            <div class="field"><label for="riskWinRate">Taxa de acerto para simulação</label><div class="input-wrap"><input id="riskWinRate" type="number" step="0.1" min="0" max="100" value="${cfg.winRate}"><span class="suffix">%</span></div><small>Somente para probabilidades matemáticas.</small></div>
+            <div class="field"><label for="riskMaxExposurePct">Limite de exposição de referência</label><div class="input-wrap"><input id="riskMaxExposurePct" type="number" step="1" min="0.1" max="100" value="${cfg.maxExposurePct}"><span class="suffix">%</span></div><small>Não altera entradas; apenas gera um alerta.</small></div>
+            <div class="field full"><label for="riskGoal">Meta de patrimônio</label><div class="input-wrap"><span class="prefix">R$</span><input id="riskGoal" type="number" step="0.01" min="0.01" value="${cfg.goal}"></div></div>
+          </div>
+          <div class="actions">
+            <button class="btn primary" id="riskApplyBtn" type="button">Recalcular plano</button>
+            <button class="btn ghost" id="riskResetBtn" type="button">Zerar plano</button>
+          </div>
+          <div class="risk-formula">
+            <strong>Fórmula central</strong>
+            <span>Entrada 1 = capital × entrada-base</span>
+            <span>Entrada seguinte = (alvo − capital restante após perdas) ÷ payout</span>
+            <span>Alvo da seção = capital + lucro da entrada-base vencedora</span>
+          </div>
+        </div>
+      </details>
+    </div>
+
+    <section class="risk-visual-grid">
+      <section class="risk-chart-card card">
+        <div class="risk-section-head">
+          <div><h2>📊 Evolução real da banca</h2><p>Verde = WIN · Vermelho = LOSS · cada ponto representa um resultado registrado.</p></div>
+          <div class="risk-chart-legend"><span><i class="risk-dot risk-dot-win"></i> WIN</span><span><i class="risk-dot risk-dot-loss"></i> LOSS</span></div>
+        </div>
+        <div id="riskActualEvolution"></div>
+      </section>
+
+      <section class="risk-chart-card card">
+        <div class="risk-section-head">
+          <div><h2>📈 Evolução projetada</h2><p>Alvos sucessivos definidos pelo plano.</p></div>
+        </div>
+        <div id="riskProjection"></div>
+      </section>
     </section>
 
-    <section class="risk-dashboard card" id="riskDashboard"></section>
-
-    <section class="risk-section-card card">
-      <div class="risk-section-head">
-        <div><h2>🎯 Seção atual · ${resolveiRiskState.session.section}</h2><p>Chances calculadas para este ciclo. Registre o resultado real de cada entrada para acompanhar o capital.</p></div>
-        <div class="risk-status-pill" id="riskStatusPill">${resolveiRiskState.session.status==='active'?'EM ANDAMENTO':'SEÇÃO ENCERRADA'}</div>
-      </div>
-      <div id="riskCurrentSection"></div>
-      <div class="actions risk-actions">
-        <button class="btn primary" id="riskWinBtn" type="button">✅ Registrar WIN</button>
-        <button class="btn" id="riskLossBtn" type="button">❌ Registrar LOSS</button>
-        <button class="btn ghost" id="riskRestartBtn" type="button">↻ Recomeçar com capital restante</button>
-      </div>
-      <div class="risk-note">O histórico funciona no navegador e, quando você está logado, o mesmo progresso é sincronizado com sua conta do Resolvei.</div>
-      <div class="notice" id="riskCloudStatus">💾 Aguardando sincronização</div>
-    </section>
-
-    <section class="risk-section-card card">
-      <div class="risk-section-head"><div><h2>📈 Evolução projetada do patrimônio</h2><p>O gráfico usa apenas os alvos sucessivos do modelo.</p></div></div>
-      <div id="riskProjection"></div>
+    <details class="risk-extra-card card">
+      <summary><div><strong>📋 Ver plano completo das seções</strong><small>Capital-base, lucro alvo e exposição de cada seção</small></div><span>Mostrar</span></summary>
       <div class="risk-evolution-table">
         <div class="risk-section-row risk-section-header"><div>Seção</div><div>Capital-base</div><div>Lucro alvo</div><div>Próximo capital</div><div>Exposição máxima</div></div>
         <div id="riskEvolutionRows"></div>
       </div>
-    </section>
+      <div class="risk-note" id="riskGoalMessage"></div>
+    </details>
 
-    <section class="risk-section-card card">
-      <div class="risk-section-head"><div><h2>🧾 Histórico de entradas</h2><p>Últimos registros deste plano neste navegador.</p></div><button class="btn ghost" id="riskClearHistoryBtn" type="button">Limpar histórico</button></div>
+    <details class="risk-extra-card card">
+      <summary><div><strong>🧾 Histórico de entradas</strong><small>Últimos registros do plano</small></div><span>Mostrar</span></summary>
+      <div class="risk-history-toolbar"><button class="btn ghost" id="riskClearHistoryBtn" type="button">Limpar histórico</button></div>
       <div id="riskHistory"></div>
       <div class="actions"><button class="btn" id="riskExportBtn" type="button">⬇ Exportar CSV</button></div>
-    </section>
+    </details>
   </div>`;
 }
 
@@ -479,7 +588,7 @@ function riskRender(){
   const plan=riskPlan();
   const current=riskCurrentSection();
   const currentRow=riskCurrentRow();
-  dash.innerHTML=riskSummaryHtml(plan,current);
+  dash.innerHTML=riskSummaryHtml(plan,current,currentRow);
 
   const sectionBox=document.getElementById('riskCurrentSection');
   const pill=document.getElementById('riskStatusPill');
@@ -490,16 +599,26 @@ function riskRender(){
       ? `Chance ${resolveiRiskState.session.chance} de ${plan.cfg.chances}. Entrada planejada: <strong>${riskMoney(currentRow.stake)}</strong>.`
       : `As ${plan.cfg.chances} chances desta seção foram perdidas. Capital restante: <strong>${riskMoney(resolveiRiskState.session.capital)}</strong>.`;
     sectionBox.innerHTML=`<div class="risk-live-box">
-      <div><span class="result-label">Capital-base da seção</span><strong>${riskMoney(current.baseCapital)}</strong></div>
+      <div><span class="result-label">Capital-base</span><strong>${riskMoney(current.baseCapital)}</strong></div>
       <div><span class="result-label">Capital atual</span><strong>${riskMoney(resolveiRiskState.session.capital)}</strong></div>
       <div><span class="result-label">Próximo alvo</span><strong>${riskMoney(current.target)}</strong></div>
       <div><span class="result-label">Situação</span><strong>${subtitle}</strong></div>
     </div>
-    <div class="risk-entry-list">${riskSectionRowsHtml(current,plan.cfg,resolveiRiskState.session.status==='active'?resolveiRiskState.session.chance:0)}</div>`;
+    <details class="risk-section-plan">
+      <summary><strong>Ver as ${plan.cfg.chances} entradas desta seção</strong><span>Mostrar plano</span></summary>
+      <div class="risk-entry-list">${riskSectionRowsHtml(current,plan.cfg,resolveiRiskState.session.status==='active'?resolveiRiskState.session.chance:0)}</div>
+    </details>`;
   }
+
+  const actual=document.getElementById('riskActualEvolution');
+  if(actual) actual.innerHTML=riskActualEvolutionSvg();
 
   const projection=document.getElementById('riskProjection');
   if(projection) projection.innerHTML=riskProjectionSvg(plan)+`<div class="notice">${riskGoalText(plan)}</div>`;
+
+  const goalMessage=document.getElementById('riskGoalMessage');
+  if(goalMessage) goalMessage.textContent=riskGoalText(plan);
+
   const rows=document.getElementById('riskEvolutionRows');
   if(rows) rows.innerHTML=riskEvolutionRowsHtml(plan);
 
@@ -507,7 +626,7 @@ function riskRender(){
   if(history){
     const items=resolveiRiskState.history.slice().reverse();
     history.innerHTML=items.length
-      ? items.map(x=>`<div class="risk-history-row"><div><strong>${x.result==='WIN'?'✅ WIN':'❌ LOSS'}</strong><span>${x.at}</span></div><div>Seção ${x.section} · chance ${x.chance}</div><div>${riskMoney(x.stake)}</div><div>${riskMoney(x.after)}</div></div>`).join('')
+      ? items.map(x=>`<div class="risk-history-row"><div><strong class="${x.result==='WIN'?'risk-history-win':'risk-history-loss'}">${x.result==='WIN'?'✅ WIN':'❌ LOSS'}</strong><span>${x.at}</span></div><div>Seção ${x.section} · chance ${x.chance}</div><div>Entrada ${riskMoney(x.stake)}</div><div>Capital ${riskMoney(x.after)}</div></div>`).join('')
       : '<div class="empty">Nenhuma entrada registrada ainda.</div>';
   }
 
@@ -518,7 +637,6 @@ function riskRender(){
   const restart=document.getElementById('riskRestartBtn');
   if(restart) restart.disabled=resolveiRiskState.session.capital<=0;
 }
-
 function statusActive(){return resolveiRiskState.session.status==='active';}
 
 function riskApplyConfig(){
