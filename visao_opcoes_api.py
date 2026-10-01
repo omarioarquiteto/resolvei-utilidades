@@ -96,14 +96,20 @@ async def _get_base_candles(client: Any, sid: str, symbol: str, count: int = 100
 
 
 def _resample(rows: list[dict[str, float]], minutes: int) -> list[dict[str, float]]:
-    if minutes == 1:
+    if minutes <= 1:
         return list(rows)
-    step = minutes
+    interval = minutes * 60
+    buckets: dict[int, list[dict[str, float]]] = {}
+    for row in rows:
+        ts = int(row.get("datetime") or 0)
+        bucket = (ts // interval) * interval
+        buckets.setdefault(bucket, []).append(row)
+
     out: list[dict[str, float]] = []
-    usable = len(rows) - (len(rows) % step)
-    for i in range(0, usable, step):
-        chunk = rows[i:i + step]
-        if len(chunk) != step:
+    for bucket in sorted(buckets):
+        chunk = sorted(buckets[bucket], key=lambda x: x["datetime"])
+        # Só um candle-base completo pode formar um candle maior.
+        if len(chunk) < minutes:
             continue
         out.append({
             "open": chunk[0]["open"],
@@ -111,7 +117,7 @@ def _resample(rows: list[dict[str, float]], minutes: int) -> list[dict[str, floa
             "low": min(x["low"] for x in chunk),
             "close": chunk[-1]["close"],
             "volume": sum(x.get("volume", 0) for x in chunk),
-            "datetime": chunk[-1]["datetime"],
+            "datetime": float(bucket),
         })
     return out
 
@@ -220,8 +226,8 @@ def _adx(rows: list[dict[str, float]], period: int = 14) -> tuple[float, float]:
     return dx, pdi - mdi
 
 
-def _indicator_pack(rows: list[dict[str, float]], strategy: str) -> dict[str, Any]:
-    closed = _closed(rows, "1m") if len(rows) and _is_forming(rows[-1], "1m") else rows
+def _indicator_pack(rows: list[dict[str, float]], timeframe: str, strategy: str) -> dict[str, Any]:
+    closed = _closed(rows, timeframe) if len(rows) and _is_forming(rows[-1], timeframe) else rows
     if len(closed) < 60:
         raise HTTPException(502, "Candles fechados insuficientes.")
 
@@ -526,16 +532,16 @@ async def _analyze(
 
     if strategy == "automatica":
         packs = {
-            s: _indicator_pack(setup_rows, s)
+            s: _indicator_pack(setup_rows, setup_tf, s)
             for s in ("tendencia", "reversao", "rompimento", "momentum")
         }
         selected = _choose_automatic(packs)
     else:
-        packs = {strategy: _indicator_pack(setup_rows, strategy)}
+        packs = {strategy: _indicator_pack(setup_rows, setup_tf, strategy)}
         selected = strategy
 
     setup_pack = packs[selected]
-    context_packs = [_indicator_pack(rows, selected) for rows in available_context]
+    context_packs = [_indicator_pack(rows, tf, selected) for rows in available_context]
 
     direction = setup_pack["direction"]
     context_same = sum(
