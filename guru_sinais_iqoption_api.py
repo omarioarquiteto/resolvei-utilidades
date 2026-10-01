@@ -1190,6 +1190,244 @@ def _backtest_selected(
     return result
 
 
+async def _analyze_vision(
+    client: Any,
+    session_id: str,
+    symbol: str,
+    timeframe: str,
+    strategy: str,
+    option_type: str,
+    expiry_minutes: int,
+    authorization: str | None,
+    analyze_with_ai: bool,
+) -> dict[str, Any]:
+    """
+    Visão Opções: leitura pontual dos indicadores atuais.
+    Não executa backtest, não simula entradas históricas e não fica procurando
+    sinais em ciclos. Uma chamada lê os candles e interpreta os indicadores
+    da estratégia escolhida.
+    """
+    started = time.perf_counter()
+
+    if timeframe not in INTERVALS:
+        raise HTTPException(status_code=400, detail="Período de vela não suportado.")
+
+    option_type, expiry_minutes = _normalize_option_config(option_type, expiry_minutes)
+    symbol = str(symbol or "").strip().upper()
+    if not symbol:
+        raise HTTPException(status_code=400, detail="Informe um ativo.")
+
+    mtf, plan, live_used = await _mtf_for_symbol(
+        client,
+        session_id,
+        symbol,
+        timeframe,
+        expiry_minutes,
+        option_type,
+        1000,
+        True,
+    )
+    context_tf, setup_tf, trigger_tf = plan
+    context_rows = mtf[context_tf]
+    setup_rows = mtf[setup_tf]
+    trigger_rows = mtf[trigger_tf]
+
+    if min(len(context_rows), len(setup_rows), len(trigger_rows)) < 60:
+        raise HTTPException(
+            status_code=502,
+            detail="Não foram recebidos candles suficientes para interpretar os indicadores.",
+        )
+
+    selected_strategy = _select_auto_strategy(setup_rows) if strategy == "automatica" else strategy
+    if selected_strategy not in {"tendencia", "reversao", "rompimento", "momentum"}:
+        raise HTTPException(status_code=400, detail="Estratégia não suportada.")
+
+    context = _iq_strategy_pack(context_rows, selected_strategy)
+    setup = _iq_strategy_pack(setup_rows, selected_strategy)
+    trigger = _iq_strategy_pack(trigger_rows, selected_strategy)
+
+    directions = [context["direction"], setup["direction"], trigger["direction"]]
+    directional = setup["direction"] in {"CALL", "PUT"}
+
+    # A direção vem dos indicadores da própria estratégia. Os demais timeframes
+    # apenas confirmam ou enfraquecem essa leitura; nenhum histórico é testado.
+    score = (
+        float(setup["confidence"]) * 0.55
+        + float(context["confidence"]) * 0.25
+        + float(trigger["confidence"]) * 0.20
+    )
+
+    alignment = sum(1 for d in directions if d == setup["direction"]) if directional else 0
+    divergence = sum(1 for d in directions if d in {"CALL", "PUT"} and d != setup["direction"]) if directional else 0
+
+    if directional and alignment == 3:
+        score += 8
+    elif directional and alignment == 2 and divergence == 0:
+        score += 2
+    elif directional and divergence:
+        score -= 8
+
+    # Confirmação por indicadores: a estratégia precisa estar elegível e
+    # apresentar direção dominante no timeframe de setup.
+    confidence_floor = float(setup.get("minConfidence", 76.0))
+    indicator_confident = bool(
+        directional
+        and setup.get("signalEligible")
+        and float(setup["confidence"]) >= confidence_floor
+    )
+
+    # Em vez de “testar” o mercado, a Visão encerra a leitura com o estado atual.
+    if indicator_confident:
+        signal = setup["direction"]
+    elif directional and float(setup["confidence"]) >= max(68.0, confidence_floor - 8):
+        signal = setup["direction"]
+    else:
+        signal = "SEM DIREÇÃO"
+
+    score = round(max(0.0, min(99.0, score)), 1)
+    if signal == "SEM DIREÇÃO":
+        quality = "INDICADORES DIVIDIDOS"
+    elif score >= 86:
+        quality = "CONFLUÊNCIA MUITO FORTE"
+    elif score >= 78:
+        quality = "CONFLUÊNCIA FORTE"
+    elif score >= 70:
+        quality = "CONFLUÊNCIA MODERADA"
+    else:
+        quality = "CONFLUÊNCIA BAIXA"
+
+    reasons = [
+        f"{selected_strategy}: {', '.join(setup.get('indicatorSet', []))}.",
+        f"Setup {setup_tf}: {setup['direction']} com {setup['confidence']:.0f}% de confluência dos indicadores.",
+        f"Contexto {context_tf}: {context['direction']} ({context['confidence']:.0f}%).",
+        f"Gatilho {trigger_tf}: {trigger['direction']} ({trigger['confidence']:.0f}%).",
+    ]
+
+    if alignment == 3 and directional:
+        reasons.append("Os três timeframes estão alinhados pela leitura dos indicadores.")
+    elif directional:
+        reasons.append("Os timeframes não estão totalmente alinhados; a confiança foi reduzida.")
+
+    warnings: list[str] = []
+    if not indicator_confident:
+        warnings.append("A leitura não atingiu o nível máximo de confluência dos indicadores.")
+    if directional and divergence:
+        warnings.append("Existe divergência entre os timeframes analisados.")
+    if option_type == "digital":
+        warnings.append("Digital: o strike/preço de exercício não é recebido pela API comunitária; a leitura é direcional.")
+    if option_type == "blitz":
+        warnings.append("Blitz: a leitura usa candles disponíveis em tempo real; não há simulação histórica de segundos.")
+
+    values = dict(setup.get("values", {}))
+    values["ContextDirection"] = context["direction"]
+    values["ContextConfidence"] = context["confidence"]
+    values["SetupDirection"] = setup["direction"]
+    values["SetupConfidence"] = setup["confidence"]
+    values["TriggerDirection"] = trigger["direction"]
+    values["TriggerConfidence"] = trigger["confidence"]
+
+    gemini = (
+        guru_base._gemini_review(
+            symbol,
+            f"{context_tf} → {setup_tf} → {trigger_tf} | {OPTION_LABELS[option_type]} | expiração {expiry_minutes}{' s' if option_type == 'blitz' else ' min'}",
+            selected_strategy,
+            [setup],
+            setup_rows[-1]["close"],
+            setup_rows,
+            authorization,
+        )
+        if analyze_with_ai
+        else {"available": False, "reason": "IA desativada."}
+    )
+
+    return {
+        "signal": signal,
+        "score": score,
+        "quality": quality,
+        "symbol": symbol,
+        "timeframe": timeframe,
+        "candlePeriod": timeframe,
+        "optionType": option_type,
+        "optionLabel": OPTION_LABELS[option_type],
+        "expiryMinutes": expiry_minutes,
+        "analysisTimeframes": {
+            "context": context_tf,
+            "setup": setup_tf,
+            "trigger": trigger_tf,
+        },
+        "price": setup_rows[-1]["close"],
+        "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "serverEpoch": time.time(),
+        "diagnostics": {
+            "serverDurationMs": round((time.perf_counter() - started) * 1000),
+            "fastMode": True,
+            "backtestCached": False,
+            "backtestSkipped": True,
+            "liveTrigger": live_used,
+            "candles": {tf: len(data) for tf, data in mtf.items()},
+            "strategyEvaluations": 1,
+            "analysisType": "indicadores atuais; sem backtest e sem teste histórico de sinais",
+        },
+        "buyScore": setup["buy"],
+        "sellScore": setup["sell"],
+        "reasons": reasons[:10],
+        "warnings": warnings[:8],
+        "strategy": selected_strategy,
+        "strategyLabel": setup["strategyLabel"],
+        "indicatorSet": setup.get("indicatorSet", []),
+        "indicators": values,
+        "indicatorReadings": setup.get("indicators", []),
+        "backtest": {
+            "available": False,
+            "skipped": True,
+            "strategy": selected_strategy,
+            "testedSignals": 0,
+            "instrumentModel": "Não utilizado na Visão Opções.",
+            "entryModel": "Leitura atual dos indicadores",
+        },
+        "entry": {
+            "ready": signal in {"CALL", "PUT"} and indicator_confident,
+            "status": "SINAL TÉCNICO" if signal in {"CALL", "PUT"} else "SEM DIREÇÃO",
+            "instruction": (
+                f"Leitura atual dos indicadores aponta {signal}."
+                if signal in {"CALL", "PUT"}
+                else "Os indicadores estão divididos; não foi formada uma direção técnica dominante."
+            ),
+            "secondsRemaining": 0,
+            "elapsedSeconds": 0,
+            "direction": signal,
+            "triggerTimeframe": trigger_tf,
+            "setupTimeframe": setup_tf,
+        },
+        "mtf": {
+            "context": {
+                "timeframe": context_tf,
+                "direction": context["direction"],
+                "confidence": context["confidence"],
+            },
+            "setup": {
+                "timeframe": setup_tf,
+                "direction": setup["direction"],
+                "confidence": setup["confidence"],
+            },
+            "trigger": {
+                "timeframe": trigger_tf,
+                "direction": trigger["direction"],
+                "confidence": trigger["confidence"],
+            },
+            "score": score,
+            "notes": reasons,
+            "liveTrigger": live_used,
+        },
+        "gemini": gemini,
+        "analysisState": "SINAL TÉCNICO" if signal in {"CALL", "PUT"} else "SEM DIREÇÃO",
+        "fastMode": True,
+        "proximity": score,
+        "signalConfirmed": bool(signal in {"CALL", "PUT"} and indicator_confident),
+        "source": "IQ Option + interpretação de indicadores MTF",
+    }
+
+
 async def _analyze(
     client: Any,
     session_id: str,
@@ -1645,18 +1883,31 @@ async def iq_market_analysis(
 ) -> dict[str, Any]:
     item = _get_session(x_iq_session)
     try:
-        analysis = await _analyze(
-            item["client"],
-            x_iq_session or "",
-            req.symbol,
-            req.timeframe,
-            req.strategy,
-            req.option_type,
-            req.expiry_minutes,
-            authorization,
-            req.analyze_with_ai,
-            req.fast_mode,
-        )
+        if req.fast_mode:
+            analysis = await _analyze_vision(
+                item["client"],
+                x_iq_session or "",
+                req.symbol,
+                req.timeframe,
+                req.strategy,
+                req.option_type,
+                req.expiry_minutes,
+                authorization,
+                req.analyze_with_ai,
+            )
+        else:
+            analysis = await _analyze(
+                item["client"],
+                x_iq_session or "",
+                req.symbol,
+                req.timeframe,
+                req.strategy,
+                req.option_type,
+                req.expiry_minutes,
+                authorization,
+                req.analyze_with_ai,
+                req.fast_mode,
+            )
     except HTTPException:
         raise
     except Exception as exc:
