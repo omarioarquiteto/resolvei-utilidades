@@ -1276,13 +1276,9 @@ async def _analyze_vision(
         and float(setup["confidence"]) >= confidence_floor
     )
 
-    # Em vez de “testar” o mercado, a Visão encerra a leitura com o estado atual.
-    if indicator_confident:
-        signal = setup["direction"]
-    elif directional and float(setup["confidence"]) >= max(68.0, confidence_floor - 8):
-        signal = setup["direction"]
-    else:
-        signal = "SEM DIREÇÃO"
+    # A Visão só publica CALL/PUT quando a própria leitura dos indicadores
+    # ultrapassa o nível mínimo definido para a estratégia.
+    signal = setup["direction"] if indicator_confident else "SEM DIREÇÃO"
 
     score = round(max(0.0, min(99.0, score)), 1)
     if signal == "SEM DIREÇÃO":
