@@ -39,7 +39,12 @@ def _normalize_option_config(option_type: str, expiry_minutes: int) -> tuple[str
 
 def _iq_mtf_plan(candle_period: str, expiry_value: int, option_type: str) -> tuple[str, str, str]:
     context_tf, setup_tf, trigger_tf = guru_base._mtf_plan(candle_period)
-    expiry_seconds = int(expiry_value) if option_type == "blitz" else int(expiry_value) * 60
+    if option_type == "blitz":
+        # Blitz usa expiração em segundos; o gatilho precisa ficar na escala de 1m,
+        # que é a resolução histórica/realtime disponível nesta integração.
+        trigger_tf = "1m"
+        return context_tf, setup_tf, trigger_tf
+    expiry_seconds = int(expiry_value) * 60
     if INTERVALS.get(trigger_tf, 60) > expiry_seconds:
         candidates = [tf for tf in ("1m", "5m", "15m") if INTERVALS[tf] <= expiry_seconds]
         if candidates:
