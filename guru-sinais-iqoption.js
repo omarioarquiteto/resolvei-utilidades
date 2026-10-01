@@ -146,6 +146,27 @@
           <strong>${score}%</strong>
         </div>
         <div class="guru-meter"><span style="width:${score}%"></span></div>
+        <div class="guru-backtest-box">
+          <div class="guru-backtest-head"><strong>📊 TESTE HISTÓRICO DA ESTRATÉGIA</strong><span>mesma lógica do sinal atual</span></div>
+          <div class="guru-backtest-grid">
+            <div><span>Sinais testados</span><strong>\${Number(a.backtest?.testedSignals || 0)}</strong></div>
+            <div><span>Acertos</span><strong>\${Number(a.backtest?.wins || 0)}</strong></div>
+            <div><span>Erros</span><strong>\${Number(a.backtest?.losses || 0)}</strong></div>
+            <div><span>Taxa de acerto</span><strong>\${Number(a.backtest?.hitRate || 0).toFixed(1)}%</strong></div>
+            <div><span>Parte anterior</span><strong>\${Number(a.backtest?.olderHitRate || 0).toFixed(1)}%</strong></div>
+            <div><span>Parte recente</span><strong>\${Number(a.backtest?.recentHitRate || 0).toFixed(1)}%</strong></div>
+          </div>
+          <div class="guru-backtest-note">\${
+            Number(a.backtest?.testedSignals || 0) >= 100
+              ? "Foram simulados 100 sinais históricos da mesma estratégia."
+              : \`Foram encontrados \${Number(a.backtest?.testedSignals || 0)} sinais históricos válidos no conjunto disponível.\`
+          } \${
+            a.backtest?.consistent
+              ? "O desempenho ficou acima de 50% nas duas metades da amostra."
+              : "A amostra não mostrou consistência suficiente entre as duas metades."
+          }</div>
+          <div class="guru-backtest-method">Modelo: entrada hipotética na abertura do candle seguinte à confirmação e resultado no fechamento correspondente à expiração de \${Number(a.backtest?.expiryMinutes || 0)} min.</div>
+        </div>
 
         <div class="guru-ai-box">
           <strong>✨ Gemini</strong>
