@@ -85,7 +85,7 @@
         </div>
         <div class="guru-config-bottom">
           <div id="guruIqOptionHint" class="guru-option-hint"></div>
-          <label class="guru-ai-toggle compact"><input type="checkbox" id="guruIqAnalyzeWithAI"><span>Validar com I.A.</span><small>Somente a estratégia selecionada</small></label>
+          <label class="guru-ai-toggle compact"><input type="checkbox" id="guruIqAnalyzeWithAI"><span>Validar com I.A.</span><small>Depois do sinal · não bloqueia</small></label>
           <div class="guru-config-actions"><button class="btn ghost small" id="iqRefreshAssets">↻ Atualizar</button><button class="btn ghost small" id="iqLogout">Sair</button></div>
         </div>
         <div id="guruIqMessage" class="notice guru-inline-message" hidden></div>
@@ -473,6 +473,35 @@
     if(detailEl) detailEl.textContent=detail||"Atualizando leitura técnica…";
   }
 
+  async function validateFinalWithAI(config,technicalSignal){
+    const note=document.getElementById("visaoOpcoesAiNote");
+    if(note)note.textContent="✨ IA: validando o sinal em segundo plano…";
+    try{
+      const d=await jsonResponse(await iqFetch("/market-analysis",{
+        method:"POST",
+        body:JSON.stringify({
+          symbol:config.symbol,
+          timeframe:config.timeframe,
+          strategy:config.strategy,
+          option_type:config.optionType,
+          expiry_minutes:config.expiryMinutes,
+          analyze_with_ai:true,
+          fast_mode:true
+        })
+      }));
+      const ai=d.analysis?.gemini||{};
+      if(!note)return;
+      if(ai.available&&ai.signal){
+        note.textContent=ai.signal===technicalSignal
+          ?"🟢 IA: concordou com a direção técnica ("+ai.signal+")."
+          :"🟠 IA: divergiu da direção técnica ("+(technicalSignal||"—")+" × "+ai.signal+"). O sinal exibido continua definido pelo motor técnico.";
+      }else{
+        note.textContent="ℹ️ IA: não forneceu uma direção complementar. O sinal técnico não foi bloqueado.";
+      }
+    }catch(_){
+      if(note)note.textContent="ℹ️ IA: validação complementar não concluída. O sinal técnico permanece disponível.";
+    }
+  }
   async function analyze(){
     const btn=document.getElementById("guruIqAnalyzeBtn"),result=document.getElementById("guruIqResult"),msg=document.getElementById("guruIqMessage");
     const symbol=document.getElementById("guruIqPair")?.value;
@@ -505,12 +534,20 @@
           updateMonitorView(lastAnalysis,label,detail);
         }
 
-        const useAI=analyzeWithAI && (!lastAnalysis || cycle%5===0);
+        // O motor técnico rápido nunca espera pelo Gemini.
         monitorRequestStartedAt=Date.now();
         monitorNextPollAt=0;
         const d=await jsonResponse(await iqFetch("/market-analysis",{
           method:"POST",
-          body:JSON.stringify({symbol,timeframe,strategy,option_type:optionType,expiry_minutes:expiryMinutes,analyze_with_ai:useAI})
+          body:JSON.stringify({
+            symbol,
+            timeframe,
+            strategy,
+            option_type:optionType,
+            expiry_minutes:expiryMinutes,
+            analyze_with_ai:useAI,
+            fast_mode:true
+          })
         }));
 
         if(runId!==monitorRunId)break;
@@ -530,12 +567,15 @@
           document.getElementById("guruNewAnalysis")?.addEventListener("click",()=>analyze());
           const finalBtn=document.getElementById("guruIqAnalyzeBtn");
           if(finalBtn)finalBtn.textContent="🔍 ANALISAR NOVAMENTE";
+          if(analyzeWithAI){
+            void validateFinalWithAI({symbol,timeframe,strategy,optionType,expiryMinutes},lastAnalysis.signal);
+          }
           break;
         }
 
         cycle++;
-        monitorNextPollAt=Date.now()+2500;
-        await sleep(2500);
+        monitorNextPollAt=Date.now()+3000;
+        await sleep(3000);
       }
     }catch(e){
       if(runId===monitorRunId){
