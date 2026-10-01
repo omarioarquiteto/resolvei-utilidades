@@ -510,7 +510,6 @@
     if(!symbol||!timeframe||monitoring)return;
 
     const runId=++monitorRunId;
-    const deadlineAt=Date.now()+60000;
     monitoring=true;
     setMonitoringUI(true);
     if(msg){msg.hidden=true;msg.textContent="";}
@@ -521,7 +520,7 @@
     let lastAnalysis=null;
 
     try{
-      while(monitoring&&runId===monitorRunId&&Date.now()<deadlineAt){
+      while(monitoring&&runId===monitorRunId){
         if(lastAnalysis){
           const label=monitoringLabel(lastAnalysis,cycle);
           const detail=monitoringDetail(lastAnalysis,label,cycle);
@@ -532,9 +531,8 @@
         monitorRequestStartedAt=requestStarted;
         monitorNextPollAt=0;
 
-        const remaining=Math.max(1000,deadlineAt-Date.now());
         const controller=new AbortController();
-        const timeoutId=setTimeout(()=>controller.abort(),Math.min(7000,remaining));
+        const timeoutId=setTimeout(()=>controller.abort(),7000);
 
         try{
           const response=await iqFetch("/market-analysis",{
@@ -594,11 +592,6 @@
         if(waitMs>0)await sleep(waitMs);
       }
 
-      if(monitoring&&runId===monitorRunId){
-        monitoring=false;
-        setMonitoringUI(false);
-        result.innerHTML=`<div class="card guru-error"><strong>⏱️ Nenhuma entrada foi confirmada nesta janela de 60 segundos.</strong><span>A Visão analisou repetidamente os indicadores atuais, sem backtest, procurando somente uma confirmação técnica válida.</span><small>Faça uma nova leitura para acompanhar o mercado em outro momento.</small></div>`;
-      }
     }catch(e){
       if(runId===monitorRunId){
         monitoring=false;
