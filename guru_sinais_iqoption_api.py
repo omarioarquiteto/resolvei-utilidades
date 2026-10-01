@@ -19,6 +19,7 @@ SESSIONS: dict[str, dict[str, Any]] = {}
 ASSET_CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
 CANDLE_CACHE: dict[str, tuple[float, list[dict[str, float]]]] = {}
 BACKTEST_CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
+FAST_STRUCTURE_CACHE: dict[str, tuple[float, tuple[list[dict[str, Any]], list[dict[str, Any]]]]] = {}
 
 INTERVALS = {"1m": 60, "5m": 300, "15m": 900, "30m": 1800, "1h": 3600, "4h": 14400}
 
