@@ -499,7 +499,7 @@ def _expiry_plan(expiry: int) -> tuple[str, str, list[str]]:
     if expiry == 5:
         return "5m", "1m", ["15m"]
     if expiry == 15:
-        return "15m", "5m", ["5m", "15m"]
+        return "15m", "1m", ["5m", "15m"]
     raise HTTPException(400, "Expiração deve ser 1, 5 ou 15 minutos.")
 
 
