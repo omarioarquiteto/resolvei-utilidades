@@ -19,7 +19,6 @@ SESSIONS: dict[str, dict[str, Any]] = {}
 ASSET_CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
 CANDLE_CACHE: dict[str, tuple[float, list[dict[str, float]]]] = {}
 BACKTEST_CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
-FAST_STRUCTURE_CACHE: dict[str, tuple[float, tuple[list[dict[str, Any]], list[dict[str, Any]]]]] = {}
 
 INTERVALS = {"1m": 60, "5m": 300, "15m": 900, "30m": 1800, "1h": 3600, "4h": 14400}
 
@@ -1618,36 +1617,12 @@ async def _analyze(
         eval_strategies = families
     else:
         eval_strategies = (strategy,)
-    # Na Visão Opções, contexto + setup são estrutura: eles só mudam quando
-    # nasce um novo candle do timeframe de setup. Reutilizamos esse cálculo entre
-    # os ciclos de monitoramento e deixamos o gatilho como a única parte dinâmica.
-    if fast_mode:
-        structure_key = (
-            f"{session_id}|{symbol}|{context_tf}|{setup_tf}|"
-            f"{strategy}|{option_type}|{expiry_minutes}|"
-            f"{mtf[context_tf][-1].get('datetime', 0)}|{setup_rows[-1].get('datetime', 0)}"
-        )
-        cached_structure = FAST_STRUCTURE_CACHE.get(structure_key)
-        if cached_structure and time.time() - cached_structure[0] <= 120:
-            context_strategies, setup_strategies = cached_structure[1]
-        else:
-            context_strategies = [
-                _iq_strategy_pack(mtf[context_tf], strategy_name) for strategy_name in eval_strategies
-            ]
-            setup_strategies = [
-                _iq_strategy_pack(setup_rows, strategy_name) for strategy_name in eval_strategies
-            ]
-            FAST_STRUCTURE_CACHE[structure_key] = (
-                time.time(),
-                (context_strategies, setup_strategies),
-            )
-    else:
-        context_strategies = [
-            _iq_strategy_pack(mtf[context_tf], strategy_name) for strategy_name in eval_strategies
-        ]
-        setup_strategies = [
-            _iq_strategy_pack(setup_rows, strategy_name) for strategy_name in eval_strategies
-        ]
+    context_strategies = [
+        _iq_strategy_pack(mtf[context_tf], strategy_name) for strategy_name in eval_strategies
+    ]
+    setup_strategies = [
+        _iq_strategy_pack(setup_rows, strategy_name) for strategy_name in eval_strategies
+    ]
 
     trigger_strategies = [
         _iq_strategy_pack(trigger_rows, strategy_name) for strategy_name in eval_strategies
