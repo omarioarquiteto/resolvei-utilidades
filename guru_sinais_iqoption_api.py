@@ -192,6 +192,7 @@ async def _candles(client: Any, session_id: str, symbol: str, timeframe: str, co
             continue
 
     rows.sort(key=lambda x: x["datetime"])
+    rows = _closed_candle_rows(rows, size)
     if len(rows) < 60:
         raise HTTPException(
             status_code=502,
