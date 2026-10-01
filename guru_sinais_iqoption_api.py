@@ -775,7 +775,7 @@ def _iq_mtf_score(
     else:
         eligible = (
             s in {"CALL", "PUT"}
-            and score >= 67
+            and score >= min_signal_score
             and not (c in {"CALL", "PUT"} and c != s and context["confidence"] >= 82)
         )
 
