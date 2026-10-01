@@ -90,6 +90,9 @@ def _cleanup() -> None:
     for sid, item in expired:
         SESSIONS.pop(sid, None)
         ASSET_CACHE.pop(sid, None)
+        for key in list(BACKTEST_CACHE):
+            if key.startswith(sid + "|"):
+                BACKTEST_CACHE.pop(key, None)
         for key in list(CANDLE_CACHE):
             if key.startswith(sid + "|"):
                 CANDLE_CACHE.pop(key, None)
