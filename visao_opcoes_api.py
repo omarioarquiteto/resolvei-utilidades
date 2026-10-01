@@ -10,6 +10,7 @@ from pydantic import BaseModel
 
 # SOMENTE autenticação/sessão/ativos: preserva o sistema de login da Visão atual.
 import guru_sinais_iqoption_api as iq_auth
+import guru_sinais_api as guru_base
 
 router = APIRouter(prefix="/api/visao-opcoes", tags=["VISÃO OPÇÕES"])
 
@@ -503,6 +504,241 @@ def _expiry_plan(expiry: int) -> tuple[str, str, list[str]]:
     raise HTTPException(400, "Expiração deve ser 1, 5 ou 15 minutos.")
 
 
+async def _analyze_fast(
+    client: Any,
+    sid: str,
+    symbol: str,
+    timeframe: str,
+    strategy: str,
+    expiry: int,
+) -> dict[str, Any]:
+    """Caminho rápido da VISÃO OPÇÕES: uma consulta de candles por ciclo,
+    MTF agregado localmente, uma única estratégia e sem backtest/IA bloqueante."""
+    started = time.perf_counter()
+
+    if timeframe not in INTERVALS:
+        raise HTTPException(400, "Período de vela inválido.")
+    if expiry not in EXPIRIES:
+        raise HTTPException(400, "Expiração deve ser 1, 5 ou 15 minutos.")
+    if strategy not in STRATEGIES:
+        raise HTTPException(400, "Estratégia inválida.")
+
+    symbol = str(symbol or "").strip().upper()
+    if not symbol:
+        raise HTTPException(400, "Informe um ativo.")
+
+    context_tf, setup_tf, trigger_tf = iq_auth._iq_mtf_plan(
+        timeframe, expiry, "binary"
+    )
+    plan = (context_tf, setup_tf, trigger_tf)
+
+    base_tf = min(plan, key=guru_base.timeframe_minutes)
+    base_minutes = guru_base.timeframe_minutes(base_tf)
+    context_minutes = guru_base.timeframe_minutes(context_tf)
+
+    # 60 candles de contexto + folga, sem baixar 1.000 candles desnecessariamente.
+    required_base = int((60 * context_minutes) / max(base_minutes, 1))
+    count = max(180, min(980, required_base + 30))
+
+    base_rows = await iq_auth._candles(
+        client,
+        sid,
+        symbol,
+        base_tf,
+        count,
+        include_forming=True,
+        cache_ttl=0.9,
+        request_timeout=4.5,
+    )
+
+    rows: dict[str, list[dict[str, float]]] = {base_tf: base_rows}
+    base_size = guru_base.timeframe_minutes(base_tf)
+    base_is_forming = bool(
+        base_rows
+        and float(base_rows[-1].get("datetime") or 0) + base_size * 60 > time.time() - 1
+    )
+
+    for tf in plan:
+        if tf in rows:
+            continue
+        aggregated = guru_base.resample_rows(
+            base_rows,
+            base_size,
+            guru_base.timeframe_minutes(tf),
+        )
+        # O agregado final pode conter a vela-base em formação.
+        if base_is_forming and aggregated:
+            aggregated = aggregated[:-1]
+        rows[tf] = aggregated
+
+    context_rows = rows.get(context_tf) or []
+    setup_rows = rows.get(setup_tf) or []
+    trigger_rows = rows.get(trigger_tf) or []
+
+    if len(context_rows) < 60 or len(setup_rows) < 60 or len(trigger_rows) < 60:
+        raise HTTPException(502, f"Dados insuficientes para a leitura rápida de {symbol}.")
+
+    # A automática seleciona UMA família pelo regime atual; não combina estratégias.
+    selected_strategy = (
+        iq_auth._select_auto_strategy(setup_rows)
+        if strategy == "automatica"
+        else strategy
+    )
+
+    context_pack = iq_auth._iq_strategy_pack(context_rows, selected_strategy)
+    setup_pack = iq_auth._iq_strategy_pack(setup_rows, selected_strategy)
+    trigger_pack = iq_auth._iq_strategy_pack(trigger_rows, selected_strategy)
+
+    signal, score, notes, trigger_state = iq_auth._iq_mtf_score(
+        context_pack,
+        setup_pack,
+        trigger_pack,
+        trigger_rows,
+        trigger_tf,
+        "binary",
+        expiry,
+        strict_confirmation=True,
+    )
+
+    direction = signal if signal in {"CALL", "PUT"} else setup_pack.get("direction")
+    confirmed = bool(trigger_state.get("ready"))
+    public_signal = direction if direction in {"CALL", "PUT"} else "SEM SINAL"
+
+    if confirmed and public_signal in {"CALL", "PUT"}:
+        quality = (
+            "MUITO FORTE" if score >= 86
+            else "FORTE" if score >= 76
+            else "MODERADA"
+        )
+    elif public_signal in {"CALL", "PUT"}:
+        quality = "SINAL PRÓXIMO"
+    else:
+        quality = "ANALISANDO MERCADO"
+
+    warnings: list[str] = []
+    if (
+        context_pack.get("direction") in {"CALL", "PUT"}
+        and setup_pack.get("direction") in {"CALL", "PUT"}
+        and context_pack["direction"] != setup_pack["direction"]
+    ):
+        warnings.append("Contexto maior divergente do setup.")
+    if (
+        trigger_pack.get("direction") in {"CALL", "PUT"}
+        and setup_pack.get("direction") in {"CALL", "PUT"}
+        and trigger_pack["direction"] != setup_pack["direction"]
+    ):
+        warnings.append("Gatilho atual divergente do setup.")
+    if not base_is_forming:
+        warnings.append("Candle vivo indisponível neste ciclo; aguardando a próxima atualização da IQ Option.")
+
+    rationale = {
+        "tendencia": "Estratégia individual de tendência, com regime, estrutura, momentum e gatilho.",
+        "reversao": "Estratégia individual de reversão, com extremo, osciladores e rejeição.",
+        "rompimento": "Estratégia individual de rompimento, com quebra, expansão e confirmação.",
+        "momentum": "Estratégia individual de momentum, com direção, aceleração e força.",
+    }.get(selected_strategy, "Leitura técnica da estratégia selecionada.")
+
+    reasons = [
+        f"{setup_pack.get('strategyLabel', selected_strategy)}: {rationale}",
+        f"Contexto {context_tf}: {context_pack.get('direction', 'NEUTRA')} com {context_pack.get('confidence', 0):.0f}% de confluência.",
+        f"Setup {setup_tf}: {setup_pack.get('direction', 'NEUTRA')} com {setup_pack.get('confidence', 0):.0f}% de confluência.",
+        f"Gatilho {trigger_tf}: {trigger_pack.get('direction', 'NEUTRA')} com {trigger_pack.get('confidence', 0):.0f}% de confluência.",
+        *notes,
+    ]
+
+    return {
+        "signal": public_signal,
+        "signalConfirmed": confirmed and public_signal in {"CALL", "PUT"},
+        "score": round(float(score), 1),
+        "quality": quality,
+        "symbol": symbol,
+        "timeframe": timeframe,
+        "candlePeriod": timeframe,
+        "expiryMinutes": expiry,
+        "optionType": "binary",
+        "optionLabel": "Binárias",
+        "strategy": selected_strategy,
+        "strategyLabel": setup_pack.get("strategyLabel", selected_strategy),
+        "price": setup_rows[-1]["close"],
+        "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "serverEpoch": time.time(),
+        "indicatorReadings": setup_pack.get("indicators", []),
+        "indicatorSet": setup_pack.get("indicatorSet", []),
+        "indicators": setup_pack.get("values", {}),
+        "buyScore": setup_pack.get("buy", 0),
+        "sellScore": setup_pack.get("sell", 0),
+        "reasons": reasons[:10],
+        "warnings": warnings[:6],
+        "entry": {
+            **trigger_state,
+            "ready": confirmed and public_signal in {"CALL", "PUT"},
+            "direction": public_signal,
+            "triggerTimeframe": trigger_tf,
+            "setupTimeframe": setup_tf,
+            "status": (
+                "ENTRADA CONFIRMADA"
+                if confirmed and public_signal in {"CALL", "PUT"}
+                else trigger_state.get("status", "ANALISANDO MERCADO")
+            ),
+            "instruction": (
+                f"CLIQUE NO {public_signal} AGORA. Contexto, setup e gatilho estão alinhados."
+                if confirmed and public_signal in {"CALL", "PUT"}
+                else (
+                    f"Direção {public_signal} identificada. Acompanhando o gatilho em tempo real."
+                    if public_signal in {"CALL", "PUT"}
+                    else "Interpretando os indicadores atuais da estratégia selecionada."
+                )
+            ),
+        },
+        "analysisTimeframes": {
+            "context": context_tf,
+            "setup": setup_tf,
+            "trigger": trigger_tf,
+        },
+        "mtf": {
+            "context": {
+                "timeframe": context_tf,
+                "direction": context_pack.get("direction", "NEUTRA"),
+                "confidence": context_pack.get("confidence", 0),
+            },
+            "setup": {
+                "timeframe": setup_tf,
+                "direction": setup_pack.get("direction", "NEUTRA"),
+                "confidence": setup_pack.get("confidence", 0),
+            },
+            "trigger": {
+                "timeframe": trigger_tf,
+                "direction": trigger_pack.get("direction", "NEUTRA"),
+                "confidence": trigger_pack.get("confidence", 0),
+            },
+            "score": round(float(score), 1),
+            "notes": notes,
+            "liveTrigger": base_is_forming,
+        },
+        "diagnostics": {
+            "serverDurationMs": round((time.perf_counter() - started) * 1000),
+            "fastMode": True,
+            "backtest": False,
+            "backtestSkipped": True,
+            "aiBlocking": False,
+            "liveTrigger": base_is_forming,
+            "baseTimeframe": base_tf,
+            "candlesBase": len(base_rows),
+            "candles": {tf: len(data) for tf, data in rows.items()},
+            "strategyEvaluations": 1,
+            "analysisType": "MTF rápido por estratégia individual, sem backtest e sem IA bloqueante",
+        },
+        "proximity": round(float(trigger_state.get("proximity", 0) or 0), 1),
+        "analysisState": (
+            "ENTRADA CONFIRMADA"
+            if confirmed and public_signal in {"CALL", "PUT"}
+            else trigger_state.get("state") or "ANALISANDO MERCADO"
+        ),
+        "fastMode": True,
+        "source": "IQ Option + MTF local + estratégia individual + gatilho em tempo real",
+    }
+
+
 async def _analyze(
     client: Any,
     sid: str,
@@ -703,7 +939,7 @@ async def market_analysis(
 ):
     item = _session(x_iq_session)
     try:
-        analysis = await _analyze(
+        analysis = await _analyze_fast(
             item["client"],
             x_iq_session or "",
             req.symbol,
