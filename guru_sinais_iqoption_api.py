@@ -243,7 +243,7 @@ async def _analyze(
             detail="Não foram recebidos candles suficientes para a análise em múltiplos timeframes.",
         )
 
-    families = ("tendencia", "reversao", "rompimento")
+    families = ("tendencia", "reversao", "rompimento", "momentum")
     context_strategies = [
         guru_base._strategy_pack(mtf[context_tf], strategy_name) for strategy_name in families
     ]
