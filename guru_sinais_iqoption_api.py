@@ -737,6 +737,224 @@ def _iq_mtf_score(
     return (s if eligible else "AGUARDAR"), round(max(0.0, min(99.0, score)), 1), notes, trigger_state
 
 
+def _wilson_lower_bound(wins: int, total: int, z: float = 1.96) -> float:
+    if total <= 0:
+        return 0.0
+    p = wins / total
+    denom = 1 + z * z / total
+    centre = p + z * z / (2 * total)
+    margin = z * ((p * (1 - p) + z * z / (4 * total)) / total) ** 0.5
+    return max(0.0, (centre - margin) / denom) * 100
+
+
+def _rows_closed_at(
+    rows: list[dict[str, float]],
+    close_time: float,
+    candle_size: int,
+) -> tuple[list[dict[str, float]], int]:
+    eligible = [
+        i for i, row in enumerate(rows)
+        if float(row.get("datetime") or 0) + candle_size <= close_time + 1
+    ]
+    if not eligible:
+        return [], -1
+    idx = eligible[-1]
+    return rows[: idx + 1], idx
+
+
+def _historical_strategy_result(
+    context_rows: list[dict[str, float]],
+    setup_rows: list[dict[str, float]],
+    trigger_rows: list[dict[str, float]],
+    strategy: str,
+    setup_size: int,
+    trigger_size: int,
+    expiry_minutes: int,
+    max_signals: int = 120,
+) -> dict[str, Any]:
+    """
+    Backtest sem look-ahead:
+    - somente candles já fechados entram na decisão;
+    - a entrada hipotética ocorre na abertura do próximo candle do gatilho;
+    - o resultado é marcado no fechamento correspondente à expiração.
+    """
+    expiry_minutes = max(1, int(expiry_minutes or 1))
+    expiry_seconds = expiry_minutes * 60
+
+    occurrences: list[dict[str, Any]] = []
+    min_setup = 60
+    min_trigger = 60
+
+    for setup_idx in range(min_setup, max(min_setup, len(setup_rows) - 2)):
+        setup_candle = setup_rows[setup_idx]
+        setup_close = float(setup_candle.get("datetime") or 0) + setup_size
+        if setup_close <= 0:
+            continue
+
+        # Selecionamos o último candle de contexto que já havia fechado.
+        context_size = _infer_candle_size(context_rows, max(1, len(context_rows) - 1))
+        ctx_candidates = [
+            i for i, row in enumerate(context_rows)
+            if float(row.get("datetime") or 0) + context_size <= setup_close + 1
+        ]
+        if len(ctx_candidates) < min_trigger:
+            # Fallback: a lista já chega fechada e ordenada; use o último candle
+            # cujo final não ultrapassa o fechamento do setup.
+            ctx_idx = -1
+            for i, row in enumerate(context_rows):
+                if float(row.get("datetime") or 0) <= setup_close:
+                    ctx_idx = i
+            if ctx_idx < min_trigger - 1:
+                continue
+        else:
+            ctx_idx = ctx_candidates[-1]
+
+        trigger_end_idx = -1
+        for i, row in enumerate(trigger_rows):
+            if float(row.get("datetime") or 0) + trigger_size <= setup_close + 1:
+                trigger_end_idx = i
+            else:
+                break
+
+        if trigger_end_idx < min_trigger - 1:
+            continue
+
+        context_cut = context_rows[: ctx_idx + 1]
+        setup_cut = setup_rows[: setup_idx + 1]
+        trigger_cut = trigger_rows[: trigger_end_idx + 1]
+        context_pack = _iq_strategy_pack(context_cut, strategy)
+        setup_pack = _iq_strategy_pack(setup_cut, strategy)
+        trigger_pack = _iq_strategy_pack(trigger_cut, strategy)
+        signal, score, notes, _ = _iq_mtf_score(
+            context_pack,
+            setup_pack,
+            trigger_pack,
+            trigger_cut,
+            "1m" if trigger_size == 60 else "5m" if trigger_size == 300 else "15m",
+        )
+        if signal not in {"CALL", "PUT"}:
+            continue
+
+        # Próximo candle do gatilho = abertura hipotética da entrada.
+        entry_idx = trigger_end_idx + 1
+        if entry_idx >= len(trigger_rows):
+            continue
+        entry = trigger_rows[entry_idx]
+        entry_price = float(entry["open"])
+        entry_start = float(entry.get("datetime") or 0)
+        if entry_start <= 0:
+            continue
+
+        target_close = entry_start + expiry_seconds
+        outcome_idx = -1
+        for i in range(entry_idx, len(trigger_rows)):
+            row_end = float(trigger_rows[i].get("datetime") or 0) + trigger_size
+            if row_end >= target_close - 1:
+                outcome_idx = i
+                break
+        if outcome_idx < 0:
+            continue
+
+        exit_price = float(trigger_rows[outcome_idx]["close"])
+        win = (exit_price > entry_price) if signal == "CALL" else (exit_price < entry_price)
+        tie = abs(exit_price - entry_price) <= max(abs(entry_price) * 1e-10, 1e-12)
+
+        occurrences.append({
+            "signal": signal,
+            "score": round(score, 1),
+            "entryPrice": entry_price,
+            "exitPrice": exit_price,
+            "win": bool(win and not tie),
+            "tie": bool(tie),
+            "setupTime": setup_close,
+        })
+        if len(occurrences) >= max_signals:
+            break
+
+    wins = sum(1 for x in occurrences if x["win"])
+    ties = sum(1 for x in occurrences if x["tie"])
+    decisive = len(occurrences) - ties
+    losses = max(0, decisive - wins)
+    hit_rate = (wins / decisive * 100) if decisive else 0.0
+
+    half = len(occurrences) // 2
+    older = occurrences[:half] if half else []
+    recent = occurrences[half:] if half else []
+    older_decisive = [x for x in older if not x["tie"]]
+    recent_decisive = [x for x in recent if not x["tie"]]
+    older_rate = (
+        sum(1 for x in older_decisive if x["win"]) / len(older_decisive) * 100
+        if older_decisive else 0.0
+    )
+    recent_rate = (
+        sum(1 for x in recent_decisive if x["win"]) / len(recent_decisive) * 100
+        if recent_decisive else 0.0
+    )
+
+    return {
+        "strategy": strategy,
+        "testedSignals": len(occurrences),
+        "wins": wins,
+        "losses": losses,
+        "ties": ties,
+        "hitRate": round(hit_rate, 1),
+        "wilsonLower95": round(_wilson_lower_bound(wins, decisive), 1),
+        "olderHitRate": round(older_rate, 1),
+        "recentHitRate": round(recent_rate, 1),
+        "consistent": (
+            len(older_decisive) >= 15
+            and len(recent_decisive) >= 15
+            and older_rate >= 50
+            and recent_rate >= 50
+        ),
+        "expiryMinutes": expiry_minutes,
+        "entryModel": "Próximo candle do gatilho após a confirmação",
+        "occurrences": occurrences[-20:],
+    }
+
+
+def _infer_candle_size(rows: list[dict[str, float]], idx: int) -> int:
+    if idx > 0:
+        delta = float(rows[idx].get("datetime") or 0) - float(rows[idx - 1].get("datetime") or 0)
+        if delta > 0:
+            return max(60, int(round(delta)))
+    return 60
+
+
+def _backtest_selected(
+    mtf: dict[str, list[dict[str, float]]],
+    plan: tuple[str, str, str],
+    strategy: str,
+    timeframe: str,
+    max_signals: int = 120,
+) -> dict[str, Any]:
+    context_tf, setup_tf, trigger_tf = plan
+    setup_rows = mtf[setup_tf]
+    trigger_rows = mtf[trigger_tf]
+    context_rows = mtf[context_tf]
+    setup_size = INTERVALS[setup_tf]
+    trigger_size = INTERVALS[trigger_tf]
+    expiry_minutes = INTERVALS.get(timeframe, setup_size) // 60
+
+    result = _historical_strategy_result(
+        context_rows,
+        setup_rows,
+        trigger_rows,
+        strategy,
+        setup_size,
+        trigger_size,
+        expiry_minutes,
+        max_signals,
+    )
+    result["requestedTimeframe"] = timeframe
+    result["analysisTimeframes"] = {
+        "context": context_tf,
+        "setup": setup_tf,
+        "trigger": trigger_tf,
+    }
+    return result
+
+
 async def _analyze(
     client: Any,
     session_id: str,
