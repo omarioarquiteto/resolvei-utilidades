@@ -1189,126 +1189,368 @@ def _backtest_selected(
     return result
 
 
-def _vision_indicator_interpretation(pack: dict[str, Any]) -> dict[str, Any]:
-    """
-    Converte exclusivamente os indicadores da estratégia em uma leitura direcional.
-    Não usa histórico de acertos, backtest ou simulação de entradas.
-    """
-    indicators = pack.get("indicators") or []
-    call = sum(float(x.get("weight", 0) or 0) for x in indicators if x.get("signal") == "CALL")
-    put = sum(float(x.get("weight", 0) or 0) for x in indicators if x.get("signal") == "PUT")
-    neutral = sum(float(x.get("weight", 0) or 0) for x in indicators if x.get("signal") == "NEUTRA")
-    total = call + put + neutral
-    directional_total = call + put
-
-    if directional_total <= 0:
-        return {
-            "direction": "NEUTRA",
-            "confidence": 50.0,
-            "callWeight": 0.0,
-            "putWeight": 0.0,
-            "agreement": 0.0,
-            "activeIndicators": 0,
-        }
-
-    direction = "CALL" if call > put else "PUT" if put > call else "NEUTRA"
-    dominant = max(call, put)
-    opposite = min(call, put)
-    agreement = dominant / max(directional_total, 1e-9)
-    directional_share = directional_total / max(total, 1e-9)
-
-    # Confiança baseada na concordância dos indicadores da própria estratégia.
-    confidence = 50.0 + 50.0 * (
-        0.70 * max(0.0, 2.0 * agreement - 1.0)
-        + 0.30 * directional_share
-    )
-    return {
-        "direction": direction,
-        "confidence": round(min(99.0, confidence), 1),
-        "callWeight": round(call, 2),
-        "putWeight": round(put, 2),
-        "agreement": round(agreement * 100.0, 1),
-        "activeIndicators": sum(1 for x in indicators if x.get("signal") in {"CALL", "PUT"}),
-    }
+def _vision_sma_std(values: list[float], period: int = 20) -> tuple[float, float]:
+    window = values[-period:] if len(values) >= period else values
+    if not window:
+        return 0.0, 0.0
+    mean = sum(window) / len(window)
+    variance = sum((x - mean) ** 2 for x in window) / len(window)
+    return mean, variance ** 0.5
 
 
-def _vision_trigger_confirmation(
+def _vision_fast_strategy(
     rows: list[dict[str, float]],
-    timeframe: str,
-    direction: str,
+    strategy: str,
+    expiry_minutes: int,
 ) -> dict[str, Any]:
     """
-    Confirma somente o timing atual do candle. É um filtro de entrada, não um
-    teste histórico de sinais.
+    Motor rápido da Visão inspirado no primeiro motor de opções do Resolvei:
+    poucos indicadores, escolhidos por estratégia, pontuação direta e sem
+    qualquer backtest/histórico de sinais.
     """
-    if direction not in {"CALL", "PUT"} or len(rows) < 3:
-        return {"ready": False, "confidence": 0.0, "status": "AGUARDANDO GATILHO"}
+    if len(rows) < 60:
+        raise HTTPException(status_code=502, detail="Candles insuficientes para a leitura dos indicadores.")
 
-    size = INTERVALS.get(timeframe, 60)
+    closes = [float(x["close"]) for x in rows]
     current = rows[-1]
-    prev = rows[-2]
-    prev2 = rows[-3]
+    previous = rows[-2]
+    atr = guru_base._atr_value(rows, 14)
+    if atr <= 0:
+        raise HTTPException(status_code=502, detail="ATR inválido para a leitura atual.")
 
+    close = closes[-1]
+    body = abs(current["close"] - current["open"])
+    candle_range = max(current["high"] - current["low"], 1e-12)
+    body_ratio = body / candle_range
+    close_location = (current["close"] - current["low"]) / candle_range
+
+    e5 = guru_base.ema(closes, 5)[-1]
+    e9 = guru_base.ema(closes, 9)[-1]
+    e20 = guru_base.ema(closes, 20)[-1]
+    e21 = guru_base.ema(closes, 21)[-1]
+    e50 = guru_base.ema(closes, 50)[-1]
+    rsi = float(guru_base.rsi(closes))
+    macd, macd_signal = guru_base.macd_values(closes)
+    prev_macd, prev_macd_signal = guru_base.macd_values(closes[:-1])
+    hist = macd - macd_signal
+    prev_hist = prev_macd - prev_macd_signal
+    adx, di_diff = guru_base._adx(rows)
+    st_k, st_d = guru_base._stochastic(rows)
+    mean20, std20 = _vision_sma_std(closes, 20)
+    bb_upper = mean20 + 2 * std20
+    bb_lower = mean20 - 2 * std20
+
+    high20 = max(x["high"] for x in rows[-21:-1])
+    low20 = min(x["low"] for x in rows[-21:-1])
+    atr_prev = guru_base._atr_value(rows[:-5], 14) if len(rows) > 40 else atr
+    atr_expanding = atr >= atr_prev * 1.05
+
+    upper_wick = (current["high"] - max(current["open"], current["close"])) / candle_range
+    lower_wick = (min(current["open"], current["close"]) - current["low"]) / candle_range
+
+    def result(
+        direction: str,
+        call_score: int,
+        put_score: int,
+        maximum: int,
+        indicators: list[dict[str, Any]],
+        rationale: str,
+        minimum: int,
+    ) -> dict[str, Any]:
+        side_score = max(call_score, put_score)
+        winning = "CALL" if call_score > put_score else "PUT" if put_score > call_score else "NEUTRA"
+        margin = abs(call_score - put_score)
+        confidence = 50.0 + (side_score / max(maximum, 1)) * 35.0 + (margin / max(maximum, 1)) * 15.0
+        if direction in {"CALL", "PUT"}:
+            confidence = min(98.0, confidence)
+        else:
+            confidence = min(74.0, confidence)
+
+        return {
+            "strategy": strategy,
+            "strategyLabel": {
+                "tendencia": "Tendência",
+                "reversao": "Reversão",
+                "rompimento": "Rompimento",
+                "momentum": "Momentum",
+            }[strategy],
+            "direction": direction,
+            "confidence": round(confidence, 1),
+            "callScore": call_score,
+            "putScore": put_score,
+            "maximumScore": maximum,
+            "minimumScore": minimum,
+            "margin": margin,
+            "indicators": indicators,
+            "indicatorSet": [x["name"] for x in indicators],
+            "rationale": rationale,
+            "values": {
+                "EMA5": e5,
+                "EMA9": e9,
+                "EMA20": e20,
+                "EMA21": e21,
+                "EMA50": e50,
+                "RSI": rsi,
+                "MACD": macd,
+                "MACDSignal": macd_signal,
+                "MACDHistogram": hist,
+                "ADX": adx,
+                "DIplusMinus": di_diff,
+                "StochasticK": st_k,
+                "StochasticD": st_d,
+                "ATRpct": (atr / close * 100) if close else 0.0,
+                "BollingerUpper": bb_upper,
+                "BollingerMiddle": mean20,
+                "BollingerLower": bb_lower,
+                "BodyRatio": body_ratio,
+                "CloseLocation": close_location,
+                "UpperWick": upper_wick,
+                "LowerWick": lower_wick,
+            },
+        }
+
+    indicators: list[dict[str, Any]]
+    if strategy == "tendencia":
+        call = 0
+        put = 0
+        indicators = []
+
+        up = e20 > e50
+        down = e20 < e50
+        if up:
+            call += 1
+            indicators.append({"name": "EMA20/EMA50", "signal": "CALL", "reason": "Tendência principal de alta."})
+        elif down:
+            put += 1
+            indicators.append({"name": "EMA20/EMA50", "signal": "PUT", "reason": "Tendência principal de baixa."})
+        else:
+            indicators.append({"name": "EMA20/EMA50", "signal": "NEUTRA", "reason": "Médias sem direção clara."})
+
+        if adx >= 20:
+            if di_diff > 3:
+                call += 1
+                indicators.append({"name": "ADX + DI", "signal": "CALL", "reason": f"Força direcional compradora: ADX {adx:.1f}."})
+            elif di_diff < -3:
+                put += 1
+                indicators.append({"name": "ADX + DI", "signal": "PUT", "reason": f"Força direcional vendedora: ADX {adx:.1f}."})
+            else:
+                indicators.append({"name": "ADX + DI", "signal": "NEUTRA", "reason": "ADX presente, mas DI dividido."})
+        else:
+            indicators.append({"name": "ADX + DI", "signal": "NEUTRA", "reason": f"ADX baixo: {adx:.1f}."})
+
+        if up and close >= e20 and rsi >= 50:
+            call += 1
+            indicators.append({"name": "RSI + preço/EMA20", "signal": "CALL", "reason": "Preço sustentado acima da EMA20 com RSI favorável."})
+        elif down and close <= e20 and rsi <= 50:
+            put += 1
+            indicators.append({"name": "RSI + preço/EMA20", "signal": "PUT", "reason": "Preço sustentado abaixo da EMA20 com RSI favorável."})
+        else:
+            indicators.append({"name": "RSI + preço/EMA20", "signal": "NEUTRA", "reason": "Retração ou RSI sem confirmação."})
+
+        if current["close"] > current["open"] and close >= previous["close"] and body_ratio >= 0.45:
+            call += 1
+            indicators.append({"name": "Candle de continuidade", "signal": "CALL", "reason": "Candle comprador com corpo consistente."})
+        elif current["close"] < current["open"] and close <= previous["close"] and body_ratio >= 0.45:
+            put += 1
+            indicators.append({"name": "Candle de continuidade", "signal": "PUT", "reason": "Candle vendedor com corpo consistente."})
+        else:
+            indicators.append({"name": "Candle de continuidade", "signal": "NEUTRA", "reason": "Candle sem força suficiente."})
+
+        direction = "CALL" if call >= 3 and call > put else "PUT" if put >= 3 and put > call else "NEUTRA"
+        return result(direction, call, put, 4, indicators, "Tendência confirmada por médias, força, RSI e candle.", 3)
+
+    if strategy == "reversao":
+        call = 0
+        put = 0
+        indicators = []
+
+        near_lower = close <= bb_lower + atr * 0.15
+        near_upper = close >= bb_upper - atr * 0.15
+        if near_lower:
+            call += 1
+            indicators.append({"name": "Bollinger", "signal": "CALL", "reason": "Preço pressionando a banda inferior."})
+        elif near_upper:
+            put += 1
+            indicators.append({"name": "Bollinger", "signal": "PUT", "reason": "Preço pressionando a banda superior."})
+        else:
+            indicators.append({"name": "Bollinger", "signal": "NEUTRA", "reason": "Preço longe das bandas extremas."})
+
+        if rsi <= 35 and rsi > guru_base.rsi(closes[:-1]):
+            call += 1
+            indicators.append({"name": "RSI + reversão", "signal": "CALL", "reason": "RSI sobrevendido virando para cima."})
+        elif rsi >= 65 and rsi < guru_base.rsi(closes[:-1]):
+            put += 1
+            indicators.append({"name": "RSI + reversão", "signal": "PUT", "reason": "RSI sobrecomprado virando para baixo."})
+        else:
+            indicators.append({"name": "RSI + reversão", "signal": "NEUTRA", "reason": "RSI sem reversão extrema."})
+
+        if st_k < 25 and st_k > st_d:
+            call += 1
+            indicators.append({"name": "Stochastic", "signal": "CALL", "reason": "Estocástico saindo da região de sobrevenda."})
+        elif st_k > 75 and st_k < st_d:
+            put += 1
+            indicators.append({"name": "Stochastic", "signal": "PUT", "reason": "Estocástico saindo da região de sobrecompra."})
+        else:
+            indicators.append({"name": "Stochastic", "signal": "NEUTRA", "reason": "Estocástico sem virada extrema."})
+
+        if lower_wick > upper_wick * 1.25 and lower_wick >= 0.28 and close_location >= 0.58:
+            call += 1
+            indicators.append({"name": "Candle de rejeição", "signal": "CALL", "reason": "Rejeição clara de preços mais baixos."})
+        elif upper_wick > lower_wick * 1.25 and upper_wick >= 0.28 and close_location <= 0.42:
+            put += 1
+            indicators.append({"name": "Candle de rejeição", "signal": "PUT", "reason": "Rejeição clara de preços mais altos."})
+        else:
+            indicators.append({"name": "Candle de rejeição", "signal": "NEUTRA", "reason": "Sem rejeição clara."})
+
+        direction = "CALL" if call >= 3 and call > put else "PUT" if put >= 3 and put > call else "NEUTRA"
+        return result(direction, call, put, 4, indicators, "Reversão confirmada por extremo, oscilador e rejeição.", 3)
+
+    if strategy == "rompimento":
+        call = 0
+        put = 0
+        indicators = []
+
+        breakout_up = close > high20
+        breakout_down = close < low20
+        if breakout_up:
+            call += 1
+            indicators.append({"name": "Máxima de 20 candles", "signal": "CALL", "reason": "Preço rompeu a máxima recente."})
+        elif breakout_down:
+            put += 1
+            indicators.append({"name": "Mínima de 20 candles", "signal": "PUT", "reason": "Preço rompeu a mínima recente."})
+        else:
+            indicators.append({"name": "Faixa de 20 candles", "signal": "NEUTRA", "reason": "Nenhum rompimento atual."})
+
+        if atr_expanding:
+            if current["close"] > current["open"]:
+                call += 1
+                indicators.append({"name": "ATR + expansão", "signal": "CALL", "reason": "Volatilidade aumentando com candle comprador."})
+            elif current["close"] < current["open"]:
+                put += 1
+                indicators.append({"name": "ATR + expansão", "signal": "PUT", "reason": "Volatilidade aumentando com candle vendedor."})
+            else:
+                indicators.append({"name": "ATR + expansão", "signal": "NEUTRA", "reason": "Expansão sem direção do candle."})
+        else:
+            indicators.append({"name": "ATR + expansão", "signal": "NEUTRA", "reason": "Volatilidade ainda não expandiu."})
+
+        if body_ratio >= 0.55 and close_location >= 0.72:
+            call += 1
+            indicators.append({"name": "Candle de expansão", "signal": "CALL", "reason": "Fechamento forte na parte superior do candle."})
+        elif body_ratio >= 0.55 and close_location <= 0.28:
+            put += 1
+            indicators.append({"name": "Candle de expansão", "signal": "PUT", "reason": "Fechamento forte na parte inferior do candle."})
+        else:
+            indicators.append({"name": "Candle de expansão", "signal": "NEUTRA", "reason": "Candle ainda sem força direcional."})
+
+        if adx >= 20 and di_diff > 3 and current["close"] > current["open"]:
+            call += 1
+            indicators.append({"name": "ADX + DI", "signal": "CALL", "reason": "Força direcional confirma o rompimento."})
+        elif adx >= 20 and di_diff < -3 and current["close"] < current["open"]:
+            put += 1
+            indicators.append({"name": "ADX + DI", "signal": "PUT", "reason": "Força direcional confirma o rompimento."})
+        else:
+            indicators.append({"name": "ADX + DI", "signal": "NEUTRA", "reason": "Força direcional sem confirmação do rompimento."})
+
+        direction = "CALL" if call >= 3 and call > put else "PUT" if put >= 3 and put > call else "NEUTRA"
+        return result(direction, call, put, 4, indicators, "Rompimento confirmado por nível, expansão e força do candle.", 3)
+
+    if strategy == "momentum":
+        call = 0
+        put = 0
+        indicators = []
+
+        if e9 > e21:
+            call += 1
+            indicators.append({"name": "EMA9/EMA21", "signal": "CALL", "reason": "Momentum estrutural comprador."})
+        elif e9 < e21:
+            put += 1
+            indicators.append({"name": "EMA9/EMA21", "signal": "PUT", "reason": "Momentum estrutural vendedor."})
+        else:
+            indicators.append({"name": "EMA9/EMA21", "signal": "NEUTRA", "reason": "Médias curtas sem direção."})
+
+        if hist > 0 and hist >= prev_hist:
+            call += 1
+            indicators.append({"name": "MACD + aceleração", "signal": "CALL", "reason": "Histograma positivo e acelerando."})
+        elif hist < 0 and hist <= prev_hist:
+            put += 1
+            indicators.append({"name": "MACD + aceleração", "signal": "PUT", "reason": "Histograma negativo e acelerando."})
+        else:
+            indicators.append({"name": "MACD + aceleração", "signal": "NEUTRA", "reason": "MACD sem aceleração clara."})
+
+        if adx >= 19 and di_diff > 3:
+            call += 1
+            indicators.append({"name": "ADX + DI", "signal": "CALL", "reason": "Força direcional compradora."})
+        elif adx >= 19 and di_diff < -3:
+            put += 1
+            indicators.append({"name": "ADX + DI", "signal": "PUT", "reason": "Força direcional vendedora."})
+        else:
+            indicators.append({"name": "ADX + DI", "signal": "NEUTRA", "reason": "Força insuficiente."})
+
+        if 53 <= rsi <= 70:
+            call += 1
+            indicators.append({"name": "RSI de impulso", "signal": "CALL", "reason": "RSI em faixa compatível com impulso comprador."})
+        elif 30 <= rsi <= 47:
+            put += 1
+            indicators.append({"name": "RSI de impulso", "signal": "PUT", "reason": "RSI em faixa compatível com impulso vendedor."})
+        else:
+            indicators.append({"name": "RSI de impulso", "signal": "NEUTRA", "reason": "RSI fora da faixa de impulso."})
+
+        direction = "CALL" if call >= 3 and call > put else "PUT" if put >= 3 and put > call else "NEUTRA"
+        return result(direction, call, put, 4, indicators, "Momentum confirmado por médias, MACD, força e RSI.", 3)
+
+    raise HTTPException(status_code=400, detail="Estratégia não suportada.")
+
+
+def _vision_trigger_fast(
+    rows: list[dict[str, float]],
+    direction: str,
+    expiry_minutes: int,
+) -> dict[str, Any]:
+    if direction not in {"CALL", "PUT"}:
+        return {"ready": False, "status": "ANALISANDO INDICADORES", "secondsRemaining": 0}
+
+    current = rows[-1]
+    previous = rows[-2]
+    size = 60 if expiry_minutes <= 1 else 60
     start_ts = float(current.get("datetime") or 0)
     elapsed = max(0.0, time.time() - start_ts) if start_ts else 0.0
     remaining = max(0.0, size - elapsed)
 
-    if elapsed < min(5.0, size * 0.08):
+    body = abs(current["close"] - current["open"])
+    rng = max(current["high"] - current["low"], 1e-12)
+    body_ratio = body / rng
+    close_location = (current["close"] - current["low"]) / rng
+
+    if elapsed > 50:
         return {
             "ready": False,
-            "confidence": 0.0,
-            "status": "AGUARDANDO ABERTURA DO GATILHO",
+            "status": "AGUARDANDO PRÓXIMO CANDLE",
             "secondsRemaining": int(round(remaining)),
             "elapsedSeconds": int(round(elapsed)),
             "candleCloseAt": int(round(start_ts + size)) if start_ts else 0,
         }
-
-    # Não entra quando o candle já está excessivamente avançado.
-    max_elapsed = max(35.0, size * 0.72)
-    if elapsed > max_elapsed:
-        return {
-            "ready": False,
-            "confidence": 0.0,
-            "status": "PRÓXIMO CANDLE",
-            "secondsRemaining": int(round(remaining)),
-            "elapsedSeconds": int(round(elapsed)),
-            "candleCloseAt": int(round(start_ts + size)) if start_ts else 0,
-        }
-
-    cm = _candle_metrics(current)
-    prev_cm = _candle_metrics(prev)
 
     if direction == "CALL":
-        conditions = [
-            current["close"] > current["open"],
-            current["close"] >= prev["close"],
-            current["close"] >= prev2["close"],
-            cm["close_location"] >= 0.58,
-            cm["body_ratio"] >= 0.25,
-            prev_cm["close_location"] >= 0.45,
-        ]
+        ready = (
+            current["close"] > current["open"]
+            and current["close"] >= previous["close"]
+            and body_ratio >= 0.30
+            and close_location >= 0.55
+        )
     else:
-        conditions = [
-            current["close"] < current["open"],
-            current["close"] <= prev["close"],
-            current["close"] <= prev2["close"],
-            cm["close_location"] <= 0.42,
-            cm["body_ratio"] >= 0.25,
-            prev_cm["close_location"] <= 0.55,
-        ]
-
-    hits = sum(1 for x in conditions if x)
-    trigger_confidence = 50.0 + (hits / len(conditions)) * 50.0
+        ready = (
+            current["close"] < current["open"]
+            and current["close"] <= previous["close"]
+            and body_ratio >= 0.30
+            and close_location <= 0.45
+        )
 
     return {
-        "ready": hits >= 5,
-        "confidence": round(trigger_confidence, 1),
-        "status": "ENTRADA CONFIRMADA" if hits >= 5 else "AGUARDANDO CONFIRMAÇÃO",
+        "ready": ready,
+        "status": "ENTRADA CONFIRMADA" if ready else "AGUARDANDO CONFIRMAÇÃO",
         "secondsRemaining": int(round(remaining)),
         "elapsedSeconds": int(round(elapsed)),
         "candleCloseAt": int(round(start_ts + size)) if start_ts else 0,
-        "hits": hits,
-        "conditions": len(conditions),
     }
 
 
@@ -1562,7 +1804,6 @@ async def _analyze_vision(
         "signalConfirmed": final_ready,
         "source": "IQ Option + interpretação de indicadores MTF + gatilho atual",
     }
-
 
 
 async def _analyze(
