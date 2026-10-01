@@ -702,8 +702,11 @@ def _iq_mtf_score(
     expiry_minutes: int = 5,
 ) -> tuple[str, float, list[str], dict[str, Any]]:
     """
-    Contexto define o regime; setup define a oportunidade; gatilho define o
-    momento da entrada. O gatilho não precisa repetir todos os indicadores do setup.
+    Separa três conceitos:
+    1) direção técnica (CALL/PUT);
+    2) proximidade de cumprir os critérios da configuração;
+    3) confirmação do timing de entrada.
+    Assim, "AGUARDAR" não mascara uma direção existente.
     """
     strategy = setup["strategy"]
     s = setup["direction"]
@@ -711,111 +714,123 @@ def _iq_mtf_score(
     t = trigger["direction"]
     option_type = str(option_type or "binary").lower()
     expiry_minutes = int(expiry_minutes or 5)
-    score = float(setup["confidence"])
+    base_conf = float(setup.get("confidence", 0) or 0)
+    min_conf = float(setup.get("minConfidence", 67) or 67)
+    required_groups = max(1, int(setup.get("requiredGroups", 1) or 1))
+    active_groups = max(0, int(setup.get("activeGroups", 0) or 0))
+    score = base_conf
     notes: list[str] = []
 
+    # O tipo de opção/horizonte ajusta a exigência, mas não cria uma estratégia nova.
     if option_type == "blitz":
-        score += 4 if t == s else -4
-        notes.append("Blitz: prioridade para confirmação do gatilho em tempo real.")
-        min_signal_score = 75
+        if t == s:
+            score += 4
+            notes.append("Blitz: confirmação do gatilho em tempo real acompanha a direção.")
+        elif t in {"CALL", "PUT"}:
+            score -= 4
+            notes.append("Blitz: o gatilho atual diverge da direção.")
+        min_signal_score = 75.0
     elif option_type == "digital":
         if expiry_minutes >= 5 and c == s:
             score += 2
             notes.append("Digital: contexto maior confirma a direção para o vencimento.")
-        notes.append("Digital: strike/preço de exercício não disponível na API comunitária; sinal é direcional.")
-        min_signal_score = 70
+        notes.append("Digital: o strike não é recebido pela API comunitária; a leitura permanece direcional.")
+        min_signal_score = 70.0
     else:
         if expiry_minutes <= 1 and t == s:
             score += 2
+            notes.append("Binária: gatilho alinhado favorece o vencimento curto.")
         elif expiry_minutes >= 15 and c == s:
             score += 2
-        min_signal_score = 67
+            notes.append("Binária: contexto maior confirma o horizonte de 15 minutos.")
+        min_signal_score = 67.0
 
-    if s not in {"CALL", "PUT"} or float(setup.get("confidence", 0)) < 60:
-        return "AGUARDAR", max(0.0, score - 5), ["O setup ainda não apresenta direção técnica suficiente."], {
+    if s not in {"CALL", "PUT"}:
+        return "AGUARDAR", 0.0, ["A estratégia selecionada ainda não definiu uma direção."], {
             "ready": False,
-            "status": "SEM DIREÇÃO",
-            "instruction": "A leitura ainda está dividida; aguarde uma direção mais clara.",
+            "status": "BUSCANDO DIREÇÃO",
+            "state": "BUSCANDO DIREÇÃO",
+            "instruction": "Buscando uma direção técnica clara.",
             "secondsRemaining": 0,
             "elapsedSeconds": 0,
             "candleCloseAt": 0,
+            "proximity": 0.0,
         }
 
-    # Contexto é filtro de regime; não precisa ficar 100% idêntico ao setup para
-    # permitir a direção, mas uma divergência forte reduz o score.
-    if c == s and context.get("signalEligible", context["confidence"] >= 64):
-        score += 11
-        notes.append(f"Contexto {c} confirma o setup.")
-    elif c == s:
-        score += 6
-        notes.append(f"Contexto acompanha {s}, mas ainda não é uma confirmação máxima.")
-    elif c in {"CALL", "PUT"} and c != s:
-        score -= 16 if context["confidence"] >= 72 else 9
-        notes.append("Contexto maior está contra o setup.")
+    # Proximidade = o quanto a configuração está perto de cumprir os próprios
+    # critérios, mais alinhamento de contexto e gatilho. Não é probabilidade de vitória.
+    confidence_progress = min(1.0, max(0.0, score / max(min_conf, min_signal_score, 1.0)))
+    group_progress = min(1.0, active_groups / required_groups)
+    if c == s:
+        context_progress = 1.0
+    elif c == "NEUTRA":
+        context_progress = 0.55
     else:
-        score -= 2
-        notes.append("Contexto maior está neutro.")
-
-    # O gatilho é confirmação de timing, não um novo voto de tendência.
+        context_progress = 0.08 if float(context.get("confidence", 0)) >= 80 else 0.28
     if t == s:
-        score += 7
-        notes.append(f"Gatilho acompanha {s}.")
-    elif t in {"CALL", "PUT"} and t != s:
-        score -= 10
-        notes.append("Gatilho atual está contra o setup.")
+        trigger_progress = 1.0
+    elif t == "NEUTRA":
+        trigger_progress = 0.48
     else:
-        notes.append("Gatilho ainda está em transição.")
+        trigger_progress = 0.08
 
-    if strategy == "reversao":
-        eligible = (
-            s in {"CALL", "PUT"}
-            and score >= min_signal_score
-            and not (c in {"CALL", "PUT"} and c != s and context["confidence"] >= 80)
-        )
+    proximity = round(
+        min(99.0, 100.0 * (
+            0.48 * confidence_progress
+            + 0.22 * group_progress
+            + 0.16 * context_progress
+            + 0.14 * trigger_progress
+        )),
+        1,
+    )
+
+    # Mantemos a exigência da própria estratégia e acrescentamos o filtro MTF.
+    strategy_ready = bool(setup.get("signalEligible"))
+    context_conflict = (
+        c in {"CALL", "PUT"}
+        and c != s
+        and float(context.get("confidence", 0)) >= (80 if strategy == "reversao" else 82)
+    )
+    option_ready = score >= min_signal_score
+    eligible = strategy_ready and option_ready and not context_conflict
+
+    if context_conflict:
+        notes.append("Contexto maior está fortemente contra a direção selecionada.")
+    elif c == s:
+        notes.append(f"Contexto {c} confirma o setup.")
     else:
-        eligible = (
-            s in {"CALL", "PUT"}
-            and score >= 67
-            and not (c in {"CALL", "PUT"} and c != s and context["confidence"] >= 82)
-        )
+        notes.append("Contexto maior ainda não confirma totalmente o setup.")
+
+    if t == s:
+        notes.append(f"Gatilho acompanha {s}.")
+    elif t in {"CALL", "PUT"}:
+        notes.append("Gatilho atual ainda diverge do setup.")
+    else:
+        notes.append("Gatilho está em transição.")
 
     trigger_state = _trigger_state(trigger_rows or [], trigger_tf, s) if eligible else {
         "ready": False,
-        "status": "SEM SETUP",
-        "instruction": "Aguarde o setup atingir os critérios mínimos da estratégia.",
+        "status": "SINAL PRÓXIMO" if proximity >= 72 else "ANALISANDO MERCADO",
+        "state": "SINAL PRÓXIMO" if proximity >= 72 else "ANALISANDO MERCADO",
+        "instruction": (
+            f"Direção {s} detectada. Aumentando a proximidade até cumprir os critérios da estratégia e do gatilho."
+            if proximity >= 72
+            else f"Direção {s} detectada. Ainda faltam critérios para uma entrada confirmada."
+        ),
         "secondsRemaining": 0,
         "elapsedSeconds": 0,
+        "candleCloseAt": 0,
+        "proximity": proximity,
     }
 
-    # Não devolvemos AGUARDAR como sinal principal quando existe uma direção
-    # técnica suficientemente estruturada. A indicação de timing fica separada.
-    return (s if eligible else "AGUARDAR"), round(max(0.0, min(99.0, score)), 1), notes, trigger_state
+    if trigger_state.get("ready"):
+        trigger_state["proximity"] = 100.0
+        trigger_state["state"] = "ENTRADA CONFIRMADA"
+        trigger_state["status"] = "ENTRADA CONFIRMADA"
 
-
-def _wilson_lower_bound(wins: int, total: int, z: float = 1.96) -> float:
-    if total <= 0:
-        return 0.0
-    p = wins / total
-    denom = 1 + z * z / total
-    centre = p + z * z / (2 * total)
-    margin = z * ((p * (1 - p) + z * z / (4 * total)) / total) ** 0.5
-    return max(0.0, (centre - margin) / denom) * 100
-
-
-def _rows_closed_at(
-    rows: list[dict[str, float]],
-    close_time: float,
-    candle_size: int,
-) -> tuple[list[dict[str, float]], int]:
-    eligible = [
-        i for i, row in enumerate(rows)
-        if float(row.get("datetime") or 0) + candle_size <= close_time + 1
-    ]
-    if not eligible:
-        return [], -1
-    idx = eligible[-1]
-    return rows[: idx + 1], idx
-
+    analysis_signal = s if s in {"CALL", "PUT"} else "AGUARDAR"
+    final_score = round(max(0.0, min(99.0, score)), 1)
+    return analysis_signal, final_score, notes, trigger_state
 
 def _historical_strategy_result(
     context_rows: list[dict[str, float]],
@@ -1073,7 +1088,7 @@ async def _analyze(
             context, setup, trigger, trigger_rows, trigger_tf, option_type, expiry_minutes
         )
         candidates.append((
-            score if signal != "AGUARDAR" else 0.0,
+            float(trigger_state.get("proximity", 0.0)),
             setup,
             signal,
             notes,
@@ -1083,10 +1098,16 @@ async def _analyze(
     if strategy == "automatica":
         valid = [x for x in candidates if x[2] in {"CALL", "PUT"}]
         if valid:
-            valid.sort(key=lambda x: (x[0], x[4].get("ready", False)), reverse=True)
+            valid.sort(key=lambda x: (x[0], x[4].get("ready", False), x[1].get("confidence", 0)), reverse=True)
             selected = valid[0][1]
         else:
-            selected = max(setup_strategies, key=lambda x: x["confidence"])
+            selected = max(
+                setup_strategies,
+                key=lambda x: (
+                    float(x.get("confidence", 0)) * 0.7
+                    + (float(x.get("activeGroups", 0)) / max(float(x.get("requiredGroups", 1)), 1)) * 30
+                ),
+            )
     else:
         selected = next(
             (x for x in setup_strategies if x["strategy"] == strategy),
@@ -1253,6 +1274,9 @@ async def _analyze(
         "strategy": selected["strategy"],
         "strategyLabel": selected["strategyLabel"],
         "strategies": setup_strategies,
+        "analysisState": trigger_state.get("state") or trigger_state.get("status") or "ANALISANDO MERCADO",
+        "proximity": round(float(trigger_state.get("proximity", 0) or 0), 1),
+        "signalConfirmed": bool(trigger_state.get("ready")),
         "entry": {
             **trigger_state,
             "direction": signal,
