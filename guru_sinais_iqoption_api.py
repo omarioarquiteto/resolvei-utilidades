@@ -1480,6 +1480,7 @@ def _vision_fast_strategy(
 def _vision_trigger_fast(
     rows: list[dict[str, float]],
     direction: str,
+    timeframe: str,
 ) -> dict[str, Any]:
     if direction not in {"CALL", "PUT"} or len(rows) < 3:
         return {
@@ -1491,7 +1492,7 @@ def _vision_trigger_fast(
 
     current = rows[-1]
     previous = rows[-2]
-    size = INTERVALS.get("1m", 60)
+    size = INTERVALS.get(timeframe, 60)
     start_ts = float(current.get("datetime") or 0)
     elapsed = max(0.0, time.time() - start_ts) if start_ts else 0.0
     remaining = max(0.0, size - elapsed)
@@ -1581,6 +1582,7 @@ async def _analyze_vision(
     trigger = _vision_trigger_fast(
         trigger_rows,
         direction,
+        timeframe,
     )
 
     final_ready = bool(direction in {"CALL", "PUT"} and trigger["ready"])
