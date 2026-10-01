@@ -68,35 +68,58 @@
 
   function shell(assets){
     const hasAssets=(assets?.normal?.length||0)+(assets?.otc?.length||0)>0;
-    return `<div class="guru-simple guru-ux">
-      <section class="guru-hero">
-        <div><span class="eyebrow">IQ OPTION · ESTUDO TÉCNICO</span><h1>🧙‍♂️ VISÃO OPÇÕES</h1><p>Configure a operação uma única vez. O Guru separa vela, expiração e tipo de opção.</p></div>
-        <div class="guru-live-chip"><span></span> ${hasAssets?"CONECTADO":"SEM ATIVOS"}</div>
-      </section>
+    const opts=assetOptions(assets);
+    return `
+      <div class="guru-simple guru-ux">
+        <section class="guru-hero">
+          <div>
+            <span class="eyebrow">IQ OPTION · OPÇÕES BINÁRIAS</span>
+            <h1>🔭 VISÃO OPÇÕES</h1>
+            <p>Motor técnico dedicado à leitura de mercado por indicadores.</p>
+          </div>
+          <div class="guru-live-chip"><span></span>${hasAssets?"CONECTADO":"SEM ATIVOS"}</div>
+        </section>
 
-      <section class="guru-config-card card">
-        <div class="guru-config-row">
-          <div class="guru-field guru-field-main"><label for="guruIqPair">PAR</label><select id="guruIqPair">${assetOptions(assets)}</select></div>
-          <div class="guru-field guru-field-main"><label for="guruIqOptionType">OPÇÃO</label><select id="guruIqOptionType">${optionTypes.map(([v,t])=>`<option value="${v}">${t}</option>`).join("")}</select></div>
-          <div class="guru-field"><label for="guruIqCandlePeriod">VELA</label><select id="guruIqCandlePeriod">${candlePeriods.map(([v,t])=>`<option value="${v}">${t}</option>`).join("")}</select></div>
-          <div class="guru-field"><label for="guruIqExpiry">EXPIRAÇÃO</label><select id="guruIqExpiry"></select></div>
-          <div class="guru-field guru-field-strategy"><label for="guruIqStrategy">ESTRATÉGIA</label><select id="guruIqStrategy">${strategies.map(([v,t])=>`<option value="${v}">${t}</option>`).join("")}</select></div>
-          <button class="guru-analyze-btn" id="guruIqAnalyzeBtn" ${hasAssets?"":"disabled"}>ANALISAR</button>
-        </div>
-        <div class="guru-config-bottom">
-          <div id="guruIqOptionHint" class="guru-option-hint"></div>
-          <label class="guru-ai-toggle compact"><input type="checkbox" id="guruIqAnalyzeWithAI"><span>Validar com I.A.</span><small>Depois do sinal · não bloqueia</small></label>
-          <div class="guru-config-actions"><button class="btn ghost small" id="iqRefreshAssets">↻ Atualizar</button><button class="btn ghost small" id="iqLogout">Sair</button></div>
-        </div>
-        <div id="guruIqMessage" class="notice guru-inline-message" hidden></div>
-      </section>
+        <section class="guru-config-card card">
+          <div class="guru-config-row">
+            <div class="guru-field guru-field-main">
+              <label for="guruIqPair">PAR</label>
+              <select id="guruIqPair">${opts}</select>
+            </div>
+            <div class="guru-field">
+              <label for="guruIqExpiry">EXPIRAÇÃO</label>
+              <select id="guruIqExpiry">
+                <option value="1">1 minuto</option>
+                <option value="5">5 minutos</option>
+                <option value="15">15 minutos</option>
+              </select>
+            </div>
+            <div class="guru-field guru-field-strategy">
+              <label for="guruIqStrategy">ESTRATÉGIA</label>
+              <select id="guruIqStrategy">
+                ${strategies.map(([v,t])=>`<option value="${v}">${t}</option>`).join("")}
+              </select>
+            </div>
+            <button class="guru-analyze-btn" id="guruIqAnalyzeBtn" ${hasAssets?"":"disabled"}>🔍 ANALISAR MERCADO</button>
+          </div>
+          <div class="guru-config-bottom">
+            <div class="guru-option-hint">A Visão analisa continuamente o par selecionado e só interrompe quando encontra uma confirmação técnica de CALL ou PUT.</div>
+            <div class="guru-config-actions">
+              <button class="btn ghost small" id="iqRefreshAssets">↻ Atualizar</button>
+              <button class="btn ghost small" id="iqLogout">Sair</button>
+            </div>
+          </div>
+          <div id="guruIqMessage" class="notice guru-inline-message" hidden></div>
+        </section>
 
-      <section id="guruIqResult" class="guru-result-stage">
-        <div class="guru-empty card"><div class="guru-empty-icon">◈</div><strong>Pronto para analisar</strong><span>Selecione suas condições e clique em <b>Analisar</b>.</span></div>
-      </section>
-
-      <div class="guru-status-bar"><span>🟢 Sessão IQ Option</span><span>•</span><span>Estratégia isolada</span><span>•</span><span>Ferramenta de estudo</span></div>
-    </div>`;
+        <section id="guruIqResult" class="guru-result-stage">
+          <div class="guru-empty card">
+            <div class="guru-empty-icon">◈</div>
+            <strong>Pronto para analisar</strong>
+            <span>Selecione o par, a expiração e a estratégia.</span>
+          </div>
+        </section>
+      </div>`;
   }
 
   function syncOptionControls(){
