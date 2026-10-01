@@ -323,41 +323,59 @@ async def _mtf_for_symbol(
     fast_mode: bool = False,
 ) -> tuple[dict[str, list[dict[str, float]]], tuple[str, str, str], bool]:
     plan = _iq_mtf_plan(timeframe, expiry_minutes, option_type)
-    rows: dict[str, list[dict[str, float]]] = {}
+    context_tf, setup_tf, trigger_tf = plan
 
-    unique_tfs = list(dict.fromkeys(plan))
+    # A Visão usa uma única consulta na menor granularidade do plano.
+    # Os timeframes maiores são agregados localmente. Isso elimina a latência
+    # acumulada de três chamadas independentes à IQ Option.
+    base_tf = min(
+        (context_tf, setup_tf, trigger_tf),
+        key=guru_base.timeframe_minutes,
+    )
     safe_count = max(80, min(int(count or 1000), 1000))
-    results = await asyncio.gather(
-        *[
-            _candles(
-                client,
-                session_id,
-                symbol,
-                tf,
-                safe_count,
-                include_forming=(fast_mode and tf == plan[2]),
-                cache_ttl=2.0 if fast_mode else 8.0,
-                request_timeout=6.0 if fast_mode else REQUEST_TIMEOUT_SECONDS,
-            )
-            for tf in unique_tfs
-        ]
+    base_rows = await _candles(
+        client,
+        session_id,
+        symbol,
+        base_tf,
+        safe_count,
+        include_forming=fast_mode,
+        cache_ttl=2.5 if fast_mode else 8.0,
+        request_timeout=6.0 if fast_mode else REQUEST_TIMEOUT_SECONDS,
     )
 
-    for tf, data in zip(unique_tfs, results):
-        rows[tf] = data
+    rows: dict[str, list[dict[str, float]]] = {base_tf: base_rows}
 
-    context_tf, setup_tf, trigger_tf = plan
+    for tf in plan:
+        if tf in rows:
+            continue
+        aggregated = guru_base.resample_rows(
+            base_rows,
+            guru_base.timeframe_minutes(base_tf),
+            guru_base.timeframe_minutes(tf),
+        )
+        # Contexto e setup só usam candles fechados. O trigger pode usar o
+        # candle em formação, pois é ele que fornece o timing atual.
+        if tf != trigger_tf or not fast_mode:
+            aggregated = _closed_candle_rows(
+                aggregated,
+                INTERVALS.get(tf, guru_base.timeframe_minutes(tf) * 60),
+            )
+        rows[tf] = aggregated
+
+    # No modo normal preservamos o streaming usado pelo Guru original.
     live_trigger = None
     if not fast_mode:
         live_trigger = await _latest_realtime_candle(client, symbol, trigger_tf)
 
-    # O histórico é calculado somente com candles fechados. O candle em formação
-    # entra apenas no timeframe de gatilho, para que o sinal reflita o preço atual.
     live_used = bool(
         fast_mode
         and rows.get(trigger_tf)
-        and float(rows[trigger_tf][-1].get("datetime") or 0) + INTERVALS.get(trigger_tf, 60) > time.time() - 1
+        and float(rows[trigger_tf][-1].get("datetime") or 0)
+        + INTERVALS.get(trigger_tf, 60)
+        > time.time() - 1
     )
+
     if live_trigger:
         trigger_rows = rows.get(trigger_tf) or []
         last_ts = trigger_rows[-1]["datetime"] if trigger_rows else 0.0
@@ -432,6 +450,48 @@ def _iq_score_signal(items: list[tuple[str, float, str, str]]) -> tuple[float, f
     return buy, sell, min(99.0, confidence), active_groups
 
 
+def _select_auto_strategy(rows: list[dict[str, float]]) -> str:
+    """Seleciona uma única família pelo regime atual antes de calcular o pack completo."""
+    closes = [x["close"] for x in rows]
+    if len(closes) < 60:
+        return "tendencia"
+
+    e9 = guru_base.ema(closes, 9)[-1]
+    e21 = guru_base.ema(closes, 21)[-1]
+    e50 = guru_base.ema(closes, 50)[-1]
+    r = guru_base.rsi(closes)
+    adx, di_diff = guru_base._adx(rows)
+    atr = guru_base._atr_value(rows, 14)
+    cm = _candle_metrics(rows[-1])
+    prev_high20 = max(x["high"] for x in rows[-21:-1])
+    prev_low20 = min(x["low"] for x in rows[-21:-1])
+    close = closes[-1]
+
+    bull = e9 > e21 > e50
+    bear = e9 < e21 < e50
+    strong_trend = adx >= 24 and (di_diff >= 4 and bull or di_diff <= -4 and bear)
+
+    breakout_up = close > prev_high20 and cm["body_ratio"] >= 0.55 and cm["close_location"] >= 0.70
+    breakout_down = close < prev_low20 and cm["body_ratio"] >= 0.55 and cm["close_location"] <= 0.30
+    if adx >= 20 and (breakout_up or breakout_down):
+        return "rompimento"
+
+    if adx < 20 and ((r <= 30 and cm["close_location"] >= 0.55) or (r >= 70 and cm["close_location"] <= 0.45)):
+        return "reversao"
+
+    momentum_up = bull and di_diff >= 3 and e9 > e21 and close >= e9
+    momentum_down = bear and di_diff <= -3 and e9 < e21 and close <= e9
+    if strong_trend and (momentum_up or momentum_down):
+        return "momentum"
+
+    if strong_trend or bull or bear:
+        return "tendencia"
+
+    # Sem regime limpo, a reversão é mais coerente com lateralização do que
+    # perseguir um rompimento que ainda não existe.
+    return "reversao"
+
+    
 def _iq_strategy_pack(rows: list[dict[str, float]], strategy: str) -> dict[str, Any]:
     """
     Estratégias exclusivas do GURÚ IQ Option.
@@ -1153,8 +1213,16 @@ async def _analyze(
             detail="Não foram recebidos candles suficientes para a análise em múltiplos timeframes.",
         )
 
-    families = ("tendencia", "reversao", "rompimento", "momentum")
-    eval_strategies = families if strategy == "automatica" else (strategy,)
+    if strategy == "automatica" and fast_mode:
+        # A automática escolhe UMA família pela estrutura atual e calcula
+        # somente essa estratégia nos três papéis MTF.
+        auto_strategy = _select_auto_strategy(setup_rows)
+        eval_strategies = (auto_strategy,)
+    elif strategy == "automatica":
+        families = ("tendencia", "reversao", "rompimento", "momentum")
+        eval_strategies = families
+    else:
+        eval_strategies = (strategy,)
     # Na Visão Opções, contexto + setup são estrutura: eles só mudam quando
     # nasce um novo candle do timeframe de setup. Reutilizamos esse cálculo entre
     # os ciclos de monitoramento e deixamos o gatilho como a única parte dinâmica.
