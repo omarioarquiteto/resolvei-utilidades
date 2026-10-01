@@ -245,3 +245,17 @@
   .guru-monitor-live-meta{grid-template-columns:1fr 1fr}
   .guru-monitor-live-meta>div:last-child{grid-column:1/-1}
 }
+
+/* VISÃO OPÇÕES — novo núcleo de análise */
+.guru-indicator-list{display:grid;gap:8px;margin-top:10px}
+.guru-indicator-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 10px;align-items:center;padding:10px 12px;border:1px solid rgba(0,0,0,.08);border-radius:12px;background:rgba(255,255,255,.72)}
+.guru-indicator-row span{font-weight:700;font-size:.9rem}
+.guru-indicator-row strong{font-size:.75rem;letter-spacing:.06em}
+.guru-indicator-row strong.call{color:#14804a}
+.guru-indicator-row strong.put{color:#bd2f39}
+.guru-indicator-row strong.neutral{color:#737373}
+.guru-indicator-row small{grid-column:1/-1;color:#666;line-height:1.35}
+.guru-wait{background:linear-gradient(180deg,#f4f6f8,#e9edf0)!important;color:#555}
+@media (max-width:760px){
+  .guru-indicator-row{padding:9px 10px}
+}
