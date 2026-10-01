@@ -744,6 +744,7 @@ def _iq_mtf_score(
     trigger_tf: str = "1m",
     option_type: str = "binary",
     expiry_minutes: int = 5,
+    strict_confirmation: bool = False,
 ) -> tuple[str, float, list[str], dict[str, Any]]:
     """
     Contexto define o regime; setup define a oportunidade; gatilho define o
@@ -819,6 +820,17 @@ def _iq_mtf_score(
             and context["confidence"] >= (80 if strategy == "reversao" else 82)
         )
     )
+
+    if strict_confirmation:
+        strict_ok = (
+            directional
+            and c == s == t
+            and float(context.get("confidence", 0)) >= 64
+            and float(setup.get("confidence", 0)) >= min_confidence
+            and float(trigger.get("confidence", 0)) >= 64
+        )
+        if not strict_ok:
+            eligible = False
 
     if eligible:
         trigger_state = _trigger_state(trigger_rows or [], trigger_tf, s)
@@ -1186,7 +1198,8 @@ async def _analyze(
             x for x in trigger_strategies if x["strategy"] == setup["strategy"]
         )
         signal, score, notes, trigger_state = _iq_mtf_score(
-            context, setup, trigger, trigger_rows, trigger_tf, option_type, expiry_minutes
+            context, setup, trigger, trigger_rows, trigger_tf, option_type, expiry_minutes,
+            strict_confirmation=fast_mode,
         )
         candidates.append((
             score if signal != "AGUARDAR" else 0.0,
@@ -1219,7 +1232,8 @@ async def _analyze(
     )
 
     base_signal, base_score, notes, trigger_state = _iq_mtf_score(
-        context, selected, trigger, trigger_rows, trigger_tf, option_type, expiry_minutes
+        context, selected, trigger, trigger_rows, trigger_tf, option_type, expiry_minutes,
+        strict_confirmation=fast_mode,
     )
 
     gemini = (
