@@ -323,10 +323,37 @@ async def _mtf_for_symbol(
     fast_mode: bool = False,
 ) -> tuple[dict[str, list[dict[str, float]]], tuple[str, str, str], bool]:
     plan = _iq_mtf_plan(timeframe, expiry_minutes, option_type)
+
+    # O Guru original mantém seu caminho anterior quando fast_mode=False.
+    if not fast_mode:
+        rows: dict[str, list[dict[str, float]]] = {}
+        unique_tfs = list(dict.fromkeys(plan))
+        safe_count = max(80, min(int(count or 1000), 1000))
+        results = await asyncio.gather(
+            *[_candles(client, session_id, symbol, tf, safe_count) for tf in unique_tfs]
+        )
+        for tf, data in zip(unique_tfs, results):
+            rows[tf] = data
+
+        context_tf, setup_tf, trigger_tf = plan
+        live_trigger = await _latest_realtime_candle(client, symbol, trigger_tf)
+
+        live_used = False
+        if live_trigger:
+            trigger_rows = rows.get(trigger_tf) or []
+            last_ts = trigger_rows[-1]["datetime"] if trigger_rows else 0.0
+            if trigger_rows and live_trigger["datetime"] == last_ts:
+                rows[trigger_tf] = trigger_rows[:-1] + [live_trigger]
+                live_used = True
+            elif live_trigger["datetime"] > last_ts:
+                rows[trigger_tf] = trigger_rows + [live_trigger]
+                live_used = True
+        return rows, plan, live_used
+
     context_tf, setup_tf, trigger_tf = plan
 
-    # A Visão usa uma única consulta na menor granularidade do plano.
-    # Os timeframes maiores são agregados localmente. Isso elimina a latência
+    # Visão Opções: uma única consulta na menor granularidade do plano.
+    # Os timeframes maiores são agregados localmente, eliminando a latência
     # acumulada de três chamadas independentes à IQ Option.
     base_tf = min(
         (context_tf, setup_tf, trigger_tf),
@@ -339,52 +366,36 @@ async def _mtf_for_symbol(
         symbol,
         base_tf,
         safe_count,
-        include_forming=fast_mode,
-        cache_ttl=2.5 if fast_mode else 8.0,
-        request_timeout=6.0 if fast_mode else REQUEST_TIMEOUT_SECONDS,
+        include_forming=True,
+        cache_ttl=2.5,
+        request_timeout=6.0,
     )
 
     rows: dict[str, list[dict[str, float]]] = {base_tf: base_rows}
+    base_size = guru_base.timeframe_minutes(base_tf)
+    base_is_forming = bool(
+        base_rows
+        and float(base_rows[-1].get("datetime") or 0) + base_size * 60 > time.time() - 1
+    )
 
     for tf in plan:
         if tf in rows:
             continue
+
         aggregated = guru_base.resample_rows(
             base_rows,
-            guru_base.timeframe_minutes(base_tf),
+            base_size,
             guru_base.timeframe_minutes(tf),
         )
-        # Contexto e setup só usam candles fechados. O trigger pode usar o
-        # candle em formação, pois é ele que fornece o timing atual.
-        if tf != trigger_tf or not fast_mode:
-            aggregated = _closed_candle_rows(
-                aggregated,
-                INTERVALS.get(tf, guru_base.timeframe_minutes(tf) * 60),
-            )
+
+        # O último agregado pode conter o candle-base em formação. Ele não entra
+        # no contexto/setup; somente o timeframe de gatilho recebe preço atual.
+        if base_is_forming and aggregated:
+            aggregated = aggregated[:-1]
+
         rows[tf] = aggregated
 
-    # No modo normal preservamos o streaming usado pelo Guru original.
-    live_trigger = None
-    if not fast_mode:
-        live_trigger = await _latest_realtime_candle(client, symbol, trigger_tf)
-
-    live_used = bool(
-        fast_mode
-        and rows.get(trigger_tf)
-        and float(rows[trigger_tf][-1].get("datetime") or 0)
-        + INTERVALS.get(trigger_tf, 60)
-        > time.time() - 1
-    )
-
-    if live_trigger:
-        trigger_rows = rows.get(trigger_tf) or []
-        last_ts = trigger_rows[-1]["datetime"] if trigger_rows else 0.0
-        if trigger_rows and live_trigger["datetime"] == last_ts:
-            rows[trigger_tf] = trigger_rows[:-1] + [live_trigger]
-            live_used = True
-        elif live_trigger["datetime"] > last_ts:
-            rows[trigger_tf] = trigger_rows + [live_trigger]
-            live_used = True
+    live_used = bool(base_is_forming and rows.get(trigger_tf))
 
     return rows, plan, live_used
 
