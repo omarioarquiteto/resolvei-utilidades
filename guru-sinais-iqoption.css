@@ -23,3 +23,21 @@
 .guru-backtest-method{margin-top:8px;font-size:10px;opacity:.62;line-height:1.4}
 @media(max-width:900px){.guru-backtest-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media(max-width:520px){.guru-backtest-head{align-items:flex-start;flex-direction:column}.guru-backtest-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+.guru-monitor-card{margin:0 0 18px;padding:18px;border:2px solid var(--border,#e5e7eb);border-radius:16px;background:var(--surface-soft,#f8fafc)}
+.guru-monitor-head{display:flex;align-items:center;justify-content:space-between;gap:16px}
+.guru-monitor-head>div{display:flex;flex-direction:column;gap:5px}
+.guru-monitor-head strong{font-size:20px;letter-spacing:.02em}
+.guru-monitor-asset{margin-top:12px;font-size:13px;opacity:.8}
+.guru-monitor-steps{display:flex;gap:7px;flex-wrap:wrap;margin-top:15px}
+.guru-monitor-step{padding:7px 9px;border:1px solid var(--border,#e5e7eb);border-radius:999px;font-size:10px;font-weight:800;letter-spacing:.035em;opacity:.42;background:var(--surface,#fff)}
+.guru-monitor-step.done{opacity:.72}
+.guru-monitor-step.active{opacity:1;box-shadow:0 0 0 2px rgba(37,99,235,.10)}
+.guru-monitor-step b{margin-right:3px}
+.guru-monitor-detail{margin-top:14px;padding-top:12px;border-top:1px solid var(--border,#e5e7eb);font-size:13px;line-height:1.5}
+.guru-monitor-pulse{width:12px;height:12px;border-radius:50%;background:#f59e0b;box-shadow:0 0 0 0 rgba(245,158,11,.55);animation:guruMonitorPulse 1.6s infinite}
+.guru-monitoring-active{cursor:wait}
+@keyframes guruMonitorPulse{0%{box-shadow:0 0 0 0 rgba(245,158,11,.55)}70%{box-shadow:0 0 0 9px rgba(245,158,11,0)}100%{box-shadow:0 0 0 0 rgba(245,158,11,0)}}
+.guru-entry-box.ready{animation:guruEntryReady 1.2s ease-in-out infinite alternate}
+@keyframes guruEntryReady{from{transform:scale(1)}to{transform:scale(1.006)}}
+@media(max-width:720px){.guru-monitor-head{align-items:flex-start}.guru-monitor-head strong{font-size:17px}.guru-monitor-steps{gap:5px}.guru-monitor-step{font-size:9px}}
