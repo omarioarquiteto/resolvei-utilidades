@@ -533,6 +533,8 @@
         const controller=new AbortController();
         const timeoutId=setTimeout(()=>controller.abort(),7000);
 
+        let cycleFailed=false;
+        let cycleError="";
         try{
           const response=await iqFetch("/market-analysis",{
             method:"POST",
@@ -581,9 +583,27 @@
               ? "Direção técnica encontrada. Recalculando os indicadores e aguardando somente a confirmação do momento de entrada."
               : "Lendo novamente os indicadores atuais até surgir uma direção técnica suficientemente consistente."
           );
+}
+        catch(e){
+          cycleFailed=true;
+          cycleError=e?.message||"Falha temporária na leitura.";
+          monitorRequestStartedAt=0;
+          if(runId===monitorRunId){
+            updateMonitorView(
+              lastAnalysis||null,
+              "ANALISANDO INDICADORES",
+              "Leitura temporariamente indisponível. A Visão continuará tentando automaticamente."
+            );
+          }
         }finally{
           clearTimeout(timeoutId);
           monitorRequestStartedAt=0;
+        }
+
+        if(cycleFailed){
+          cycle++;
+          await sleep(2000);
+          continue;
         }
 
         cycle++;
