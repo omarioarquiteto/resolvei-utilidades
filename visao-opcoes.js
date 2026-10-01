@@ -231,7 +231,7 @@
     return data;
   }
 
-  function iqMount(){return document.getElementById("guruIqToolHost")||document.getElementById("app");}
+  function iqMount(){return document.getElementById("visaoOpcoesToolHost")||document.getElementById("app");}
 
   function renderLogin(message=""){
     const app=iqMount(); if(!app)return;
