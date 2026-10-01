@@ -599,9 +599,9 @@ function riskRender(){
       ? `Chance ${resolveiRiskState.session.chance} de ${plan.cfg.chances}. Entrada planejada: <strong>${riskMoney(currentRow.stake)}</strong>.`
       : `As ${plan.cfg.chances} chances desta seção foram perdidas. Capital restante: <strong>${riskMoney(resolveiRiskState.session.capital)}</strong>.`;
     sectionBox.innerHTML=`<div class="risk-live-box">
-      <div><span class="result-label">Capital-base</span><strong>${riskMoney(current.baseCapital)}</strong></div>
-      <div><span class="result-label">Capital atual</span><strong>${riskMoney(resolveiRiskState.session.capital)}</strong></div>
-      <div><span class="result-label">Próximo alvo</span><strong>${riskMoney(current.target)}</strong></div>
+      <div><span class="result-label">Capital-base da seção</span><strong>${riskMoney(current.baseCapital)}</strong></div>
+      <div><span class="result-label">Lucro alvo da seção</span><strong>+${riskMoney(current.growth)}</strong></div>
+      <div><span class="result-label">Exposição até aqui</span><strong>${riskPct(resolveiRiskState.session.baseCapital ? (resolveiRiskState.session.accumulatedLoss / resolveiRiskState.session.baseCapital * 100) : 0)}</strong></div>
       <div><span class="result-label">Situação</span><strong>${subtitle}</strong></div>
     </div>
     <details class="risk-section-plan">
