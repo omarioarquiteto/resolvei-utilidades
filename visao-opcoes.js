@@ -383,7 +383,7 @@
     controls.forEach(el=>{el.disabled=active;});
     if(btn){
       btn.disabled=active;
-      btn.textContent=active?"⏳ MONITORANDO MERCADO…":"🔍 ANALISAR NOVAMENTE";
+      btn.textContent=active?"⏳ ANALISANDO MERCADO…":"🔍 ANALISAR NOVAMENTE";
       btn.classList.toggle("guru-monitoring-active",active);
     }
   }
