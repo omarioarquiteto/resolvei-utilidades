@@ -22,5 +22,3 @@ git+https://github.com/victalejo/iqoptionapi.git@master#egg=iqoptionapi
 aiohttp>=3.9,<4
 websockets>=12,<16
 
-# Cliente comunitário Binomo (login, ativos e conexão de mercado)
-BinomoAPI==2.0.1
