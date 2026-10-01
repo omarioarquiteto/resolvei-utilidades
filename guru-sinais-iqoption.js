@@ -307,8 +307,78 @@
 
   let monitorRunId=0;
   let monitoring=false;
+  let monitorUiTimer=null;
+  let monitorRequestStartedAt=0;
+  let monitorNextPollAt=0;
+  let monitorLastUpdateAt=0;
+  let monitorClockOffsetMs=0;
+  let monitorCurrentAnalysis=null;
 
   const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+
+  function monitorClock(){
+    return Date.now()+monitorClockOffsetMs;
+  }
+
+  function clockLabel(tsMs){
+    if(!tsMs)return "—";
+    try{return new Date(tsMs).toLocaleTimeString("pt-BR",{hour12:false});}
+    catch(_){return "—";}
+  }
+
+  function startMonitorUiTicker(){
+    clearInterval(monitorUiTimer);
+    monitorUiTimer=setInterval(()=>{
+      if(!monitoring){
+        clearInterval(monitorUiTimer);
+        monitorUiTimer=null;
+        return;
+      }
+      const stageEl=document.getElementById("guruIqMonitorStage");
+      const reqEl=document.getElementById("guruIqMonitorRequest");
+      const elapsedEl=document.getElementById("guruIqMonitorElapsed");
+      const nextEl=document.getElementById("guruIqMonitorNext");
+      const lastEl=document.getElementById("guruIqMonitorLastUpdate");
+      const candleEl=document.getElementById("guruIqMonitorCandle");
+      if(!stageEl&&!reqEl&&!elapsedEl&&!nextEl&&!lastEl&&!candleEl)return;
+
+      const now=Date.now();
+      if(monitorRequestStartedAt){
+        const sec=(now-monitorRequestStartedAt)/1000;
+        if(stageEl)stageEl.textContent="RECALCULANDO AGORA";
+        if(reqEl)reqEl.textContent="Consultando a IQ Option, recalculando a estratégia e verificando o gatilho.";
+        if(elapsedEl)elapsedEl.textContent=sec.toFixed(1)+"s em processamento";
+        if(nextEl)nextEl.textContent="AGORA";
+      }else{
+        const nextSec=Math.max(0,(monitorNextPollAt-now)/1000);
+        const label=monitoringLabel(monitorCurrentAnalysis,0);
+        if(stageEl)stageEl.textContent=label==="SINAL PRÓXIMO"?"MONITORANDO CONFIRMAÇÃO":label;
+        if(reqEl)reqEl.textContent=label==="SINAL PRÓXIMO"
+          ?"O sinal está próximo; o motor continua conferindo o candle de gatilho até a confirmação."
+          :"Aguardando a próxima leitura automática do mercado.";
+        if(elapsedEl)elapsedEl.textContent="Leitura concluída";
+        if(nextEl)nextEl.textContent=nextSec<=0?"AGORA":nextSec.toFixed(1)+"s";
+      }
+
+      if(lastEl)lastEl.textContent=monitorLastUpdateAt?clockLabel(monitorLastUpdateAt):"aguardando";
+
+      const closeAt=Number(monitorCurrentAnalysis?.entry?.candleCloseAt||0)*1000;
+      if(candleEl&&closeAt>0){
+        const remaining=Math.max(0,(closeAt-monitorClock())/1000);
+        candleEl.textContent=remaining.toFixed(0)+"s";
+      }else if(candleEl){
+        candleEl.textContent="—";
+      }
+    },250);
+  }
+
+  function stopMonitorUiTicker(){
+    clearInterval(monitorUiTimer);
+    monitorUiTimer=null;
+    monitorRequestStartedAt=0;
+    monitorNextPollAt=0;
+    monitorCurrentAnalysis=null;
+  }
 
   function setMonitoringUI(active){
     const btn=document.getElementById("guruIqAnalyzeBtn");
@@ -345,7 +415,15 @@
           </div>
           <div class="guru-progress-track" aria-hidden="true"><span id="guruIqMonitorBar" style="width:${p}%"></span></div>
         </div>
-        <div class="guru-monitor-detail" id="guruIqMonitorDetail">${esc(detail)}</div>
+        <div class="guru-monitor-live-meta">
+          <div><span>ETAPA DO MOTOR</span><strong id="guruIqMonitorStage" aria-live="polite">PREPARANDO LEITURA</strong></div>
+          <div><span>ÚLTIMA LEITURA</span><strong id="guruIqMonitorLastUpdate">aguardando</strong></div>
+          <div><span>PRÓXIMA LEITURA</span><strong id="guruIqMonitorNext">AGORA</strong></div>
+          <div><span>PROCESSAMENTO</span><strong id="guruIqMonitorElapsed">iniciando</strong></div>
+          <div><span>CANDLE DO GATILHO</span><strong id="guruIqMonitorCandle">—</strong></div>
+          <div><span>STATUS</span><strong id="guruIqMonitorRequest" aria-live="polite">Consultando o motor técnico…</strong></div>
+        </div>
+        <div class="guru-monitor-detail" id="guruIqMonitorDetail" aria-live="polite">${esc(detail)}</div>
       </div>`;
   }
 
@@ -367,7 +445,10 @@
       return `Confirmação técnica encontrada para ${direction}. Encerrando o monitoramento e exibindo o sinal.`;
     }
     if(label==="ATENÇÃO"||label==="SINAL PRÓXIMO"){
-      return entry.instruction||"A configuração está avançando, aguardando a confirmação final do gatilho.";
+      const triggerTf=entry.triggerTimeframe||analysis?.analysisTimeframes?.trigger||"1m";
+      return entry.instruction
+        ? "Gatilho "+triggerTf+": "+entry.instruction
+        : "O motor está acompanhando o candle de gatilho e recalculando a confirmação em ciclos sucessivos.";
     }
     const direction=analysis?.signal==="CALL"||analysis?.signal==="PUT"
       ? analysis.signal
@@ -384,6 +465,8 @@
     const barEl=document.getElementById("guruIqMonitorBar");
     const detailEl=document.getElementById("guruIqMonitorDetail");
     const p=Math.max(0,Math.min(100,Number(analysis?.proximity||0)));
+    monitorCurrentAnalysis=analysis||null;
+    if(Number(analysis?.serverEpoch)) monitorClockOffsetMs=Number(analysis.serverEpoch)*1000-Date.now();
     if(labelEl) labelEl.textContent=label;
     if(percentEl) percentEl.textContent=`${p.toFixed(0)}%`;
     if(barEl) barEl.style.width=`${p}%`;
@@ -408,6 +491,7 @@
     let cycle=0;
     let lastAnalysis=null;
     result.innerHTML=monitorStatusHtml(symbol,null);
+    startMonitorUiTicker();
 
     try{
       while(monitoring&&runId===monitorRunId){
@@ -418,13 +502,19 @@
         }
 
         const useAI=analyzeWithAI && (!lastAnalysis || cycle%5===0);
+        monitorRequestStartedAt=Date.now();
+        monitorNextPollAt=0;
         const d=await jsonResponse(await iqFetch("/market-analysis",{
           method:"POST",
           body:JSON.stringify({symbol,timeframe,strategy,option_type:optionType,expiry_minutes:expiryMinutes,analyze_with_ai:useAI})
         }));
 
         if(runId!==monitorRunId)break;
+        monitorRequestStartedAt=0;
+        monitorLastUpdateAt=Date.now();
         lastAnalysis=d.analysis||{};
+        monitorCurrentAnalysis=lastAnalysis;
+        if(Number(lastAnalysis?.serverEpoch)) monitorClockOffsetMs=Number(lastAnalysis.serverEpoch)*1000-Date.now();
         const label=monitoringLabel(lastAnalysis,cycle);
         const detail=monitoringDetail(lastAnalysis,label,cycle);
         updateMonitorView(lastAnalysis,label,detail);
@@ -440,7 +530,8 @@
         }
 
         cycle++;
-        await sleep(4500);
+        monitorNextPollAt=Date.now()+2500;
+        await sleep(2500);
       }
     }catch(e){
       if(runId===monitorRunId){
@@ -452,6 +543,7 @@
       if(runId===monitorRunId&&monitoring===false){
         const b=document.getElementById("guruIqAnalyzeBtn");
         if(b)b.textContent="🔍 ANALISAR NOVAMENTE";
+        stopMonitorUiTicker();
       }
     }
   }
@@ -461,6 +553,7 @@ async function renderRoute(){
     if(!hash.includes("/ferramenta/"+TOOL_ID)){
       monitoring=false;
       monitorRunId++;
+      stopMonitorUiTicker();
       document.body.classList.remove("iq-tool-active");
       return;
     }
