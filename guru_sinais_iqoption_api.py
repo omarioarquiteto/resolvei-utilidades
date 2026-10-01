@@ -1670,14 +1670,6 @@ async def _analyze_vision(
         "indicatorSet": pack["indicatorSet"],
         "indicators": pack["values"],
         "indicatorReadings": pack["indicators"],
-        "backtest": {
-            "available": False,
-            "skipped": True,
-            "strategy": selected_strategy,
-            "testedSignals": 0,
-            "instrumentModel": "Não utilizado pela Visão Opções.",
-            "entryModel": "Indicadores atuais + confirmação do candle",
-        },
         "entry": {
             **trigger,
             "ready": final_ready,
