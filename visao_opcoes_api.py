@@ -541,7 +541,10 @@ async def _analyze(
         selected = strategy
 
     setup_pack = packs[selected]
-    context_packs = [_indicator_pack(rows, tf, selected) for rows in available_context]
+    context_packs = [
+        _indicator_pack(rows, tf, selected)
+        for tf, rows in zip(context_tfs, available_context)
+    ]
 
     direction = setup_pack["direction"]
     context_same = sum(
