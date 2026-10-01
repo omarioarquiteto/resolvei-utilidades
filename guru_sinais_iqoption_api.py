@@ -37,9 +37,9 @@ def _normalize_option_config(option_type: str, expiry_minutes: int) -> tuple[str
         raise HTTPException(status_code=400, detail=f"Expiração inválida para {OPTION_LABELS[option_type]}. Escolha: {allowed}.")
     return option_type, expiry
 
-def _iq_mtf_plan(candle_period: str, expiry_minutes: int) -> tuple[str, str, str]:
+def _iq_mtf_plan(candle_period: str, expiry_value: int, option_type: str) -> tuple[str, str, str]:
     context_tf, setup_tf, trigger_tf = guru_base._mtf_plan(candle_period)
-    expiry_seconds = int(expiry_minutes) * 60
+    expiry_seconds = int(expiry_value) if option_type == "blitz" else int(expiry_value) * 60
     if INTERVALS.get(trigger_tf, 60) > expiry_seconds:
         candidates = [tf for tf in ("1m", "5m", "15m") if INTERVALS[tf] <= expiry_seconds]
         if candidates:
@@ -289,8 +289,9 @@ async def _mtf_for_symbol(
     symbol: str,
     timeframe: str,
     expiry_minutes: int,
+    option_type: str,
 ) -> tuple[dict[str, list[dict[str, float]]], tuple[str, str, str], bool]:
-    plan = _iq_mtf_plan(timeframe, expiry_minutes)
+    plan = _iq_mtf_plan(timeframe, expiry_minutes, option_type)
     rows: dict[str, list[dict[str, float]]] = {}
 
     unique_tfs = list(dict.fromkeys(plan))
@@ -1032,7 +1033,7 @@ async def _analyze(
         raise HTTPException(status_code=400, detail="Informe um ativo.")
 
     mtf, plan, live_trigger_used = await _mtf_for_symbol(
-        client, session_id, symbol, timeframe, expiry_minutes
+        client, session_id, symbol, timeframe, expiry_minutes, option_type
     )
     context_tf, setup_tf, trigger_tf = plan
     setup_rows = mtf[setup_tf]
