@@ -38,7 +38,7 @@ BASE_DIR = Path(__file__).resolve().parent
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "").strip()
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-5.6-luna").strip() or "gpt-5.6-luna"
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.8-flash").strip() or "gemini-3.8-flash"
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite").strip() or "gemini-3.5-flash-lite"
 SERPAPI_KEY = os.getenv("SERPAPI_KEY", "").strip()
 FIREBASE_PROJECT_ID = os.getenv("FIREBASE_PROJECT_ID", "").strip()
 FIREBASE_CLIENT_EMAIL = os.getenv("FIREBASE_CLIENT_EMAIL", "").strip()
@@ -373,7 +373,7 @@ def _gemini_available_models(api_key: str, preferred: str = "") -> list[str]:
         methods=item.get("supportedGenerationMethods",[]) or []
         if name.startswith("models/"): name=name[7:]
         if name and "generateContent" in methods: available.append(name)
-    priority=[preferred.strip(),"gemini-3.8-flash","gemini-3.5-flash","gemini-3.1-flash-lite"]
+    priority=[preferred.strip(),"gemini-3.5-flash-lite","gemini-3.8-flash","gemini-3.5-flash","gemini-3.1-flash-lite"]
     return list(dict.fromkeys([x for x in priority+available if x and x in available]))
 
 def _gemini_generate(api_key: str, model: str, message: str) -> str:
