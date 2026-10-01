@@ -787,9 +787,32 @@ def _iq_mtf_score(
         "elapsedSeconds": 0,
     }
 
-    # Não devolvemos AGUARDAR como sinal principal quando existe uma direção
-    # técnica suficientemente estruturada. A indicação de timing fica separada.
-    return (s if eligible else "AGUARDAR"), round(max(0.0, min(99.0, score)), 1), notes, trigger_state
+    # A proximidade mede o quanto falta para a confirmação; não é probabilidade de vitória.
+    conf_target = max(min_confidence, min_signal_score, 1.0)
+    conf_progress = min(1.0, max(0.0, score / conf_target))
+    group_progress = min(1.0, active_groups / max(required_groups, 1))
+    context_progress = 1.0 if c == s else 0.55 if c == "NEUTRA" else 0.15
+    trigger_progress = 1.0 if t == s else 0.45 if t == "NEUTRA" else 0.10
+    proximity = round(min(99.0, 100.0 * (
+        0.48 * conf_progress + 0.22 * group_progress + 0.16 * context_progress + 0.14 * trigger_progress
+    )), 1)
+
+    if trigger_state.get("ready"):
+        proximity = 100.0
+        trigger_state["state"] = "ENTRADA CONFIRMADA"
+        trigger_state["status"] = "ENTRADA CONFIRMADA"
+    elif proximity >= 82:
+        trigger_state["state"] = "SINAL PRÓXIMO"
+        trigger_state["status"] = "SINAL PRÓXIMO"
+    elif proximity >= 65:
+        trigger_state["state"] = "ATENÇÃO"
+        trigger_state["status"] = "ATENÇÃO"
+    else:
+        trigger_state["state"] = "ANALISANDO MERCADO"
+        trigger_state["status"] = "ANALISANDO MERCADO"
+
+    trigger_state["proximity"] = proximity
+    return s, round(max(0.0, min(99.0, score)), 1), notes, trigger_state
 
 
 def _wilson_lower_bound(wins: int, total: int, z: float = 1.96) -> float:
@@ -1073,7 +1096,7 @@ async def _analyze(
             context, setup, trigger, trigger_rows, trigger_tf, option_type, expiry_minutes
         )
         candidates.append((
-            score if signal != "AGUARDAR" else 0.0,
+            float(trigger_state.get("proximity", 0.0)),
             setup,
             signal,
             notes,
@@ -1083,7 +1106,7 @@ async def _analyze(
     if strategy == "automatica":
         valid = [x for x in candidates if x[2] in {"CALL", "PUT"}]
         if valid:
-            valid.sort(key=lambda x: (x[0], x[4].get("ready", False)), reverse=True)
+            valid.sort(key=lambda x: (x[0], x[4].get("ready", False), x[1].get("confidence", 0)), reverse=True)
             selected = valid[0][1]
         else:
             selected = max(setup_strategies, key=lambda x: x["confidence"])
@@ -1282,6 +1305,9 @@ async def _analyze(
         },
         "gemini": gemini,
         "indicators": selected["values"],
+        "analysisState": trigger_state.get("state") or trigger_state.get("status") or "ANALISANDO MERCADO",
+        "proximity": round(float(trigger_state.get("proximity", 0.0) or 0.0), 1),
+        "signalConfirmed": bool(trigger_state.get("ready")),
         "source": "IQ Option + motor técnico MTF + tipo de opção + expiração + gatilho em tempo real",
     }
 
