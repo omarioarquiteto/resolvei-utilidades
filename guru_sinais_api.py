@@ -575,9 +575,24 @@ def _gemini_review(symbol: str, timeframe: str, selected_strategy: str, strategi
 
         return None, None, last_reason or "Gemini temporariamente indisponível."
 
-    result, status, reason = call_gemini(api_key, model)
-    if result:
-        return result
+    try:
+        from server import _gemini_available_models
+        available_models = _gemini_available_models(api_key, model)
+    except Exception:
+        available_models = [model]
+
+    if not available_models:
+        return {"available": False, "reason": "A chave Gemini não possui nenhum modelo com generateContent disponível.", "model": model}
+
+    result = None
+    status = None
+    reason = ""
+    for candidate in available_models[:8]:
+        result, status, reason = call_gemini(api_key, candidate)
+        if result:
+            return result
+        if status == 402:
+            break
 
     # Contingência opcional: uma segunda chave pode apontar para um projeto
     # Gemini independente, inclusive um projeto no nível gratuito.
