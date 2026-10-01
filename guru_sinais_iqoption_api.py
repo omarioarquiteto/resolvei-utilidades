@@ -217,6 +217,101 @@ async def _mtf_for_symbol(client: Any, session_id: str, symbol: str, timeframe: 
     return rows, plan
 
 
+
+def _iq_strategy_pack(rows: list[dict[str, float]], strategy: str) -> dict[str, Any]:
+    """Estratégias exclusivas do GURÚ IQ Option; famílias não são combinadas."""
+    closes = [x["close"] for x in rows]
+    e9, e21, e50 = [guru_base.ema(closes, p)[-1] for p in (9, 21, 50)]
+    r = guru_base.rsi(closes)
+    macd, macd_signal = guru_base.macd_values(closes)
+    hist = macd - macd_signal
+    prev_macd, prev_signal = guru_base.macd_values(closes[:-1]) if len(closes) >= 30 else (macd, macd_signal)
+    prev_hist = prev_macd - prev_signal
+    e9_prev = guru_base.ema(closes[:-1], 9)[-1] if len(closes) >= 3 else e9
+    roc = guru_base._roc(closes)
+    adx, di_diff = guru_base._adx(rows)
+    atr = guru_base._atr_value(rows, 14)
+    atr_prev = guru_base._atr_value(rows[:-10], 14) if len(rows) > 30 else atr
+    atr_pct = atr / closes[-1] * 100 if closes[-1] else 0.0
+    volume_avg = guru_base._last_sma([x.get("volume", 0.0) for x in rows], 20)
+    vr = rows[-1].get("volume", 0.0) / max(volume_avg, 1e-12)
+    candle = guru_base.candle_pattern(rows)
+    structure = "CALL" if closes[-1] > closes[-3] > closes[-6] else "PUT" if closes[-1] < closes[-3] < closes[-6] else "NEUTRA"
+    prev_high20 = max(x["high"] for x in rows[-21:-1])
+    prev_low20 = min(x["low"] for x in rows[-21:-1])
+    breakout_up = closes[-1] > prev_high20
+    breakout_down = closes[-1] < prev_low20
+    breakout_distance = (
+        "CALL" if breakout_up and atr > 0 and (closes[-1] - prev_high20) >= atr * 0.20
+        else "PUT" if breakout_down and atr > 0 and (prev_low20 - closes[-1]) >= atr * 0.20
+        else "NEUTRA"
+    )
+    bb_mid = guru_base._last_sma(closes, 20)
+    bb_sd = guru_base._std(closes, 20)
+    bb_width = (4 * bb_sd / closes[-1] * 100) if closes[-1] else 0.0
+    prev_closes = closes[:-10]
+    prev_sd = guru_base._std(prev_closes, 20)
+    bb_width_prev = (4 * prev_sd / closes[-11] * 100) if len(closes) > 40 and closes[-11] else bb_width
+    volume_dir = "CALL" if vr >= 1.20 and closes[-1] > closes[-2] else "PUT" if vr >= 1.20 and closes[-1] < closes[-2] else "NEUTRA"
+
+    if strategy in {"tendencia", "reversao"}:
+        result = guru_base._strategy_pack(rows, strategy)
+        result["strategyLabel"] = "Tendência" if strategy == "tendencia" else "Reversão"
+        return result
+
+    if strategy == "rompimento":
+        items = [
+            ("Rompimento Donchian",2.0,"CALL" if breakout_up else "PUT" if breakout_down else "NEUTRA"),
+            ("Distância do rompimento",1.5,breakout_distance),
+            ("Expansão ATR",1.1,"CALL" if atr>atr_prev and closes[-1]>closes[-2] else "PUT" if atr>atr_prev and closes[-1]<closes[-2] else "NEUTRA"),
+            ("Expansão Bollinger",0.9,"CALL" if bb_width>bb_width_prev and closes[-1]>bb_mid else "PUT" if bb_width>bb_width_prev and closes[-1]<bb_mid else "NEUTRA"),
+            ("ADX + DI",1.0,"CALL" if adx>=22 and di_diff>0 else "PUT" if adx>=22 and di_diff<0 else "NEUTRA"),
+            ("Volume no rompimento",1.2,volume_dir),
+            ("Candle de confirmação",1.0,"CALL" if candle in {"bullish","engolfo de alta"} and breakout_up else "PUT" if candle in {"bearish","engolfo de baixa"} and breakout_down else "NEUTRA"),
+            ("Estrutura pós-rompimento",0.8,"CALL" if closes[-1]>closes[-2]>closes[-3] and breakout_up else "PUT" if closes[-1]<closes[-2]<closes[-3] and breakout_down else "NEUTRA"),
+            ("EMA como filtro",0.7,"CALL" if e9>e21>e50 else "PUT" if e9<e21<e50 else "NEUTRA")
+        ]
+        min_confidence = 78.0
+        label = "Rompimento"
+        extra = {"BreakoutUp": breakout_up, "BreakoutDown": breakout_down, "BreakoutDistance": breakout_distance}
+    elif strategy == "momentum":
+        items = [
+            ("MACD histograma",1.4,"CALL" if hist>0 else "PUT" if hist<0 else "NEUTRA"),
+            ("Aceleração MACD",1.1,"CALL" if hist>prev_hist and hist>0 else "PUT" if hist<prev_hist and hist<0 else "NEUTRA"),
+            ("ROC",1.2,"CALL" if roc>.04 else "PUT" if roc<-.04 else "NEUTRA"),
+            ("Inclinação EMA 9",1.0,"CALL" if e9>e9_prev else "PUT" if e9<e9_prev else "NEUTRA"),
+            ("Alinhamento EMA",0.9,"CALL" if e9>e21>e50 else "PUT" if e9<e21<e50 else "NEUTRA"),
+            ("ADX + DI",1.0,"CALL" if adx>=20 and di_diff>0 else "PUT" if adx>=20 and di_diff<0 else "NEUTRA"),
+            ("RSI momentum",0.9,"CALL" if 55<=r<=72 else "PUT" if 28<=r<=45 else "NEUTRA"),
+            ("Estrutura de preço",1.0,structure),
+            ("Volume",0.8,volume_dir),
+            ("Candle continuação",0.7,"CALL" if candle in {"bullish","engolfo de alta"} and structure=="CALL" else "PUT" if candle in {"bearish","engolfo de baixa"} and structure=="PUT" else "NEUTRA")
+        ]
+        min_confidence = 76.0
+        label = "Momentum"
+        extra = {}
+    else:
+        raise HTTPException(status_code=400, detail="Estratégia não suportada.")
+
+    buy, sell, confidence = guru_base._score_signal(items)
+    direction = "CALL" if buy > sell else "PUT" if sell > buy else "NEUTRA"
+    eligible = direction in {"CALL","PUT"} and confidence >= min_confidence
+    values = {
+        "EMA9": e9, "EMA21": e21, "EMA50": e50, "RSI": r,
+        "MACD": macd, "MACDSignal": macd_signal, "MACDHistogram": hist,
+        "ATRpct": atr_pct, "ADX": adx, "DIplusMinus": di_diff, "ROC": roc,
+        "VolumeRatio": vr, "Candle": candle, "PriceStructure": structure
+    }
+    values.update(extra)
+    return {
+        "strategy": strategy, "strategyLabel": label,
+        "buy": round(buy,2), "sell": round(sell,2), "confidence": round(confidence,1),
+        "direction": direction if eligible else "NEUTRA",
+        "signalEligible": eligible, "minConfidence": min_confidence,
+        "indicators": [{"name":n,"weight":w,"signal":d} for n,w,d in items],
+        "values": values,
+    }
+
 async def _analyze(
     client: Any,
     session_id: str,
@@ -245,13 +340,13 @@ async def _analyze(
 
     families = ("tendencia", "reversao", "rompimento", "momentum")
     context_strategies = [
-        guru_base._strategy_pack(mtf[context_tf], strategy_name) for strategy_name in families
+        _iq_strategy_pack(mtf[context_tf], strategy_name) for strategy_name in families
     ]
     setup_strategies = [
-        guru_base._strategy_pack(setup_rows, strategy_name) for strategy_name in families
+        _iq_strategy_pack(setup_rows, strategy_name) for strategy_name in families
     ]
     trigger_strategies = [
-        guru_base._strategy_pack(mtf[trigger_tf], strategy_name) for strategy_name in families
+        _iq_strategy_pack(mtf[trigger_tf], strategy_name) for strategy_name in families
     ]
 
     if strategy == "automatica":
@@ -290,7 +385,7 @@ async def _analyze(
             symbol,
             f"{context_tf} → {setup_tf} → {trigger_tf}",
             selected["strategy"],
-            setup_strategies,
+            [selected],
             setup_rows[-1]["close"],
             setup_rows,
             authorization,
