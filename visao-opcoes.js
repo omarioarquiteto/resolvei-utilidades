@@ -314,6 +314,7 @@
   let monitorLastUpdateAt=0;
   let monitorClockOffsetMs=0;
   let monitorCurrentAnalysis=null;
+  const ANALYSIS_LIMIT_MS=60000;
 
   const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 
@@ -514,6 +515,7 @@
     if(!symbol||!timeframe||monitoring)return;
 
     const runId=++monitorRunId;
+    const deadlineAt=Date.now()+ANALYSIS_LIMIT_MS;
     monitoring=true;
     setMonitoringUI(true);
     if(msg){msg.hidden=true;msg.textContent="";}
@@ -529,6 +531,19 @@
 
     try{
       while(monitoring&&runId===monitorRunId){
+        const remainingMs=deadlineAt-Date.now();
+        if(remainingMs<=0){
+          monitoring=false;
+          setMonitoringUI(false);
+          result.innerHTML=`
+            <div class="card guru-error">
+              <strong>⏱️ Janela de análise encerrada.</strong>
+              <span>Nenhuma confirmação técnica atingiu todos os critérios dentro de 60 segundos.</span>
+              <small>Isso evita deixar o sistema procurando indefinidamente. Ajuste par, vela ou estratégia e faça uma nova análise.</small>
+            </div>`;
+          break;
+        }
+
         if(lastAnalysis){
           const label=monitoringLabel(lastAnalysis,cycle);
           const detail=monitoringDetail(lastAnalysis,label,cycle);
@@ -539,19 +554,40 @@
         const useAI=false;
         monitorRequestStartedAt=Date.now();
         monitorNextPollAt=0;
-        const d=await jsonResponse(await iqFetch("/market-analysis",{
-          method:"POST",
-          body:JSON.stringify({
-            symbol,
-            timeframe,
-            strategy,
-            option_type:optionType,
-            expiry_minutes:expiryMinutes,
-            analyze_with_ai:useAI,
-            fast_mode:true
-          })
-        }));
+        const requestBudget=Math.min(7000,Math.max(1500,remainingMs));
+        let requestResult;
+        try{
+          requestResult=await Promise.race([
+            iqFetch("/market-analysis",{
+              method:"POST",
+              body:JSON.stringify({
+                symbol,
+                timeframe,
+                strategy,
+                option_type:optionType,
+                expiry_minutes:expiryMinutes,
+                analyze_with_ai:useAI,
+                fast_mode:true
+              })
+            }),
+            sleep(requestBudget).then(()=>{throw new Error("A leitura atual excedeu o limite de tempo da janela de análise.");})
+          ]);
+        }catch(e){
+          if(Date.now()>=deadlineAt){
+            monitoring=false;
+            setMonitoringUI(false);
+            result.innerHTML=`
+              <div class="card guru-error">
+                <strong>⏱️ Janela de análise encerrada.</strong>
+                <span>Nenhuma confirmação técnica foi obtida dentro de 60 segundos.</span>
+                <small>O sistema foi encerrado automaticamente para não ficar preso em “aguardando”.</small>
+              </div>`;
+            break;
+          }
+          throw e;
+        }
 
+        const d=await jsonResponse(requestResult);
         if(runId!==monitorRunId)break;
         monitorRequestStartedAt=0;
         monitorLastUpdateAt=Date.now();
@@ -576,8 +612,9 @@
         }
 
         cycle++;
-        monitorNextPollAt=Date.now()+3000;
-        await sleep(3000);
+        monitorNextPollAt=Math.min(deadlineAt,Date.now()+3000);
+        const waitMs=Math.min(3000,Math.max(0,deadlineAt-Date.now()));
+        if(waitMs>0)await sleep(waitMs);
       }
     }catch(e){
       if(runId===monitorRunId){
