@@ -460,14 +460,20 @@ def _strategy_pack(rows: list[dict[str, float]], strategy: str) -> dict[str, Any
 def _gemini_review(symbol: str, timeframe: str, selected_strategy: str, strategies: list[dict[str, Any]], price: float, rows: list[dict[str, float]], authorization: str | None = None) -> dict[str, Any]:
     api_key = GEMINI_API_KEY
     model = os.getenv("GEMINI_MODEL", "gemini-3.8-flash").strip() or "gemini-3.8-flash"
+
+    # Usuário autenticado pode fornecer sua própria credencial Gemini.
     if authorization:
         try:
             from server import _resolve_ai_credentials
-            _, api_key, stored_model = _resolve_ai_credentials(authorization, "gemini")
+            _, user_api_key, stored_model = _resolve_ai_credentials(authorization, "gemini")
+            if user_api_key:
+                api_key = user_api_key
             model = stored_model or model
         except Exception:
+            # Mantém a chave do servidor como fallback.
             if not api_key:
                 raise
+
     if not api_key:
         return {"available": False, "reason": "Gemini não configurado."}
 
@@ -493,93 +499,120 @@ def _gemini_review(symbol: str, timeframe: str, selected_strategy: str, strategi
     prompt = (
         "Valide um estudo técnico de opções binárias de curtíssimo prazo. Não invente dados. "
         "Use apenas os indicadores, confluências e candles fornecidos. Cada estratégia tem 12 indicadores. "
-        "Compare famílias diferentes e penalize contradições. Responda SOMENTE JSON: "
+        "Valide somente a estratégia selecionada, sem combinar estratégias entre si. Responda SOMENTE JSON: "
         "{\"signal\":\"CALL|PUT|AGUARDAR\",\"confidence\":0-100,\"reason\":\"texto curto\",\"risk\":\"baixo|medio|alto\"}. "
         f"Par={symbol}; timeframe={timeframe}; preço={price}; estratégia={selected_strategy}. "
-        f"Estratégias={json.dumps(compact, ensure_ascii=False, separators=(',', ':'))}. "
-        f"Valores da estratégia selecionada={json.dumps(selected['values'], ensure_ascii=False, separators=(',', ':'))}. "
+        f"Estratégia selecionada={json.dumps(selected, ensure_ascii=False, separators=(',', ':'))}. "
         f"Candles={json.dumps(recent, separators=(',', ':'))}. "
         "Só use CALL/PUT quando houver confluência clara; caso contrário AGUARDAR."
     )
 
-    url = "https://generativelanguage.googleapis.com/v1beta/models/" + model + ":generateContent"
-    payload = {
-        "contents": [{"parts": [{"text": prompt}]}],
-        "generationConfig": {
-            "responseMimeType": "application/json",
-            "temperature": 0.1,
-            "maxOutputTokens": 180,
-        },
-    }
+    def call_gemini(key: str, selected_model: str) -> tuple[dict[str, Any] | None, int | None, str]:
+        url = "https://generativelanguage.googleapis.com/v1beta/models/" + selected_model + ":generateContent"
+        payload = {
+            "contents": [{"parts": [{"text": prompt}]}],
+            "generationConfig": {
+                "responseMimeType": "application/json",
+                "temperature": 0.1,
+                "maxOutputTokens": 180,
+            },
+        }
+        retryable = {429, 500, 502, 503, 504}
+        last_reason = ""
 
-    last_reason = ""
-    retryable = {429, 500, 502, 503, 504}
-
-    for attempt in range(3):
-        try:
-            resp = requests.post(
-                url,
-                headers={
-                    "x-goog-api-key": api_key,
-                    "Content-Type": "application/json",
-                },
-                json=payload,
-                timeout=12,
-            )
-
-            if resp.ok:
-                data = resp.json()
-                text = data["candidates"][0]["content"]["parts"][0]["text"]
-                parsed = json.loads(text)
-                signal = str(parsed.get("signal", "AGUARDAR")).upper()
-                if signal not in {"CALL", "PUT", "AGUARDAR"}:
-                    signal = "AGUARDAR"
-                return {
-                    "available": True,
-                    "signal": signal,
-                    "confidence": float(parsed.get("confidence", 0)),
-                    "reason": str(parsed.get("reason", ""))[:300],
-                    "risk": str(parsed.get("risk", "alto")),
-                    "model": model,
-                }
-
+        for attempt in range(3):
             try:
-                err = resp.json().get("error", {})
-                message = str(err.get("message") or resp.text[:300]).strip()
-            except Exception:
-                message = resp.text[:300].strip()
+                resp = requests.post(
+                    url,
+                    headers={"x-goog-api-key": key, "Content-Type": "application/json"},
+                    json=payload,
+                    timeout=12,
+                )
 
-            last_reason = f"Gemini HTTP {resp.status_code}: {message}"
+                if resp.ok:
+                    data = resp.json()
+                    text = data["candidates"][0]["content"]["parts"][0]["text"]
+                    parsed = json.loads(text)
+                    signal = str(parsed.get("signal", "AGUARDAR")).upper()
+                    if signal not in {"CALL", "PUT", "AGUARDAR"}:
+                        signal = "AGUARDAR"
+                    return {
+                        "available": True,
+                        "signal": signal,
+                        "confidence": float(parsed.get("confidence", 0)),
+                        "reason": str(parsed.get("reason", ""))[:300],
+                        "risk": str(parsed.get("risk", "alto")),
+                        "model": selected_model,
+                    }, resp.status_code, ""
 
-            if resp.status_code not in retryable or attempt >= 2:
-                break
+                try:
+                    err = resp.json().get("error", {})
+                    message = str(err.get("message") or resp.text[:300]).strip()
+                except Exception:
+                    message = resp.text[:300].strip()
 
-            time.sleep(1.5 * (2 ** attempt))
+                last_reason = f"Gemini HTTP {resp.status_code}: {message}"
 
-        except requests.RequestException as exc:
-            last_reason = f"Falha de conexão com Gemini: {exc}"
-            if attempt >= 2:
-                break
-            time.sleep(1.5 * (2 ** attempt))
-        except (KeyError, IndexError, TypeError, ValueError) as exc:
-            return {
-                "available": False,
-                "reason": f"Resposta do Gemini em formato inesperado: {exc}",
-                "model": model,
-            }
-        except Exception as exc:
-            return {
-                "available": False,
-                "reason": str(exc)[:220],
-                "model": model,
-            }
+                # 402 significa saldo pré-pago esgotado; repetir a chamada
+                # não resolve o problema e só aumenta a latência.
+                if resp.status_code == 402:
+                    return None, 402, last_reason
+
+                if resp.status_code not in retryable or attempt >= 2:
+                    break
+
+                time.sleep(1.5 * (2 ** attempt))
+
+            except requests.RequestException as exc:
+                last_reason = f"Falha de conexão com Gemini: {exc}"
+                if attempt >= 2:
+                    break
+                time.sleep(1.5 * (2 ** attempt))
+            except (KeyError, IndexError, TypeError, ValueError) as exc:
+                return None, None, f"Resposta do Gemini em formato inesperado: {exc}"
+            except Exception as exc:
+                return None, None, str(exc)[:220]
+
+        return None, None, last_reason or "Gemini temporariamente indisponível."
+
+    result, status, reason = call_gemini(api_key, model)
+    if result:
+        return result
+
+    # Contingência opcional: uma segunda chave pode apontar para um projeto
+    # Gemini independente, inclusive um projeto no nível gratuito.
+    # Isso evita que o saldo esgotado da chave principal derrube a validação.
+    fallback_key = os.getenv("GEMINI_API_KEY_FALLBACK", "").strip()
+    fallback_model = os.getenv("GEMINI_FALLBACK_MODEL", "gemini-3.5-flash-lite").strip() or "gemini-3.5-flash-lite"
+
+    if status == 402 and fallback_key and fallback_key != api_key:
+        fallback_result, _, fallback_reason = call_gemini(fallback_key, fallback_model)
+        if fallback_result:
+            fallback_result["fallback"] = True
+            fallback_result["primary_reason"] = reason[:300]
+            return fallback_result
+        return {
+            "available": False,
+            "reason": f"Chave principal sem créditos e chave de contingência indisponível: {fallback_reason}"[:500],
+            "model": fallback_model,
+        }
+
+    if status == 402:
+        return {
+            "available": False,
+            "reason": (
+                "Gemini HTTP 402: os créditos pré-pagos da chave configurada foram esgotados. "
+                "Configure GEMINI_API_KEY_FALLBACK no Render com uma chave de outro projeto Gemini "
+                "ou recarregue os créditos da conta principal."
+            ),
+            "model": model,
+        }
 
     return {
         "available": False,
-        "reason": last_reason or "Gemini temporariamente indisponível.",
+        "reason": reason or "Gemini temporariamente indisponível.",
         "model": model,
     }
-
 
 def _mtf_plan(timeframe: str) -> tuple[str, str, str]:
     # Contexto = TF maior, setup = TF escolhido, gatilho = TF menor.
