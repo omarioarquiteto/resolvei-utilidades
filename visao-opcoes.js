@@ -562,7 +562,7 @@ async function renderRoute(){
       return;
     }
     document.body.classList.add("iq-tool-active");
-    if(!document.getElementById("guruIqToolHost")){
+    if(!document.getElementById("visaoOpcoesToolHost")){
       setTimeout(renderRoute,0);
       return;
     }
