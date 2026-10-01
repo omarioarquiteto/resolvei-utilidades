@@ -137,9 +137,6 @@
     const entryStatus=entryReady?"ENTRADA CONFIRMADA":(a.entry?.status||"ANALISANDO");
     const reasons=(a.reasons||[]).slice(0,3).map(x=>`<li>✓ ${esc(x)}</li>`).join("");
     const warnings=(a.warnings||[]).slice(0,3).map(x=>`<li>⚠ ${esc(x)}</li>`).join("");
-    const back=a.backtest||{};
-    const tested=Number(back.testedSignals||0);
-    const hit=Number(back.hitRate||0);
     const mtf=a.mtf||{};
     return `
       <div class="guru-dashboard">
@@ -188,15 +185,13 @@
             ${warnings?`<div class="guru-warning-mini">${warnings}</div>`:""}
           </section>
 
-          <details class="guru-details-card card">
-            <summary>Ver desempenho histórico</summary>
+          <details class="guru-details-card card" open>
+            <summary>Indicadores utilizados</summary>
             <div class="guru-mini-history">
-              ${back.available===false
-                ? `<div class="guru-history-note">${esc(back.instrumentModel||"Backtest específico indisponível para esta configuração.")}</div>`
-                : `<div><span>Sinais</span><strong>${tested}</strong></div><div><span>Acertos</span><strong>${Number(back.wins||0)}</strong></div><div><span>Erros</span><strong>${Number(back.losses||0)}</strong></div><div><span>Taxa</span><strong>${hit.toFixed(1)}%</strong></div>`}
+              ${(a.indicatorReadings||[]).map(item=>`<div><span>${esc(item.name)}</span><strong>${esc(item.signal)}</strong></div>`).join("")||"<div><span>Leitura</span><strong>—</strong></div>"}
             </div>
+            <div class="guru-history-note">Esta leitura usa somente os indicadores atuais da estratégia. Não há backtest nem teste histórico de sinais.</div>
           </details>
-
           <details class="guru-details-card card">
             <summary>Ver contexto técnico</summary>
             <div class="guru-mtf-compact">
@@ -347,17 +342,17 @@
       const now=Date.now();
       if(monitorRequestStartedAt){
         const sec=(now-monitorRequestStartedAt)/1000;
-        if(stageEl)stageEl.textContent="RECALCULANDO AGORA";
-        if(reqEl)reqEl.textContent="Consultando a IQ Option, recalculando a estratégia e verificando o gatilho.";
+        if(stageEl)stageEl.textContent="ANALISANDO INDICADORES";
+        if(reqEl)reqEl.textContent="Lendo candles e interpretando os indicadores selecionados para esta estratégia.";
         if(elapsedEl)elapsedEl.textContent=sec.toFixed(1)+"s em processamento";
         if(nextEl)nextEl.textContent="AGORA";
       }else{
         const nextSec=Math.max(0,(monitorNextPollAt-now)/1000);
         const label=monitoringLabel(monitorCurrentAnalysis,0);
-        if(stageEl)stageEl.textContent=label==="SINAL PRÓXIMO"?"MONITORANDO CONFIRMAÇÃO":label;
+        if(stageEl)stageEl.textContent=label==="SINAL PRÓXIMO"?"INTERPRETANDO INDICADORES":label;
         if(reqEl)reqEl.textContent=label==="SINAL PRÓXIMO"
           ?"O sinal está próximo; o motor continua conferindo o candle de gatilho até a confirmação."
-          :"Aguardando a próxima leitura automática do mercado.";
+          :"Interpretando os indicadores atuais da estratégia escolhida.";
         if(elapsedEl)elapsedEl.textContent="Leitura concluída";
         if(nextEl)nextEl.textContent=nextSec<=0?"AGORA":nextSec.toFixed(1)+"s";
       }
@@ -404,7 +399,7 @@
           <div class="guru-monitor-main">
             <span class="guru-live-dot"></span>
             <div>
-              <small>MONITORAMENTO ATIVO</small>
+              <small>ANÁLISE TÉCNICA</small>
               <strong id="guruIqMonitorLabel">${esc(label)}</strong>
               <span>${esc(readableAsset(symbol))}</span>
             </div>
@@ -515,118 +510,61 @@
     if(!symbol||!timeframe||monitoring)return;
 
     const runId=++monitorRunId;
-    const deadlineAt=Date.now()+ANALYSIS_LIMIT_MS;
+    const controller=new AbortController();
+    const timeoutId=setTimeout(()=>controller.abort(),60000);
     monitoring=true;
     setMonitoringUI(true);
     if(msg){msg.hidden=true;msg.textContent="";}
-
-    let cycle=0;
-    let lastAnalysis=null;
-    monitorLastUpdateAt=0;
-    monitorClockOffsetMs=0;
-    monitorNextPollAt=0;
-    monitorCurrentAnalysis=null;
     result.innerHTML=monitorStatusHtml(symbol,null);
     startMonitorUiTicker();
 
     try{
-      while(monitoring&&runId===monitorRunId){
-        const remainingMs=deadlineAt-Date.now();
-        if(remainingMs<=0){
-          monitoring=false;
-          setMonitoringUI(false);
-          result.innerHTML=`
-            <div class="card guru-error">
-              <strong>⏱️ Janela de análise encerrada.</strong>
-              <span>Nenhuma confirmação técnica atingiu todos os critérios dentro de 60 segundos.</span>
-              <small>Isso evita deixar o sistema procurando indefinidamente. Ajuste par, vela ou estratégia e faça uma nova análise.</small>
-            </div>`;
-          break;
-        }
+      monitorRequestStartedAt=Date.now();
+      const response=await iqFetch("/market-analysis",{
+        method:"POST",
+        signal:controller.signal,
+        body:JSON.stringify({
+          symbol,
+          timeframe,
+          strategy,
+          option_type:optionType,
+          expiry_minutes:expiryMinutes,
+          analyze_with_ai:false,
+          fast_mode:true
+        })
+      });
+      const d=await jsonResponse(response);
+      if(runId!==monitorRunId)return;
 
-        if(lastAnalysis){
-          const label=monitoringLabel(lastAnalysis,cycle);
-          const detail=monitoringDetail(lastAnalysis,label,cycle);
-          updateMonitorView(lastAnalysis,label,detail);
-        }
+      monitorRequestStartedAt=0;
+      monitorLastUpdateAt=Date.now();
+      const analysis=d.analysis||{};
+      monitorCurrentAnalysis=analysis;
+      const directional=analysis.signal==="CALL"||analysis.signal==="PUT";
+      updateMonitorView(analysis,directional?"SINAL TÉCNICO":"SEM DIREÇÃO",directional
+        ?"Resultado definido pela interpretação dos indicadores da estratégia selecionada."
+        :"Os indicadores atuais não formaram uma direção técnica dominante suficiente.");
 
-        // O motor técnico rápido nunca espera pelo Gemini.
-        const useAI=false;
-        monitorRequestStartedAt=Date.now();
-        monitorNextPollAt=0;
-        const requestBudget=Math.min(7000,Math.max(1500,remainingMs));
-        let requestResult;
-        try{
-          requestResult=await Promise.race([
-            iqFetch("/market-analysis",{
-              method:"POST",
-              body:JSON.stringify({
-                symbol,
-                timeframe,
-                strategy,
-                option_type:optionType,
-                expiry_minutes:expiryMinutes,
-                analyze_with_ai:useAI,
-                fast_mode:true
-              })
-            }),
-            sleep(requestBudget).then(()=>{throw new Error("A leitura atual excedeu o limite de tempo da janela de análise.");})
-          ]);
-        }catch(e){
-          if(Date.now()>=deadlineAt){
-            monitoring=false;
-            setMonitoringUI(false);
-            result.innerHTML=`
-              <div class="card guru-error">
-                <strong>⏱️ Janela de análise encerrada.</strong>
-                <span>Nenhuma confirmação técnica foi obtida dentro de 60 segundos.</span>
-                <small>O sistema foi encerrado automaticamente para não ficar preso em “aguardando”.</small>
-              </div>`;
-            break;
-          }
-          throw e;
-        }
-
-        const d=await jsonResponse(requestResult);
-        if(runId!==monitorRunId)break;
-        monitorRequestStartedAt=0;
-        monitorLastUpdateAt=Date.now();
-        lastAnalysis=d.analysis||{};
-        monitorCurrentAnalysis=lastAnalysis;
-        if(Number(lastAnalysis?.serverEpoch)) monitorClockOffsetMs=Number(lastAnalysis.serverEpoch)*1000-Date.now();
-        const label=monitoringLabel(lastAnalysis,cycle);
-        const detail=monitoringDetail(lastAnalysis,label,cycle);
-        updateMonitorView(lastAnalysis,label,detail);
-
-        if(lastAnalysis?.entry?.ready||lastAnalysis?.signalConfirmed){
-          monitoring=false;
-          setMonitoringUI(false);
-          result.innerHTML=resultHtml(lastAnalysis);
-          document.getElementById("guruNewAnalysis")?.addEventListener("click",()=>analyze());
-          const finalBtn=document.getElementById("guruIqAnalyzeBtn");
-          if(finalBtn)finalBtn.textContent="🔍 ANALISAR NOVAMENTE";
-          if(analyzeWithAI){
-            void validateFinalWithAI({symbol,timeframe,strategy,optionType,expiryMinutes},lastAnalysis.signal);
-          }
-          break;
-        }
-
-        cycle++;
-        monitorNextPollAt=Math.min(deadlineAt,Date.now()+3000);
-        const waitMs=Math.min(3000,Math.max(0,deadlineAt-Date.now()));
-        if(waitMs>0)await sleep(waitMs);
+      monitoring=false;
+      setMonitoringUI(false);
+      result.innerHTML=resultHtml(analysis);
+      document.getElementById("guruNewAnalysis")?.addEventListener("click",()=>analyze());
+      if(analyzeWithAI && directional){
+        void validateFinalWithAI({symbol,timeframe,strategy,optionType,expiryMinutes},analysis.signal);
       }
     }catch(e){
-      if(runId===monitorRunId){
-        monitoring=false;
-        result.innerHTML=`<div class="card guru-error"><strong>Não foi possível continuar o monitoramento.</strong><span>${esc(e.message)}</span><small>A análise automática foi encerrada. Clique novamente em “Analisar novamente” para iniciar outro ciclo.</small></div>`;
-        setMonitoringUI(false);
-      }
+      if(runId!==monitorRunId)return;
+      monitoring=false;
+      const message=e?.name==="AbortError"?"A análise excedeu o limite de 60 segundos e foi encerrada.":(e?.message||"Falha durante a análise pela IQ Option.");
+      result.innerHTML=`<div class="card guru-error"><strong>Não foi possível concluir a análise.</strong><span>${esc(message)}</span><small>A Visão faz uma única leitura dos indicadores atuais e não fica procurando sinais.</small></div>`;
+      setMonitoringUI(false);
     }finally{
-      if(runId===monitorRunId&&monitoring===false){
+      clearTimeout(timeoutId);
+      monitorRequestStartedAt=0;
+      if(runId===monitorRunId){
+        stopMonitorUiTicker();
         const b=document.getElementById("guruIqAnalyzeBtn");
         if(b)b.textContent="🔍 ANALISAR NOVAMENTE";
-        stopMonitorUiTicker();
       }
     }
   }
