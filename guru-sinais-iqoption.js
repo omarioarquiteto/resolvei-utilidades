@@ -15,7 +15,7 @@
     </a></article>`;
   }
 
-  function breadcrumbWrap(body){return `<div class="tool-page"><div class="breadcrumb"><a href="#/">Início</a> / GURÚ DOS SINAIS IQOPTION</div>${body}</div>`;}
+  function breadcrumbWrap(body){return `<div class="tool-page iq-tool-page">${body}</div>`;}
 
   function loginShell(message=""){
     return `<div class="guru-simple guru-iq-shell">
