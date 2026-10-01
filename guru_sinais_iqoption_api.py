@@ -65,6 +65,7 @@ class MarketAnalysisRequest(BaseModel):
     option_type: str = "binary"
     expiry_minutes: int = 5
     analyze_with_ai: bool = False
+    fast_mode: bool = False
 
 
 def _client_class() -> Any:
@@ -299,13 +300,15 @@ async def _mtf_for_symbol(
     timeframe: str,
     expiry_minutes: int,
     option_type: str,
+    count: int = 1000,
 ) -> tuple[dict[str, list[dict[str, float]]], tuple[str, str, str], bool]:
     plan = _iq_mtf_plan(timeframe, expiry_minutes, option_type)
     rows: dict[str, list[dict[str, float]]] = {}
 
     unique_tfs = list(dict.fromkeys(plan))
+    safe_count = max(80, min(int(count or 1000), 1000))
     results = await asyncio.gather(
-        *[_candles(client, session_id, symbol, tf, 1000) for tf in unique_tfs]
+        *[_candles(client, session_id, symbol, tf, safe_count) for tf in unique_tfs]
     )
 
     for tf, data in zip(unique_tfs, results):
@@ -1068,6 +1071,7 @@ async def _analyze(
     expiry_minutes: int,
     authorization: str | None,
     analyze_with_ai: bool,
+    fast_mode: bool = False,
 ) -> dict[str, Any]:
     analysis_started = time.perf_counter()
     if timeframe not in INTERVALS:
@@ -1080,7 +1084,13 @@ async def _analyze(
         raise HTTPException(status_code=400, detail="Informe um ativo.")
 
     mtf, plan, live_trigger_used = await _mtf_for_symbol(
-        client, session_id, symbol, timeframe, expiry_minutes, option_type
+        client,
+        session_id,
+        symbol,
+        timeframe,
+        expiry_minutes,
+        option_type,
+        220 if fast_mode else 1000,
     )
     context_tf, setup_tf, trigger_tf = plan
     setup_rows = mtf[setup_tf]
@@ -1223,45 +1233,13 @@ async def _analyze(
         else "Nenhuma direção técnica suficiente."
     )
 
-    backtest_cache_key = f"{session_id}|{symbol}|{timeframe}|{selected['strategy']}|{option_type}|{expiry_minutes}"
-    cached_backtest = BACKTEST_CACHE.get(backtest_cache_key)
-    backtest_cached = bool(cached_backtest and time.time() - cached_backtest[0] <= 180)
-    try:
-        if backtest_cached:
-            backtest = cached_backtest[1]
-        elif option_type == "blitz":
-            backtest = {
-                "available": False,
-                "strategy": selected["strategy"],
-                "optionType": option_type,
-                "testedSignals": 0,
-                "wins": 0,
-                "losses": 0,
-                "ties": 0,
-                "hitRate": 0.0,
-                "wilsonLower95": 0.0,
-                "olderHitRate": 0.0,
-                "recentHitRate": 0.0,
-                "consistent": False,
-                "expiryMinutes": expiry_minutes,
-                "instrumentModel": "Sem backtest exato para expiração em segundos usando apenas candles de 1 minuto.",
-                "entryModel": "Gatilho em tempo real",
-            }
-        else:
-            backtest = _backtest_selected(
-                mtf,
-                plan,
-                selected["strategy"],
-                timeframe,
-                expiry_minutes,
-                option_type,
-                max_signals=100,
-            )
-        if not backtest_cached:
-            BACKTEST_CACHE[backtest_cache_key] = (time.time(), backtest)
-    except Exception as exc:
+    backtest_cached = False
+    if fast_mode:
         backtest = {
+            "available": False,
+            "skipped": True,
             "strategy": selected["strategy"],
+            "optionType": option_type,
             "testedSignals": 0,
             "wins": 0,
             "losses": 0,
@@ -1271,13 +1249,66 @@ async def _analyze(
             "olderHitRate": 0.0,
             "recentHitRate": 0.0,
             "consistent": False,
-            "available": False,
             "expiryMinutes": expiry_minutes,
-            "optionType": option_type,
-            "instrumentModel": "Indisponível",
-            "entryModel": "Indisponível",
-            "error": f"Falha no backtest: {str(exc)[:160]}",
+            "instrumentModel": "Backtest desativado no modo rápido da Visão Opções.",
+            "entryModel": "Confirmação técnica em tempo real",
         }
+    else:
+        backtest_cache_key = f"{session_id}|{symbol}|{timeframe}|{selected['strategy']}|{option_type}|{expiry_minutes}"
+        cached_backtest = BACKTEST_CACHE.get(backtest_cache_key)
+        backtest_cached = bool(cached_backtest and time.time() - cached_backtest[0] <= 180)
+        try:
+            if backtest_cached:
+                backtest = cached_backtest[1]
+            elif option_type == "blitz":
+                backtest = {
+                    "available": False,
+                    "strategy": selected["strategy"],
+                    "optionType": option_type,
+                    "testedSignals": 0,
+                    "wins": 0,
+                    "losses": 0,
+                    "ties": 0,
+                    "hitRate": 0.0,
+                    "wilsonLower95": 0.0,
+                    "olderHitRate": 0.0,
+                    "recentHitRate": 0.0,
+                    "consistent": False,
+                    "expiryMinutes": expiry_minutes,
+                    "instrumentModel": "Sem backtest exato para expiração em segundos usando apenas candles de 1 minuto.",
+                    "entryModel": "Gatilho em tempo real",
+                }
+            else:
+                backtest = _backtest_selected(
+                    mtf,
+                    plan,
+                    selected["strategy"],
+                    timeframe,
+                    expiry_minutes,
+                    option_type,
+                    max_signals=100,
+                )
+            if not backtest_cached:
+                BACKTEST_CACHE[backtest_cache_key] = (time.time(), backtest)
+        except Exception as exc:
+            backtest = {
+                "strategy": selected["strategy"],
+                "testedSignals": 0,
+                "wins": 0,
+                "losses": 0,
+                "ties": 0,
+                "hitRate": 0.0,
+                "wilsonLower95": 0.0,
+                "olderHitRate": 0.0,
+                "recentHitRate": 0.0,
+                "consistent": False,
+                "available": False,
+                "expiryMinutes": expiry_minutes,
+                "optionType": option_type,
+                "instrumentModel": "Indisponível",
+                "entryModel": "Indisponível",
+                "error": f"Falha no backtest: {str(exc)[:160]}",
+            }
 
     return {
         "signal": signal,
@@ -1299,7 +1330,9 @@ async def _analyze(
         "serverEpoch": time.time(),
         "diagnostics": {
             "serverDurationMs": round((time.perf_counter() - analysis_started) * 1000),
+            "fastMode": fast_mode,
             "backtestCached": backtest_cached,
+            "backtestSkipped": fast_mode,
             "liveTrigger": live_trigger_used,
             "candles": {tf: len(data) for tf, data in mtf.items()},
             "strategyEvaluations": len(eval_strategies),
@@ -1341,6 +1374,7 @@ async def _analyze(
         "gemini": gemini,
         "indicators": selected["values"],
         "analysisState": trigger_state.get("state") or trigger_state.get("status") or "ANALISANDO MERCADO",
+        "fastMode": fast_mode,
         "proximity": round(float(trigger_state.get("proximity", 0.0) or 0.0), 1),
         "signalConfirmed": bool(trigger_state.get("ready")),
         "source": "IQ Option + motor técnico MTF + tipo de opção + expiração + gatilho em tempo real",
@@ -1456,6 +1490,7 @@ async def iq_market_analysis(
             req.expiry_minutes,
             authorization,
             req.analyze_with_ai,
+            req.fast_mode,
         )
     except HTTPException:
         raise
