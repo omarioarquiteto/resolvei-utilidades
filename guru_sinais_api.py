@@ -368,6 +368,8 @@ def _strategy_pack(rows: list[dict[str, float]], strategy: str) -> dict[str, Any
     r = rsi(closes)
     macd, macd_signal = macd_values(closes)
     hist = macd - macd_signal
+    prev_macd, prev_macd_signal = macd_values(closes[:-1]) if len(closes) >= 30 else (macd, macd_signal)
+    prev_hist = prev_macd - prev_macd_signal
     atr = _atr_value(rows, 14)
     atr_pct = atr / closes[-1] * 100 if closes[-1] else 0.0
     atr_prev = _atr_value(rows[:-10], 14) if len(rows) > 30 else atr
@@ -383,6 +385,7 @@ def _strategy_pack(rows: list[dict[str, float]], strategy: str) -> dict[str, Any
     bb_width = (bb_upper - bb_lower) / closes[-1] * 100 if closes[-1] else 0.0
     prev_closes = closes[:-10]
     prev_mid, prev_sd = _last_sma(prev_closes, 20), _std(prev_closes, 20)
+    e9_prev = ema(closes[:-1], 9)[-1] if len(closes) >= 3 else e9
     bb_width_prev = (4 * prev_sd / closes[-11] * 100) if len(closes) > 40 and closes[-11] else bb_width
     high20, low20 = max(x["high"] for x in rows[-20:]), min(x["low"] for x in rows[-20:])
     prev_high20, prev_low20 = max(x["high"] for x in rows[-21:-1]), min(x["low"] for x in rows[-21:-1])
@@ -397,54 +400,89 @@ def _strategy_pack(rows: list[dict[str, float]], strategy: str) -> dict[str, Any
 
     if strategy == "tendencia":
         items = [
-            ("EMA 9/21/50/200",1.4,"CALL" if e9>e21>e50>e200 else "PUT" if e9<e21<e50<e200 else "NEUTRA"),
-            ("ADX + DI",1.2,"CALL" if adx>=20 and di_diff>0 else "PUT" if adx>=20 and di_diff<0 else "NEUTRA"),
+            ("EMA 9/21/50/200",1.5,"CALL" if e9>e21>e50>e200 else "PUT" if e9<e21<e50<e200 else "NEUTRA"),
+            ("ADX + DI",1.3,"CALL" if adx>=20 and di_diff>0 else "PUT" if adx>=20 and di_diff<0 else "NEUTRA"),
             ("MACD",1.1,"CALL" if hist>0 else "PUT" if hist<0 else "NEUTRA"),
-            ("RSI regime",.9,"CALL" if 52<=r<=68 else "PUT" if 32<=r<=48 else "NEUTRA"),
+            ("RSI regime",1.0,"CALL" if 52<=r<=68 else "PUT" if 32<=r<=48 else "NEUTRA"),
             ("Supertrend",1.1,"CALL" if st_trend=="ALTA" else "PUT" if st_trend=="BAIXA" else "NEUTRA"),
             ("Ichimoku",1.0,"CALL" if ichi=="ALTA" else "PUT" if ichi=="BAIXA" else "NEUTRA"),
-            ("VWAP",.8,"CALL" if closes[-1]>vwap else "PUT" if closes[-1]<vwap else "NEUTRA"),
-            ("Donchian",.8,"CALL" if donchian_up else "PUT" if donchian_down else "NEUTRA"),
-            ("ROC",.7,"CALL" if roc>.03 else "PUT" if roc<-.03 else "NEUTRA"),
-            ("OBV",.7,"CALL" if obv>.02 else "PUT" if obv<-.02 else "NEUTRA"),
-            ("Volume",.6,volume_dir),("Price structure",.7,structure)
+            ("VWAP",0.8,"CALL" if closes[-1]>vwap else "PUT" if closes[-1]<vwap else "NEUTRA"),
+            ("Price structure",0.9,structure),
+            ("ROC",0.6,"CALL" if roc>0.03 else "PUT" if roc<-0.03 else "NEUTRA"),
+            ("OBV",0.6,"CALL" if obv>0.02 else "PUT" if obv<-0.02 else "NEUTRA"),
+            ("Volume",0.5,volume_dir),
+            ("EMA slope",0.6,"CALL" if e9>e9_prev else "PUT" if e9<e9_prev else "NEUTRA")
         ]
+        min_confidence = 72.0
     elif strategy == "reversao":
         items = [
-            ("Bollinger position",1.2,"CALL" if bb_pos<=.12 else "PUT" if bb_pos>=.88 else "NEUTRA"),
-            ("RSI extreme",1.1,"CALL" if r<=30 else "PUT" if r>=70 else "NEUTRA"),
-            ("Stochastic",1.0,"CALL" if st_k<=20 and st_k>=st_d else "PUT" if st_k>=80 and st_k<=st_d else "NEUTRA"),
-            ("CCI",.9,"CALL" if cci<=-100 else "PUT" if cci>=100 else "NEUTRA"),
-            ("Williams %R",.8,"CALL" if willr<=-80 else "PUT" if willr>=-20 else "NEUTRA"),
-            ("MFI",.8,"CALL" if mfi<=20 else "PUT" if mfi>=80 else "NEUTRA"),
-            ("VWAP distance",.8,"CALL" if closes[-1]<vwap*.9995 else "PUT" if closes[-1]>vwap*1.0005 else "NEUTRA"),
-            ("Support/resistance",1.0,"CALL" if near_support else "PUT" if near_resistance else "NEUTRA"),
-            ("Candle reversal",.8,"CALL" if "alta" in candle or candle=="bullish" else "PUT" if "baixa" in candle or candle=="bearish" else "NEUTRA"),
-            ("ATR regime",.6,"CALL" if atr_pct>=.02 and closes[-1]<vwap else "PUT" if atr_pct>=.02 and closes[-1]>vwap else "NEUTRA"),
-            ("ADX range filter",.6,"CALL" if adx<18 and bb_pos<.2 else "PUT" if adx<18 and bb_pos>.8 else "NEUTRA"),
-            ("Volume confirmation",.5,volume_dir)
+            ("Bollinger position",1.3,"CALL" if bb_pos<=.12 else "PUT" if bb_pos>=.88 else "NEUTRA"),
+            ("RSI extreme",1.2,"CALL" if r<=30 else "PUT" if r>=70 else "NEUTRA"),
+            ("Stochastic",1.1,"CALL" if st_k<=20 and st_k>=st_d else "PUT" if st_k>=80 and st_k<=st_d else "NEUTRA"),
+            ("CCI",1.0,"CALL" if cci<=-100 else "PUT" if cci>=100 else "NEUTRA"),
+            ("Williams %R",0.9,"CALL" if willr<=-80 else "PUT" if willr>=-20 else "NEUTRA"),
+            ("MFI",0.8,"CALL" if mfi<=20 else "PUT" if mfi>=80 else "NEUTRA"),
+            ("VWAP distance",0.8,"CALL" if closes[-1]<vwap*.9995 else "PUT" if closes[-1]>vwap*1.0005 else "NEUTRA"),
+            ("Support/resistance",1.1,"CALL" if near_support else "PUT" if near_resistance else "NEUTRA"),
+            ("Candle reversal",0.9,"CALL" if "alta" in candle or candle=="bullish" else "PUT" if "baixa" in candle or candle=="bearish" else "NEUTRA"),
+            ("ADX range filter",0.8,"CALL" if adx<18 and bb_pos<.2 else "PUT" if adx<18 and bb_pos>.8 else "NEUTRA"),
+            ("ATR regime",0.5,"CALL" if atr_pct>=.02 and closes[-1]<vwap else "PUT" if atr_pct>=.02 and closes[-1]>vwap else "NEUTRA"),
+            ("Volume confirmation",0.5,volume_dir)
         ]
-    else:
+        min_confidence = 74.0
+    elif strategy == "rompimento":
         items = [
-            ("Donchian breakout",1.4,"CALL" if donchian_up else "PUT" if donchian_down else "NEUTRA"),
-            ("Bollinger expansion",1.0,"CALL" if bb_width>bb_width_prev and closes[-1]>bb_mid else "PUT" if bb_width>bb_width_prev and closes[-1]<bb_mid else "NEUTRA"),
-            ("ATR expansion",.9,"CALL" if atr>atr_prev and closes[-1]>closes[-2] else "PUT" if atr>atr_prev and closes[-1]<closes[-2] else "NEUTRA"),
-            ("ADX + DI",1.1,"CALL" if adx>=22 and di_diff>0 else "PUT" if adx>=22 and di_diff<0 else "NEUTRA"),
-            ("MACD histogram",1.0,"CALL" if hist>0 else "PUT" if hist<0 else "NEUTRA"),
-            ("EMA alignment",1.0,"CALL" if e9>e21>e50 else "PUT" if e9<e21<e50 else "NEUTRA"),
-            ("ROC",.8,"CALL" if roc>.05 else "PUT" if roc<-.05 else "NEUTRA"),
-            ("Volume expansion",.9,volume_dir),("OBV",.8,"CALL" if obv>.02 else "PUT" if obv<-.02 else "NEUTRA"),
-            ("VWAP",.7,"CALL" if closes[-1]>vwap else "PUT" if closes[-1]<vwap else "NEUTRA"),
-            ("Candle confirmation",.7,"CALL" if candle in {"bullish","engolfo de alta"} else "PUT" if candle in {"bearish","engolfo de baixa"} else "NEUTRA"),
-            ("Price structure",.7,structure)
+            ("Donchian breakout",1.5,"CALL" if donchian_up else "PUT" if donchian_down else "NEUTRA"),
+            ("Bollinger expansion",1.1,"CALL" if bb_width>bb_width_prev and closes[-1]>bb_mid else "PUT" if bb_width>bb_width_prev and closes[-1]<bb_mid else "NEUTRA"),
+            ("ATR expansion",1.0,"CALL" if atr>atr_prev and closes[-1]>closes[-2] else "PUT" if atr>atr_prev and closes[-1]<closes[-2] else "NEUTRA"),
+            ("ADX + DI",1.2,"CALL" if adx>=22 and di_diff>0 else "PUT" if adx>=22 and di_diff<0 else "NEUTRA"),
+            ("Volume expansion",1.0,volume_dir),
+            ("OBV expansion",0.9,"CALL" if obv>.02 else "PUT" if obv<-.02 else "NEUTRA"),
+            ("EMA alignment",0.9,"CALL" if e9>e21>e50 else "PUT" if e9<e21<e50 else "NEUTRA"),
+            ("VWAP",0.7,"CALL" if closes[-1]>vwap else "PUT" if closes[-1]<vwap else "NEUTRA"),
+            ("ROC",0.7,"CALL" if roc>.05 else "PUT" if roc<-.05 else "NEUTRA"),
+            ("Candle confirmation",0.7,"CALL" if candle in {"bullish","engolfo de alta"} else "PUT" if candle in {"bearish","engolfo de baixa"} else "NEUTRA"),
+            ("Price structure",0.8,structure),
+            ("Breakout distance",0.8,"CALL" if closes[-1]>prev_high20 and (closes[-1]-prev_high20)>=atr*0.15 else "PUT" if closes[-1]<prev_low20 and (prev_low20-closes[-1])>=atr*0.15 else "NEUTRA")
         ]
+        min_confidence = 76.0
+    elif strategy == "momentum":
+        items = [
+            ("MACD histogram",1.3,"CALL" if hist>0 else "PUT" if hist<0 else "NEUTRA"),
+            ("MACD acceleration",1.0,"CALL" if hist>prev_hist and hist>0 else "PUT" if hist<prev_hist and hist<0 else "NEUTRA"),
+            ("ROC",1.2,"CALL" if roc>.04 else "PUT" if roc<-.04 else "NEUTRA"),
+            ("EMA alignment",1.0,"CALL" if e9>e21>e50 else "PUT" if e9<e21<e50 else "NEUTRA"),
+            ("EMA slope",0.9,"CALL" if e9>e9_prev else "PUT" if e9<e9_prev else "NEUTRA"),
+            ("ADX + DI",1.0,"CALL" if adx>=20 and di_diff>0 else "PUT" if adx>=20 and di_diff<0 else "NEUTRA"),
+            ("RSI momentum regime",0.9,"CALL" if 55<=r<=72 else "PUT" if 28<=r<=45 else "NEUTRA"),
+            ("Price structure",1.0,structure),
+            ("Volume confirmation",0.8,volume_dir),
+            ("OBV",0.7,"CALL" if obv>.02 else "PUT" if obv<-.02 else "NEUTRA"),
+            ("VWAP",0.6,"CALL" if closes[-1]>vwap else "PUT" if closes[-1]<vwap else "NEUTRA"),
+            ("Candle continuation",0.6,"CALL" if candle in {"bullish","engolfo de alta"} else "PUT" if candle in {"bearish","engolfo de baixa"} else "NEUTRA")
+        ]
+        min_confidence = 74.0
+    else:
+        raise HTTPException(status_code=400, detail="Estratégia não suportada.")
 
     buy, sell, confidence = _score_signal(items)
     direction = "CALL" if buy > sell else "PUT" if sell > buy else "NEUTRA"
+    signal_eligible = direction in {"CALL", "PUT"} and confidence >= min_confidence
+
     return {
         "strategy": strategy,
-        "strategyLabel": {"tendencia":"Tendência + confluência","reversao":"Reversão à média","rompimento":"Rompimento + momentum"}[strategy],
-        "buy": round(buy,2), "sell": round(sell,2), "confidence": round(confidence,1), "direction": direction,
+        "strategyLabel": {
+            "tendencia":"Tendência",
+            "reversao":"Reversão",
+            "rompimento":"Rompimento",
+            "momentum":"Momentum",
+        }[strategy],
+        "buy": round(buy,2),
+        "sell": round(sell,2),
+        "confidence": round(confidence,1),
+        "direction": direction if signal_eligible else "NEUTRA",
+        "signalEligible": signal_eligible,
+        "minConfidence": min_confidence,
         "indicators": [{"name":n,"weight":w,"signal":d} for n,w,d in items],
         "values": {
             "EMA9":e9,"EMA21":e21,"EMA50":e50,"EMA200":e200,"RSI":r,"MACD":macd,"MACDSignal":macd_signal,
@@ -472,15 +510,12 @@ def _gemini_review(symbol: str, timeframe: str, selected_strategy: str, strategi
         return {"available": False, "reason": "Gemini não configurado."}
 
     selected = next((x for x in strategies if x["strategy"] == selected_strategy), strategies[0])
-    compact = [
-        {
-            "strategy": x["strategyLabel"],
-            "direction": x["direction"],
-            "confidence": x["confidence"],
-            "indicators": x["indicators"],
-        }
-        for x in strategies
-    ]
+    compact = {
+        "strategy": selected["strategyLabel"],
+        "direction": selected["direction"],
+        "confidence": selected["confidence"],
+        "indicators": selected["indicators"],
+    }
     recent = [
         {
             "o": round(x["open"], 6),
@@ -492,14 +527,14 @@ def _gemini_review(symbol: str, timeframe: str, selected_strategy: str, strategi
     ]
     prompt = (
         "Valide um estudo técnico de opções binárias de curtíssimo prazo. Não invente dados. "
-        "Use apenas os indicadores, confluências e candles fornecidos. Cada estratégia tem 12 indicadores. "
-        "Compare famílias diferentes e penalize contradições. Responda SOMENTE JSON: "
+        "Use apenas os indicadores, confluências e candles fornecidos. A estratégia selecionada deve ser analisada isoladamente; "
+        "não misture nem compare famílias diferentes. Exija coerência entre os indicadores da própria estratégia e os candles. Responda SOMENTE JSON: "
         "{\"signal\":\"CALL|PUT|AGUARDAR\",\"confidence\":0-100,\"reason\":\"texto curto\",\"risk\":\"baixo|medio|alto\"}. "
         f"Par={symbol}; timeframe={timeframe}; preço={price}; estratégia={selected_strategy}. "
-        f"Estratégias={json.dumps(compact, ensure_ascii=False, separators=(',', ':'))}. "
+        f"Estratégia selecionada={json.dumps(compact, ensure_ascii=False, separators=(',', ':'))}. "
         f"Valores da estratégia selecionada={json.dumps(selected['values'], ensure_ascii=False, separators=(',', ':'))}. "
         f"Candles={json.dumps(recent, separators=(',', ':'))}. "
-        "Só use CALL/PUT quando houver confluência clara; caso contrário AGUARDAR."
+        "Só use CALL/PUT quando houver confluência clara dentro da estratégia selecionada; caso contrário AGUARDAR."
     )
 
     url = "https://generativelanguage.googleapis.com/v1beta/models/" + model + ":generateContent"
@@ -677,9 +712,9 @@ def analyze_market(symbol: str, timeframe: str, strategy: str = "automatica", au
 
     # Cada timeframe usa a mesma família de estratégia, evitando misturar
     # indicadores incompatíveis. O contexto filtra, o setup decide e o gatilho temporiza.
-    context_strategies = [_strategy_pack(mtf[context_tf], s) for s in ("tendencia", "reversao", "rompimento")]
-    setup_strategies = [_strategy_pack(setup_rows, s) for s in ("tendencia", "reversao", "rompimento")]
-    trigger_strategies = [_strategy_pack(mtf[trigger_tf], s) for s in ("tendencia", "reversao", "rompimento")]
+    context_strategies = [_strategy_pack(mtf[context_tf], s) for s in ("tendencia", "reversao", "rompimento", "momentum")]
+    setup_strategies = [_strategy_pack(setup_rows, s) for s in ("tendencia", "reversao", "rompimento", "momentum")]
+    trigger_strategies = [_strategy_pack(mtf[trigger_tf], s) for s in ("tendencia", "reversao", "rompimento", "momentum")]
 
     if strategy == "automatica":
         candidates = []
