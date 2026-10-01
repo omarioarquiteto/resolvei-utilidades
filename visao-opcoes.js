@@ -205,6 +205,7 @@
               <div><span>GATILHO</span><strong>${esc(mtf.trigger?.timeframe||"—")}</strong><em>${esc(mtf.trigger?.direction||"—")}</em></div>
             </div>
           </details>
+          <div id="visaoOpcoesAiNote" class="guru-disclaimer-mini">IA opcional: quando ativada, a validação ocorre depois do sinal e não interfere na direção técnica.</div>
           <div class="guru-disclaimer-mini">Estudo técnico. Não há garantia de resultado futuro. O Resolvei não executa operações.</div>
         </aside>
       </div>`;
@@ -535,6 +536,7 @@
         }
 
         // O motor técnico rápido nunca espera pelo Gemini.
+        const useAI=false;
         monitorRequestStartedAt=Date.now();
         monitorNextPollAt=0;
         const d=await jsonResponse(await iqFetch("/market-analysis",{
