@@ -18,6 +18,7 @@ REQUEST_TIMEOUT_SECONDS = 12
 SESSIONS: dict[str, dict[str, Any]] = {}
 ASSET_CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
 CANDLE_CACHE: dict[str, tuple[float, list[dict[str, float]]]] = {}
+BACKTEST_CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
 
 INTERVALS = {"1m": 60, "5m": 300, "15m": 900, "30m": 1800, "1h": 3600, "4h": 14400}
 
@@ -99,7 +100,7 @@ def _cleanup() -> None:
             except Exception:
                 pass
 
-    for cache, ttl in ((ASSET_CACHE, 120), (CANDLE_CACHE, 40)):
+    for cache, ttl in ((ASSET_CACHE, 120), (CANDLE_CACHE, 40), (BACKTEST_CACHE, 180)):
         for key, (ts, _) in list(cache.items()):
             if now - ts > ttl:
                 cache.pop(key, None)
@@ -860,6 +861,7 @@ def _historical_strategy_result(
     setup_size: int,
     trigger_size: int,
     expiry_minutes: int,
+    option_type: str,
     max_signals: int = 100,
 ) -> dict[str, Any]:
     """
@@ -1041,6 +1043,7 @@ def _backtest_selected(
         setup_size,
         trigger_size,
         expiry_minutes,
+        option_type,
         max_signals,
     )
     result["requestedTimeframe"] = timeframe
@@ -1063,6 +1066,7 @@ async def _analyze(
     authorization: str | None,
     analyze_with_ai: bool,
 ) -> dict[str, Any]:
+    analysis_started = time.perf_counter()
     if timeframe not in INTERVALS:
         raise HTTPException(status_code=400, detail="Período de vela não suportado.")
 
@@ -1086,14 +1090,15 @@ async def _analyze(
         )
 
     families = ("tendencia", "reversao", "rompimento", "momentum")
+    eval_strategies = families if strategy == "automatica" else (strategy,)
     context_strategies = [
-        _iq_strategy_pack(mtf[context_tf], strategy_name) for strategy_name in families
+        _iq_strategy_pack(mtf[context_tf], strategy_name) for strategy_name in eval_strategies
     ]
     setup_strategies = [
-        _iq_strategy_pack(setup_rows, strategy_name) for strategy_name in families
+        _iq_strategy_pack(setup_rows, strategy_name) for strategy_name in eval_strategies
     ]
     trigger_strategies = [
-        _iq_strategy_pack(trigger_rows, strategy_name) for strategy_name in families
+        _iq_strategy_pack(trigger_rows, strategy_name) for strategy_name in eval_strategies
     ]
 
     candidates: list[tuple[float, dict[str, Any], str, list[str], dict[str, Any]]] = []
@@ -1215,8 +1220,13 @@ async def _analyze(
         else "Nenhuma direção técnica suficiente."
     )
 
+    backtest_cache_key = f"{session_id}|{symbol}|{timeframe}|{selected['strategy']}|{option_type}|{expiry_minutes}"
+    cached_backtest = BACKTEST_CACHE.get(backtest_cache_key)
+    backtest_cached = bool(cached_backtest and time.time() - cached_backtest[0] <= 180)
     try:
-        if option_type == "blitz":
+        if backtest_cached:
+            backtest = cached_backtest[1]
+        elif option_type == "blitz":
             backtest = {
                 "available": False,
                 "strategy": selected["strategy"],
@@ -1244,6 +1254,8 @@ async def _analyze(
                 option_type,
                 max_signals=100,
             )
+        if not backtest_cached:
+            BACKTEST_CACHE[backtest_cache_key] = (time.time(), backtest)
     except Exception as exc:
         backtest = {
             "strategy": selected["strategy"],
@@ -1281,6 +1293,14 @@ async def _analyze(
         },
         "price": setup_rows[-1]["close"],
         "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "serverEpoch": time.time(),
+        "diagnostics": {
+            "serverDurationMs": round((time.perf_counter() - analysis_started) * 1000),
+            "backtestCached": backtest_cached,
+            "liveTrigger": live_trigger_used,
+            "candles": {tf: len(data) for tf, data in mtf.items()},
+            "strategyEvaluations": len(eval_strategies),
+        },
         "buyScore": selected["buy"],
         "sellScore": selected["sell"],
         "reasons": reasons[:10],
@@ -1402,6 +1422,9 @@ async def iq_logout(x_iq_session: str | None = Header(default=None)) -> dict[str
     for key in list(CANDLE_CACHE):
         if key.startswith(sid + "|"):
             CANDLE_CACHE.pop(key, None)
+    for key in list(BACKTEST_CACHE):
+        if key.startswith(sid + "|"):
+            BACKTEST_CACHE.pop(key, None)
 
     if item:
         try:
