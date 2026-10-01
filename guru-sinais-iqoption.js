@@ -135,8 +135,8 @@
         <div class="guru-big-signal ${classFor(a.signal)}">${esc(a.signal)}</div>
         <div class="guru-quality">${esc(a.quality)}</div>
         <div class="guru-entry-box ${a.entry?.ready ? "ready" : "wait"}">
-          <div class="guru-entry-head"><strong>⏱ MOMENTO DA ENTRADA</strong><span class="guru-entry-status">${esc(a.entry?.status || "AGUARDE O GATILHO")}</span></div>
-          <div class="guru-entry-instruction">${esc(a.entry?.instruction || (a.signal === "CALL" ? "Aguarde a confirmação do gatilho antes de clicar no CALL." : a.signal === "PUT" ? "Aguarde a confirmação do gatilho antes de clicar no PUT." : "Aguarde uma direção técnica clara."))}</div>
+          <div class="guru-entry-head"><strong>⏱ MOMENTO DA ENTRADA</strong><span class="guru-entry-status">${esc(a.entry?.ready ? "FAÇA A ENTRADA AGORA" : (a.entry?.status || "AGUARDE O GATILHO"))}</span></div>
+          <div class="guru-entry-instruction">${esc(a.entry?.ready ? "FAÇA A ENTRADA AGORA" : (a.entry?.instruction || (a.signal === "CALL" ? "Aguarde a confirmação do gatilho antes de clicar no CALL." : a.signal === "PUT" ? "Aguarde a confirmação do gatilho antes de clicar no PUT." : "Aguarde uma direção técnica clara.")))}</div>
           <div class="guru-entry-meta"><span>Direção: <strong>${esc(a.signal)}</strong></span><span>Gatilho: <strong>${esc(tfLabel(a.entry?.triggerTimeframe || tf.trigger || "1m"))}</strong></span><span>Tempo da vela: <strong>${Number(a.entry?.secondsRemaining || 0)}s</strong></span></div>
           <div class="guru-entry-disclaimer">O sinal e o timing são uma leitura técnica de estudo. A condição pode mudar rapidamente e não garante o resultado da operação.</div>
         </div>
@@ -209,7 +209,7 @@
         </div>
 
         <div class="guru-result-bottom">
-          <button class="btn primary" id="guruNewAnalysis">Nova análise</button>
+          <button class="btn primary" id="guruNewAnalysis">🔍 NOVA ANÁLISE</button>
           <span>Atualizado: ${esc(a.timestamp)}</span>
         </div>
       </div>
@@ -308,22 +308,129 @@
     document.getElementById("iqLogout")?.addEventListener("click",()=>logout(true));
   }
 
+  let monitorRunId=0;
+  let monitoring=false;
+
+  const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+
+  function setMonitoringUI(active){
+    const btn=document.getElementById("guruIqAnalyzeBtn");
+    const controls=["guruIqPair","guruIqTimeframe","guruIqStrategy","guruIqAnalyzeWithAI"]
+      .map(id=>document.getElementById(id)).filter(Boolean);
+    controls.forEach(el=>{el.disabled=active;});
+    if(btn){
+      btn.disabled=active;
+      btn.textContent=active?"⏳ MONITORANDO MERCADO…":"🔍 ANALISAR NOVAMENTE";
+      btn.classList.toggle("guru-monitoring-active",active);
+    }
+  }
+
+  function monitorStatusHtml(symbol,label,detail=""){
+    const steps=[
+      ["BUSCANDO SINAL","🔎"],
+      ["CALCULANDO MERCADO","📐"],
+      ["TESTANDO SINAIS","🧪"],
+      ["ATENÇÃO","⚠️"],
+      ["SINAL PRÓXIMO","🎯"],
+      ["FAÇA A ENTRADA AGORA","🚨"]
+    ];
+    const activeIndex=steps.findIndex(x=>x[0]===label);
+    const stepHtml=steps.map((x,i)=>`<span class="guru-monitor-step ${i===activeIndex?"active":i<activeIndex?"done":""}"><b>${x[1]}</b> ${x[0]}</span>`).join("");
+    return `<div class="card guru-monitor-card">
+      <div class="guru-monitor-head">
+        <div><span class="eyebrow">IQ OPTION · MONITORAMENTO EM TEMPO REAL</span><strong>${esc(label)}</strong></div>
+        <span class="guru-monitor-pulse" aria-hidden="true"></span>
+      </div>
+      <div class="guru-monitor-asset">Acompanhando <strong>${esc(readableAsset(symbol))}</strong></div>
+      <div class="guru-monitor-steps">${stepHtml}</div>
+      <div class="guru-monitor-detail">${esc(detail||"Atualizando a leitura...")}</div>
+    </div>`;
+  }
+
+  function monitoringLabel(analysis,cycle){
+    const entry=analysis?.entry||{};
+    if(entry.ready||entry.status==="ENTRADA CONFIRMADA") return "FAÇA A ENTRADA AGORA";
+    if(entry.status==="PRÓXIMO CANDLE") return "ATENÇÃO";
+    if(analysis?.signal&&analysis?.score>=72) return "SINAL PRÓXIMO";
+    return ["BUSCANDO SINAL","CALCULANDO MERCADO","TESTANDO SINAIS"][cycle%3];
+  }
+
+  function monitoringDetail(analysis,label,cycle){
+    const entry=analysis?.entry||{};
+    if(label==="FAÇA A ENTRADA AGORA") return `Confirmação encontrada para ${analysis?.signal==="CALL"?"CALL":"PUT"}. O monitoramento será encerrado agora.`;
+    if(label==="ATENÇÃO") return entry.instruction||"A configuração está próxima, mas o gatilho ainda não confirmou.";
+    if(label==="SINAL PRÓXIMO") return entry.instruction||`Direção ${analysis?.signal||"definida"} encontrada; acompanhando a confirmação do gatilho em tempo real.`;
+    return cycle%3===0?"Atualizando candles e procurando uma configuração válida.":cycle%3===1?"Recalculando a estratégia selecionada, contexto, setup e gatilho.":"Testando a condição atual contra os critérios da estratégia isolada.";
+  }
+
   async function analyze(){
     const btn=document.getElementById("guruIqAnalyzeBtn"),result=document.getElementById("guruIqResult"),msg=document.getElementById("guruIqMessage");
-    const symbol=document.getElementById("guruIqPair")?.value,timeframe=document.getElementById("guruIqTimeframe")?.value,strategy=document.getElementById("guruIqStrategy")?.value||"automatica",analyzeWithAI=!!document.getElementById("guruIqAnalyzeWithAI")?.checked;
-    if(!symbol||!timeframe)return;
-    btn.disabled=true;btn.textContent="⏳ CALCULANDO…";if(msg){msg.hidden=true;msg.textContent="";}
-    result.innerHTML=`<div class="card guru-loading"><div class="guru-spinner"></div><strong>Analisando ${esc(readableAsset(symbol))}</strong><span>indicadores da estratégia selecionada + contexto maior + setup + gatilho${analyzeWithAI?" + validação Gemini":"."}</span></div>`;
+    const symbol=document.getElementById("guruIqPair")?.value;
+    const timeframe=document.getElementById("guruIqTimeframe")?.value;
+    const strategy=document.getElementById("guruIqStrategy")?.value||"automatica";
+    const analyzeWithAI=!!document.getElementById("guruIqAnalyzeWithAI")?.checked;
+    if(!symbol||!timeframe||monitoring)return;
+
+    const runId=++monitorRunId;
+    monitoring=true;
+    setMonitoringUI(true);
+    if(msg){msg.hidden=true;msg.textContent="";}
+
+    let cycle=0;
+    let lastAnalysis=null;
+    result.innerHTML=monitorStatusHtml(symbol,"BUSCANDO SINAL","Iniciando a busca automática. Você não precisa clicar novamente.");
+
     try{
-      const d=await jsonResponse(await iqFetch("/market-analysis",{method:"POST",body:JSON.stringify({symbol,timeframe,strategy,analyze_with_ai:analyzeWithAI})}));
-      result.innerHTML=resultHtml(d.analysis);
-      document.getElementById("guruNewAnalysis")?.addEventListener("click",()=>window.scrollTo({top:0,behavior:"smooth"}));
-    }catch(e){result.innerHTML=`<div class="card guru-error"><strong>Não foi possível concluir a análise.</strong><span>${esc(e.message)}</span></div>`;}
-    finally{const b=document.getElementById("guruIqAnalyzeBtn");if(b){b.disabled=false;b.textContent="🔍 ANALISAR MERCADO";}}
+      while(monitoring&&runId===monitorRunId){
+        const label=monitoringLabel(lastAnalysis,cycle);
+        const detail=monitoringDetail(lastAnalysis,label,cycle);
+        result.innerHTML=monitorStatusHtml(symbol,label,detail);
+
+        const useAI=analyzeWithAI && (!lastAnalysis || cycle%5===0);
+        const d=await jsonResponse(await iqFetch("/market-analysis",{
+          method:"POST",
+          body:JSON.stringify({symbol,timeframe,strategy,analyze_with_ai:useAI})
+        }));
+
+        if(runId!==monitorRunId)break;
+        lastAnalysis=d.analysis;
+        result.innerHTML=resultHtml(lastAnalysis);
+        document.getElementById("guruNewAnalysis")?.addEventListener("click",()=>{
+          window.scrollTo({top:0,behavior:"smooth"});
+        });
+
+        if(lastAnalysis?.entry?.ready){
+          monitoring=false;
+          setMonitoringUI(false);
+          const finalBtn=document.getElementById("guruIqAnalyzeBtn");
+          if(finalBtn)finalBtn.textContent="🔍 ANALISAR NOVAMENTE";
+          break;
+        }
+
+        cycle++;
+        await sleep(4500);
+      }
+    }catch(e){
+      if(runId===monitorRunId){
+        monitoring=false;
+        result.innerHTML=`<div class="card guru-error"><strong>Não foi possível continuar o monitoramento.</strong><span>${esc(e.message)}</span><small>A análise automática foi encerrada. Clique novamente em “Analisar novamente” para iniciar outro ciclo.</small></div>`;
+        setMonitoringUI(false);
+      }
+    }finally{
+      if(runId===monitorRunId&&monitoring===false){
+        const b=document.getElementById("guruIqAnalyzeBtn");
+        if(b)b.textContent="🔍 ANALISAR NOVAMENTE";
+      }
+    }
   }
 
   async function renderRoute(){
-    const hash=location.hash||"";if(!hash.includes("/ferramenta/"+TOOL_ID))return;
+    const hash=location.hash||"";
+    if(!hash.includes("/ferramenta/"+TOOL_ID)){
+      monitoring=false;
+      monitorRunId++;
+      return;
+    }
     const existing=sessionStorage.getItem(SESSION_KEY);
     if(existing)await renderConnected();else renderLogin();
     document.title="GURÚ DOS SINAIS IQOPTION | Resolvei";window.scrollTo({top:0,behavior:"auto"});
