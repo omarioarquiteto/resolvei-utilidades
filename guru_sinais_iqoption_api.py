@@ -1190,6 +1190,129 @@ def _backtest_selected(
     return result
 
 
+def _vision_indicator_interpretation(pack: dict[str, Any]) -> dict[str, Any]:
+    """
+    Converte exclusivamente os indicadores da estratégia em uma leitura direcional.
+    Não usa histórico de acertos, backtest ou simulação de entradas.
+    """
+    indicators = pack.get("indicators") or []
+    call = sum(float(x.get("weight", 0) or 0) for x in indicators if x.get("signal") == "CALL")
+    put = sum(float(x.get("weight", 0) or 0) for x in indicators if x.get("signal") == "PUT")
+    neutral = sum(float(x.get("weight", 0) or 0) for x in indicators if x.get("signal") == "NEUTRA")
+    total = call + put + neutral
+    directional_total = call + put
+
+    if directional_total <= 0:
+        return {
+            "direction": "NEUTRA",
+            "confidence": 50.0,
+            "callWeight": 0.0,
+            "putWeight": 0.0,
+            "agreement": 0.0,
+            "activeIndicators": 0,
+        }
+
+    direction = "CALL" if call > put else "PUT" if put > call else "NEUTRA"
+    dominant = max(call, put)
+    opposite = min(call, put)
+    agreement = dominant / max(directional_total, 1e-9)
+    directional_share = directional_total / max(total, 1e-9)
+
+    # Confiança baseada na concordância dos indicadores da própria estratégia.
+    confidence = 50.0 + 50.0 * (
+        0.70 * max(0.0, 2.0 * agreement - 1.0)
+        + 0.30 * directional_share
+    )
+    return {
+        "direction": direction,
+        "confidence": round(min(99.0, confidence), 1),
+        "callWeight": round(call, 2),
+        "putWeight": round(put, 2),
+        "agreement": round(agreement * 100.0, 1),
+        "activeIndicators": sum(1 for x in indicators if x.get("signal") in {"CALL", "PUT"}),
+    }
+
+
+def _vision_trigger_confirmation(
+    rows: list[dict[str, float]],
+    timeframe: str,
+    direction: str,
+) -> dict[str, Any]:
+    """
+    Confirma somente o timing atual do candle. É um filtro de entrada, não um
+    teste histórico de sinais.
+    """
+    if direction not in {"CALL", "PUT"} or len(rows) < 3:
+        return {"ready": False, "confidence": 0.0, "status": "AGUARDANDO GATILHO"}
+
+    size = INTERVALS.get(timeframe, 60)
+    current = rows[-1]
+    prev = rows[-2]
+    prev2 = rows[-3]
+
+    start_ts = float(current.get("datetime") or 0)
+    elapsed = max(0.0, time.time() - start_ts) if start_ts else 0.0
+    remaining = max(0.0, size - elapsed)
+
+    if elapsed < min(5.0, size * 0.08):
+        return {
+            "ready": False,
+            "confidence": 0.0,
+            "status": "AGUARDANDO ABERTURA DO GATILHO",
+            "secondsRemaining": int(round(remaining)),
+            "elapsedSeconds": int(round(elapsed)),
+            "candleCloseAt": int(round(start_ts + size)) if start_ts else 0,
+        }
+
+    # Não entra quando o candle já está excessivamente avançado.
+    max_elapsed = max(35.0, size * 0.72)
+    if elapsed > max_elapsed:
+        return {
+            "ready": False,
+            "confidence": 0.0,
+            "status": "PRÓXIMO CANDLE",
+            "secondsRemaining": int(round(remaining)),
+            "elapsedSeconds": int(round(elapsed)),
+            "candleCloseAt": int(round(start_ts + size)) if start_ts else 0,
+        }
+
+    cm = _candle_metrics(current)
+    prev_cm = _candle_metrics(prev)
+
+    if direction == "CALL":
+        conditions = [
+            current["close"] > current["open"],
+            current["close"] >= prev["close"],
+            current["close"] >= prev2["close"],
+            cm["close_location"] >= 0.58,
+            cm["body_ratio"] >= 0.25,
+            prev_cm["close_location"] >= 0.45,
+        ]
+    else:
+        conditions = [
+            current["close"] < current["open"],
+            current["close"] <= prev["close"],
+            current["close"] <= prev2["close"],
+            cm["close_location"] <= 0.42,
+            cm["body_ratio"] >= 0.25,
+            prev_cm["close_location"] <= 0.55,
+        ]
+
+    hits = sum(1 for x in conditions if x)
+    trigger_confidence = 50.0 + (hits / len(conditions)) * 50.0
+
+    return {
+        "ready": hits >= 5,
+        "confidence": round(trigger_confidence, 1),
+        "status": "ENTRADA CONFIRMADA" if hits >= 5 else "AGUARDANDO CONFIRMAÇÃO",
+        "secondsRemaining": int(round(remaining)),
+        "elapsedSeconds": int(round(elapsed)),
+        "candleCloseAt": int(round(start_ts + size)) if start_ts else 0,
+        "hits": hits,
+        "conditions": len(conditions),
+    }
+
+
 async def _analyze_vision(
     client: Any,
     session_id: str,
@@ -1202,10 +1325,8 @@ async def _analyze_vision(
     analyze_with_ai: bool,
 ) -> dict[str, Any]:
     """
-    Visão Opções: leitura pontual dos indicadores atuais.
-    Não executa backtest, não simula entradas históricas e não fica procurando
-    sinais em ciclos. Uma chamada lê os candles e interpreta os indicadores
-    da estratégia escolhida.
+    Visão Opções: uma leitura técnica atual e repetível.
+    Nunca executa backtest ou teste histórico de sinais.
     """
     started = time.perf_counter()
 
@@ -1242,98 +1363,114 @@ async def _analyze_vision(
     if selected_strategy not in {"tendencia", "reversao", "rompimento", "momentum"}:
         raise HTTPException(status_code=400, detail="Estratégia não suportada.")
 
-    context = _iq_strategy_pack(context_rows, selected_strategy)
-    setup = _iq_strategy_pack(setup_rows, selected_strategy)
-    trigger = _iq_strategy_pack(trigger_rows, selected_strategy)
+    context_pack = _iq_strategy_pack(context_rows, selected_strategy)
+    setup_pack = _iq_strategy_pack(setup_rows, selected_strategy)
+    trigger_pack = _iq_strategy_pack(trigger_rows, selected_strategy)
 
-    directions = [context["direction"], setup["direction"], trigger["direction"]]
-    directional = setup["direction"] in {"CALL", "PUT"}
+    context_read = _vision_indicator_interpretation(context_pack)
+    setup_read = _vision_indicator_interpretation(setup_pack)
+    trigger_read = _vision_indicator_interpretation(trigger_pack)
 
-    # A direção vem dos indicadores da própria estratégia. Os demais timeframes
-    # apenas confirmam ou enfraquecem essa leitura; nenhum histórico é testado.
+    candidate = setup_read["direction"]
+    candidate_is_directional = candidate in {"CALL", "PUT"}
+
+    mtf_direction_count = sum(
+        1 for x in (context_read, trigger_read) if x["direction"] == candidate
+    ) if candidate_is_directional else 0
+
+    # A direção é produzida pelos indicadores. Contexto oposto forte derruba a leitura;
+    # neutralidade não impede um setup forte. O timing continua separado abaixo.
     score = (
-        float(setup["confidence"]) * 0.55
-        + float(context["confidence"]) * 0.25
-        + float(trigger["confidence"]) * 0.20
+        setup_read["confidence"] * 0.60
+        + context_read["confidence"] * 0.20
+        + trigger_read["confidence"] * 0.20
     )
 
-    alignment = sum(1 for d in directions if d == setup["direction"]) if directional else 0
-    divergence = sum(1 for d in directions if d in {"CALL", "PUT"} and d != setup["direction"]) if directional else 0
+    if candidate_is_directional:
+        if context_read["direction"] == candidate:
+            score += 6
+        elif context_read["direction"] in {"CALL", "PUT"} and context_read["direction"] != candidate and context_read["confidence"] >= 72:
+            score -= 12
 
-    if directional and alignment == 3:
-        score += 8
-    elif directional and alignment == 2 and divergence == 0:
-        score += 2
-    elif directional and divergence:
-        score -= 8
+        if trigger_read["direction"] == candidate:
+            score += 5
+        elif trigger_read["direction"] in {"CALL", "PUT"} and trigger_read["direction"] != candidate:
+            score -= 8
 
-    # Confirmação por indicadores: a estratégia precisa estar elegível e
-    # apresentar direção dominante no timeframe de setup.
-    confidence_floor = float(setup.get("minConfidence", 76.0))
-    indicator_confident = bool(
-        directional
-        and setup.get("signalEligible")
-        and float(setup["confidence"]) >= confidence_floor
+    indicator_ready = bool(
+        candidate_is_directional
+        and setup_read["confidence"] >= 68
+        and setup_read["agreement"] >= 60
+        and setup_pack["activeGroups"] >= 2
     )
 
-    # A Visão só publica CALL/PUT quando a própria leitura dos indicadores
-    # ultrapassa o nível mínimo definido para a estratégia.
-    signal = setup["direction"] if indicator_confident else "SEM DIREÇÃO"
+    trigger = _vision_trigger_confirmation(trigger_rows, trigger_tf, candidate if indicator_ready else "NEUTRA")
+    final_ready = bool(indicator_ready and trigger.get("ready"))
 
-    score = round(max(0.0, min(99.0, score)), 1)
-    if signal == "SEM DIREÇÃO":
-        quality = "INDICADORES DIVIDIDOS"
-    elif score >= 86:
-        quality = "CONFLUÊNCIA MUITO FORTE"
-    elif score >= 78:
-        quality = "CONFLUÊNCIA FORTE"
-    elif score >= 70:
-        quality = "CONFLUÊNCIA MODERADA"
+    signal = candidate if final_ready else "SEM SINAL"
+    score = round(max(0.0, min(99.0, score + (trigger.get("confidence", 0) * 0.08 if indicator_ready else 0.0))), 1)
+
+    if final_ready:
+        quality = (
+            "CONFLUÊNCIA MUITO FORTE" if score >= 86
+            else "CONFLUÊNCIA FORTE" if score >= 78
+            else "CONFLUÊNCIA MODERADA"
+        )
     else:
-        quality = "CONFLUÊNCIA BAIXA"
+        quality = "AGUARDANDO CONFIRMAÇÃO DOS INDICADORES" if indicator_ready else "INDICADORES EM CONFLUÊNCIA INSUFICIENTE"
 
     reasons = [
-        f"{selected_strategy}: {', '.join(setup.get('indicatorSet', []))}.",
-        f"Setup {setup_tf}: {setup['direction']} com {setup['confidence']:.0f}% de confluência dos indicadores.",
-        f"Contexto {context_tf}: {context['direction']} ({context['confidence']:.0f}%).",
-        f"Gatilho {trigger_tf}: {trigger['direction']} ({trigger['confidence']:.0f}%).",
+        f"{selected_strategy}: {', '.join(setup_pack.get('indicatorSet', []))}.",
+        f"Indicadores do setup {setup_tf}: {setup_read['direction']} com {setup_read['confidence']:.0f}% de concordância.",
+        f"Indicadores do contexto {context_tf}: {context_read['direction']} com {context_read['confidence']:.0f}%.",
+        f"Indicadores do gatilho {trigger_tf}: {trigger_read['direction']} com {trigger_read['confidence']:.0f}%.",
     ]
 
-    if alignment == 3 and directional:
-        reasons.append("Os três timeframes estão alinhados pela leitura dos indicadores.")
-    elif directional:
-        reasons.append("Os timeframes não estão totalmente alinhados; a confiança foi reduzida.")
+    if indicator_ready:
+        reasons.append("A direção técnica atingiu o limiar pelos indicadores da estratégia.")
+    else:
+        reasons.append("O motor continua lendo os indicadores atuais até a confluência mínima.")
+
+    if trigger.get("ready"):
+        reasons.append("O candle atual confirmou o momento do gatilho.")
+    else:
+        reasons.append(f"Gatilho: {trigger.get('status', 'aguardando confirmação')}.")
 
     warnings: list[str] = []
-    if not indicator_confident:
-        warnings.append("A leitura não atingiu o nível máximo de confluência dos indicadores.")
-    if directional and divergence:
-        warnings.append("Existe divergência entre os timeframes analisados.")
+    if context_read["direction"] in {"CALL", "PUT"} and context_read["direction"] != candidate:
+        warnings.append("O contexto está em direção oposta ao setup.")
+    if trigger_read["direction"] in {"CALL", "PUT"} and trigger_read["direction"] != candidate:
+        warnings.append("Os indicadores do gatilho estão divergentes do setup.")
+    if not indicator_ready:
+        warnings.append("Ainda não há confluência suficiente nos indicadores da estratégia.")
     if option_type == "digital":
-        warnings.append("Digital: o strike/preço de exercício não é recebido pela API comunitária; a leitura é direcional.")
+        warnings.append("Digital: a API comunitária não fornece o strike/preço de exercício; a leitura é direcional.")
     if option_type == "blitz":
-        warnings.append("Blitz: a leitura usa candles disponíveis em tempo real; não há simulação histórica de segundos.")
+        warnings.append("Blitz: o timing usa o candle atual; não existe simulação histórica de segundos.")
 
-    values = dict(setup.get("values", {}))
-    values["ContextDirection"] = context["direction"]
-    values["ContextConfidence"] = context["confidence"]
-    values["SetupDirection"] = setup["direction"]
-    values["SetupConfidence"] = setup["confidence"]
-    values["TriggerDirection"] = trigger["direction"]
-    values["TriggerConfidence"] = trigger["confidence"]
+    values = dict(setup_pack.get("values", {}))
+    values.update({
+        "ContextDirection": context_read["direction"],
+        "ContextConfidence": context_read["confidence"],
+        "SetupDirection": setup_read["direction"],
+        "SetupConfidence": setup_read["confidence"],
+        "TriggerDirection": trigger_read["direction"],
+        "TriggerConfidence": trigger_read["confidence"],
+        "TriggerReady": bool(trigger.get("ready")),
+    })
 
     gemini = (
         guru_base._gemini_review(
             symbol,
             f"{context_tf} → {setup_tf} → {trigger_tf} | {OPTION_LABELS[option_type]} | expiração {expiry_minutes}{' s' if option_type == 'blitz' else ' min'}",
             selected_strategy,
-            [setup],
+            [setup_pack],
             setup_rows[-1]["close"],
             setup_rows,
             authorization,
         )
-        if analyze_with_ai
-        else {"available": False, "reason": "IA desativada."}
+        if analyze_with_ai and final_ready
+        else {"available": False, "reason": "IA opcional após confirmação técnica."}
     )
 
     return {
@@ -1362,35 +1499,39 @@ async def _analyze_vision(
             "liveTrigger": live_used,
             "candles": {tf: len(data) for tf, data in mtf.items()},
             "strategyEvaluations": 1,
-            "analysisType": "indicadores atuais; sem backtest e sem teste histórico de sinais",
+            "analysisType": "interpretação atual de indicadores + confirmação do candle; sem backtest",
+            "indicatorAlignment": mtf_direction_count,
         },
-        "buyScore": setup["buy"],
-        "sellScore": setup["sell"],
+        "buyScore": setup_pack["buy"],
+        "sellScore": setup_pack["sell"],
         "reasons": reasons[:10],
         "warnings": warnings[:8],
         "strategy": selected_strategy,
-        "strategyLabel": setup["strategyLabel"],
-        "indicatorSet": setup.get("indicatorSet", []),
+        "strategyLabel": setup_pack["strategyLabel"],
+        "indicatorSet": setup_pack.get("indicatorSet", []),
         "indicators": values,
-        "indicatorReadings": setup.get("indicators", []),
+        "indicatorReadings": setup_pack.get("indicators", []),
         "backtest": {
             "available": False,
             "skipped": True,
             "strategy": selected_strategy,
             "testedSignals": 0,
             "instrumentModel": "Não utilizado na Visão Opções.",
-            "entryModel": "Leitura atual dos indicadores",
+            "entryModel": "Indicadores atuais + candle de gatilho",
         },
         "entry": {
-            "ready": signal in {"CALL", "PUT"} and indicator_confident,
-            "status": "SINAL TÉCNICO" if signal in {"CALL", "PUT"} else "SEM DIREÇÃO",
+            **trigger,
+            "ready": final_ready,
+            "status": "ENTRADA CONFIRMADA" if final_ready else ("SINAL PRÓXIMO" if indicator_ready else "LENDO INDICADORES"),
             "instruction": (
-                f"Leitura atual dos indicadores aponta {signal}."
-                if signal in {"CALL", "PUT"}
-                else "Os indicadores estão divididos; não foi formada uma direção técnica dominante."
+                f"CLIQUE NO {signal} AGORA. O momento foi confirmado pelo candle atual."
+                if final_ready
+                else (
+                    f"Direção {candidate} encontrada. Aguardando confirmação do candle para entrada."
+                    if candidate_is_directional and indicator_ready
+                    else "Interpretando os indicadores da estratégia; nenhuma entrada foi confirmada."
+                )
             ),
-            "secondsRemaining": 0,
-            "elapsedSeconds": 0,
             "direction": signal,
             "triggerTimeframe": trigger_tf,
             "setupTimeframe": setup_tf,
@@ -1398,30 +1539,31 @@ async def _analyze_vision(
         "mtf": {
             "context": {
                 "timeframe": context_tf,
-                "direction": context["direction"],
-                "confidence": context["confidence"],
+                "direction": context_read["direction"],
+                "confidence": context_read["confidence"],
             },
             "setup": {
                 "timeframe": setup_tf,
-                "direction": setup["direction"],
-                "confidence": setup["confidence"],
+                "direction": setup_read["direction"],
+                "confidence": setup_read["confidence"],
             },
             "trigger": {
                 "timeframe": trigger_tf,
-                "direction": trigger["direction"],
-                "confidence": trigger["confidence"],
+                "direction": trigger_read["direction"],
+                "confidence": trigger_read["confidence"],
             },
             "score": score,
             "notes": reasons,
             "liveTrigger": live_used,
         },
         "gemini": gemini,
-        "analysisState": "SINAL TÉCNICO" if signal in {"CALL", "PUT"} else "SEM DIREÇÃO",
+        "analysisState": "ENTRADA CONFIRMADA" if final_ready else ("SINAL PRÓXIMO" if indicator_ready else "ANALISANDO INDICADORES"),
         "fastMode": True,
-        "proximity": score,
-        "signalConfirmed": bool(signal in {"CALL", "PUT"} and indicator_confident),
-        "source": "IQ Option + interpretação de indicadores MTF",
+        "proximity": score if indicator_ready else max(35.0, setup_read["confidence"]),
+        "signalConfirmed": final_ready,
+        "source": "IQ Option + interpretação de indicadores MTF + gatilho atual",
     }
+
 
 
 async def _analyze(
