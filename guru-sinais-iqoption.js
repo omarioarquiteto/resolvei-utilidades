@@ -395,9 +395,7 @@
         if(runId!==monitorRunId)break;
         lastAnalysis=d.analysis;
         result.innerHTML=resultHtml(lastAnalysis);
-        document.getElementById("guruNewAnalysis")?.addEventListener("click",()=>{
-          window.scrollTo({top:0,behavior:"smooth"});
-        });
+        document.getElementById("guruNewAnalysis")?.addEventListener("click",()=>analyze());
 
         if(lastAnalysis?.entry?.ready){
           monitoring=false;
