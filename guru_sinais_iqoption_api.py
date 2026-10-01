@@ -1317,6 +1317,9 @@ async def _analyze(
         },
         "gemini": gemini,
         "indicators": selected["values"],
+        "analysisState": trigger_state.get("state") or trigger_state.get("status") or "ANALISANDO MERCADO",
+        "proximity": round(float(trigger_state.get("proximity", 0.0) or 0.0), 1),
+        "signalConfirmed": bool(trigger_state.get("ready")),
         "source": "IQ Option + motor técnico MTF + tipo de opção + expiração + gatilho em tempo real",
     }
 
