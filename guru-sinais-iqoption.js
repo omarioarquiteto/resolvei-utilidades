@@ -322,28 +322,72 @@
     }
   }
 
-  function monitorStatusHtml(symbol,label,detail=""){
-    const stage={"BUSCANDO SINAL":"1/4","CALCULANDO MERCADO":"2/4","TESTANDO SINAIS":"3/4","ATENÇÃO":"4/4","SINAL PRÓXIMO":"4/4","FAÇA A ENTRADA AGORA":"4/4"}[label]||"1/4";
-    return `<div class="guru-monitor-compact card">
-      <div class="guru-monitor-main"><span class="guru-live-dot"></span><div><small>MONITORAMENTO ATIVO · ${esc(stage)}</small><strong>${esc(label)}</strong><span>${esc(readableAsset(symbol))}</span></div></div>
-      <div class="guru-monitor-detail">${esc(detail||"Atualizando leitura técnica…")}</div>
-    </div>`;
+  function monitorStatusHtml(symbol,analysis=null){
+    const label=monitoringLabel(analysis,0);
+    const detail=monitoringDetail(analysis,label,0);
+    const p=Math.max(0,Math.min(100,Number(analysis?.proximity||0)));
+    return `
+      <div class="guru-monitor-compact card">
+        <div class="guru-monitor-head">
+          <div class="guru-monitor-main">
+            <span class="guru-live-dot"></span>
+            <div>
+              <small>MONITORAMENTO ATIVO</small>
+              <strong id="guruIqMonitorLabel">${esc(label)}</strong>
+              <span>${esc(readableAsset(symbol))}</span>
+            </div>
+          </div>
+        </div>
+        <div class="guru-monitor-progress">
+          <div class="guru-monitor-progress-top">
+            <span>PROXIMIDADE PARA CONFIRMAÇÃO</span>
+            <strong id="guruIqMonitorPercent">${p.toFixed(0)}%</strong>
+          </div>
+          <div class="guru-progress-track" aria-hidden="true"><span id="guruIqMonitorBar" style="width:${p}%"></span></div>
+        </div>
+        <div class="guru-monitor-detail" id="guruIqMonitorDetail">${esc(detail)}</div>
+      </div>`;
   }
 
   function monitoringLabel(analysis,cycle){
     const entry=analysis?.entry||{};
-    if(entry.ready||entry.status==="ENTRADA CONFIRMADA") return "FAÇA A ENTRADA AGORA";
-    if(entry.status==="PRÓXIMO CANDLE") return "ATENÇÃO";
-    if(analysis?.signal&&analysis?.score>=72) return "SINAL PRÓXIMO";
-    return ["BUSCANDO SINAL","CALCULANDO MERCADO","TESTANDO SINAIS"][cycle%3];
+    if(entry.ready||analysis?.signalConfirmed) return "SINAL CONFIRMADO";
+    const state=String(analysis?.analysisState||entry.state||entry.status||"").toUpperCase();
+    const p=Math.max(0,Math.min(100,Number(analysis?.proximity||entry.proximity||0)));
+    if(state==="SINAL PRÓXIMO"||p>=82) return "SINAL PRÓXIMO";
+    if(state==="ATENÇÃO"||p>=65) return "ATENÇÃO";
+    if(state==="BUSCANDO DIREÇÃO") return "BUSCANDO DIREÇÃO";
+    return "ANALISANDO MERCADO";
   }
 
   function monitoringDetail(analysis,label,cycle){
     const entry=analysis?.entry||{};
-    if(label==="FAÇA A ENTRADA AGORA") return `Confirmação encontrada para ${analysis?.signal==="CALL"?"CALL":"PUT"}. O monitoramento será encerrado agora.`;
-    if(label==="ATENÇÃO") return entry.instruction||"A configuração está próxima, mas o gatilho ainda não confirmou.";
-    if(label==="SINAL PRÓXIMO") return entry.instruction||`Direção ${analysis?.signal||"definida"} encontrada; acompanhando a confirmação do gatilho em tempo real.`;
-    return cycle%3===0?"Atualizando candles e procurando uma configuração válida.":cycle%3===1?"Recalculando a estratégia selecionada, contexto, setup e gatilho.":"Testando a condição atual contra os critérios da estratégia isolada.";
+    if(label==="SINAL CONFIRMADO"){
+      const direction=analysis?.signal==="CALL"?"CALL":"PUT";
+      return `Confirmação técnica encontrada para ${direction}. Encerrando o monitoramento e exibindo o sinal.`;
+    }
+    if(label==="ATENÇÃO"||label==="SINAL PRÓXIMO"){
+      return entry.instruction||"A configuração está avançando, aguardando a confirmação final do gatilho.";
+    }
+    const direction=analysis?.signal==="CALL"||analysis?.signal==="PUT"
+      ? analysis.signal
+      : (analysis?.mtf?.setup?.direction==="CALL"||analysis?.mtf?.setup?.direction==="PUT" ? analysis.mtf.setup.direction : "");
+    if(direction){
+      return `Direção ${direction} identificada. O motor continua acompanhando confiança, grupos e gatilho antes de confirmar.`;
+    }
+    return "Lendo candles e procurando uma direção que atenda aos critérios da estratégia selecionada.";
+  }
+
+  function updateMonitorView(analysis,label,detail){
+    const labelEl=document.getElementById("guruIqMonitorLabel");
+    const percentEl=document.getElementById("guruIqMonitorPercent");
+    const barEl=document.getElementById("guruIqMonitorBar");
+    const detailEl=document.getElementById("guruIqMonitorDetail");
+    const p=Math.max(0,Math.min(100,Number(analysis?.proximity||0)));
+    if(labelEl) labelEl.textContent=label;
+    if(percentEl) percentEl.textContent=`${p.toFixed(0)}%`;
+    if(barEl) barEl.style.width=`${p}%`;
+    if(detailEl) detailEl.textContent=detail||"Atualizando leitura técnica…";
   }
 
   async function analyze(){
@@ -363,13 +407,15 @@
 
     let cycle=0;
     let lastAnalysis=null;
-    result.innerHTML=monitorStatusHtml(symbol,"BUSCANDO SINAL","Iniciando a busca automática. Você não precisa clicar novamente.");
+    result.innerHTML=monitorStatusHtml(symbol,null);
 
     try{
       while(monitoring&&runId===monitorRunId){
-        const label=monitoringLabel(lastAnalysis,cycle);
-        const detail=monitoringDetail(lastAnalysis,label,cycle);
-        result.innerHTML=monitorStatusHtml(symbol,label,detail);
+        if(lastAnalysis){
+          const label=monitoringLabel(lastAnalysis,cycle);
+          const detail=monitoringDetail(lastAnalysis,label,cycle);
+          updateMonitorView(lastAnalysis,label,detail);
+        }
 
         const useAI=analyzeWithAI && (!lastAnalysis || cycle%5===0);
         const d=await jsonResponse(await iqFetch("/market-analysis",{
@@ -378,13 +424,16 @@
         }));
 
         if(runId!==monitorRunId)break;
-        lastAnalysis=d.analysis;
-        result.innerHTML=resultHtml(lastAnalysis);
-        document.getElementById("guruNewAnalysis")?.addEventListener("click",()=>analyze());
+        lastAnalysis=d.analysis||{};
+        const label=monitoringLabel(lastAnalysis,cycle);
+        const detail=monitoringDetail(lastAnalysis,label,cycle);
+        updateMonitorView(lastAnalysis,label,detail);
 
-        if(lastAnalysis?.entry?.ready){
+        if(lastAnalysis?.entry?.ready||lastAnalysis?.signalConfirmed){
           monitoring=false;
           setMonitoringUI(false);
+          result.innerHTML=resultHtml(lastAnalysis);
+          document.getElementById("guruNewAnalysis")?.addEventListener("click",()=>analyze());
           const finalBtn=document.getElementById("guruIqAnalyzeBtn");
           if(finalBtn)finalBtn.textContent="🔍 ANALISAR NOVAMENTE";
           break;
@@ -407,7 +456,7 @@
     }
   }
 
-  async function renderRoute(){
+async function renderRoute(){
     const hash=location.hash||"";
     if(!hash.includes("/ferramenta/"+TOOL_ID)){
       monitoring=false;
