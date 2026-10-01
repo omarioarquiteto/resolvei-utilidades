@@ -3,7 +3,7 @@
   const API = "/api/guru-sinais-iqoption";
   const SESSION_KEY = "resolvei_iqoption_session";
   const timeframes = [["1m","1 minuto"],["5m","5 minutos"],["15m","15 minutos"],["30m","30 minutos"],["1h","1 hora"]];
-  const strategies = [["automatica","🤖 Automática — maior confluência"],["tendencia","📈 Tendência + confluência"],["reversao","↩️ Reversão à média"],["rompimento","🚀 Rompimento + momentum"]];
+  const strategies = [["automatica","🤖 Automática — escolhe 1"],["tendencia","📈 Tendência"],["reversao","↩️ Reversão"],["rompimento","🚀 Rompimento"],["momentum","⚡ Momentum"]];
   const esc = v => String(v ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c]));
 
   function card() {
@@ -80,7 +80,7 @@
           <div class="field"><label for="guruIqTimeframe">Timeframe de entrada</label><select id="guruIqTimeframe">${timeframes.map(([v,t])=>`<option value="${v}">${t}</option>`).join("")}</select></div>
           <div class="field"><label for="guruIqStrategy">Estratégia</label><select id="guruIqStrategy">${strategies.map(([v,t])=>`<option value="${v}">${t}</option>`).join("")}</select></div>
         </div>
-        <label class="guru-ai-toggle"><input type="checkbox" id="guruIqAnalyzeWithAI"><span>Analisar com I.A.</span><small>Usa o Gemini para validar o sinal.</small></label>
+        <label class="guru-ai-toggle"><input type="checkbox" id="guruIqAnalyzeWithAI"><span>Analisar com I.A.</span><small>Valida somente a estratégia selecionada.</small></label>
         <button class="guru-analyze-btn" id="guruIqAnalyzeBtn" ${hasAssets?"":"disabled"}>🔍 ANALISAR MERCADO</button>
         <div id="guruIqMessage" class="notice" hidden></div>
       </section>
@@ -97,11 +97,13 @@
     const reasons = (a.reasons || []).slice(0,7).map(x => `<li>✓ ${esc(x)}</li>`).join("");
     const warnings = (a.warnings || []).slice(0,5).map(x => `<li>⚠ ${esc(x)}</li>`).join("");
     const score = Math.max(0, Math.min(100, Number(a.score || 0)));
-    const strategyRows = (a.strategies || []).map(s => `
-      <div class="guru-strategy-card ${s.direction === "CALL" ? "guru-strategy-call" : s.direction === "PUT" ? "guru-strategy-put" : ""}">
-        <div><strong>${esc(s.strategyLabel)}</strong><span>${esc(s.direction)}</span></div>
-        <small>${Number(s.confidence || 0).toFixed(0)}% · ${Number(s.indicators?.length || 0)} indicadores</small>
-      </div>`).join("");
+    const selectedStrategy = (a.strategies || []).find(s => s.strategy === a.strategy) || a.strategies?.[0];
+    const strategyRows = selectedStrategy ? `
+      <div class="guru-strategy-card ${selectedStrategy.direction === "CALL" ? "guru-strategy-call" : selectedStrategy.direction === "PUT" ? "guru-strategy-put" : ""}">
+        <div><strong>${esc(selectedStrategy.strategyLabel)}</strong><span>${esc(selectedStrategy.direction)}</span></div>
+        <small>${Number(selectedStrategy.confidence || 0).toFixed(0)}% · ${Number(selectedStrategy.indicators?.length || 0)} indicadores · estratégia isolada</small>
+      </div>` : "";
+
     const indicators = (a.strategies || []).find(s => s.strategy === a.strategy)?.indicators || [];
     const indicatorRows = indicators.map(i => `
       <div class="guru-indicator-row">
@@ -141,7 +143,7 @@
 
         <div class="guru-ai-box">
           <strong>✨ Gemini</strong>
-          <span>${gemini.available ? "Validação da leitura técnica concluída." : "Validação IA indisponível; sinal calculado pelo motor técnico."}</span>
+          <span>${gemini.available ? "Validação da leitura técnica concluída." : "Validação IA indisponível; sinal calculado somente pela estratégia selecionada."}</span>
           ${gemini.reason ? `<small>${esc(gemini.reason)}</small>` : ""}
         </div>
 
@@ -153,7 +155,7 @@
             <span>Contexto → Setup → Gatilho</span>
           </div>
           <div class="guru-mtf-grid">${mtfRows}</div>
-          <small class="guru-mtf-note">O timeframe maior filtra a direção, o selecionado confirma o setup e o menor procura o momento de entrada.</small>
+          <small class="guru-mtf-note">A mesma estratégia é aplicada no contexto, setup e gatilho; nenhuma outra estratégia entra no cálculo.</small>
         </div>
 
         <div class="guru-columns">
@@ -284,7 +286,7 @@
     const symbol=document.getElementById("guruIqPair")?.value,timeframe=document.getElementById("guruIqTimeframe")?.value,strategy=document.getElementById("guruIqStrategy")?.value||"automatica",analyzeWithAI=!!document.getElementById("guruIqAnalyzeWithAI")?.checked;
     if(!symbol||!timeframe)return;
     btn.disabled=true;btn.textContent="⏳ CALCULANDO…";if(msg){msg.hidden=true;msg.textContent="";}
-    result.innerHTML=`<div class="card guru-loading"><div class="guru-spinner"></div><strong>Analisando ${esc(readableAsset(symbol))}</strong><span>12 indicadores por estratégia + contexto maior + setup + gatilho${analyzeWithAI?" + validação Gemini":"."}</span></div>`;
+    result.innerHTML=`<div class="card guru-loading"><div class="guru-spinner"></div><strong>Analisando ${esc(readableAsset(symbol))}</strong><span>indicadores da estratégia selecionada + contexto maior + setup + gatilho${analyzeWithAI?" + validação Gemini":"."}</span></div>`;
     try{
       const d=await jsonResponse(await iqFetch("/market-analysis",{method:"POST",body:JSON.stringify({symbol,timeframe,strategy,analyze_with_ai:analyzeWithAI})}));
       result.innerHTML=resultHtml(d.analysis);
