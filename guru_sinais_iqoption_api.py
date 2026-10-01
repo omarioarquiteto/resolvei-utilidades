@@ -563,7 +563,7 @@ def _iq_strategy_pack(rows: list[dict[str, float]], strategy: str) -> dict[str, 
         "buy": round(buy, 2),
         "sell": round(sell, 2),
         "confidence": round(confidence, 1),
-        "direction": direction if signal_eligible else "NEUTRA",
+        "direction": direction,
         "signalEligible": signal_eligible,
         "minConfidence": min_confidence,
         "requiredGroups": required_groups,
@@ -673,11 +673,11 @@ def _iq_mtf_score(
     score = float(setup["confidence"])
     notes: list[str] = []
 
-    if not setup.get("signalEligible"):
-        return "AGUARDAR", max(0.0, score - 8), ["O setup não atingiu os filtros mínimos da estratégia."], {
+    if s not in {"CALL", "PUT"} or float(setup.get("confidence", 0)) < 60:
+        return "AGUARDAR", max(0.0, score - 5), ["O setup ainda não apresenta direção técnica suficiente."], {
             "ready": False,
-            "status": "SEM SETUP",
-            "instruction": "Aguarde o setup atingir os critérios mínimos da estratégia.",
+            "status": "SEM DIREÇÃO",
+            "instruction": "A leitura ainda está dividida; aguarde uma direção mais clara.",
             "secondsRemaining": 0,
             "elapsedSeconds": 0,
         }
@@ -710,13 +710,13 @@ def _iq_mtf_score(
     if strategy == "reversao":
         eligible = (
             s in {"CALL", "PUT"}
-            and score >= 73
+            and score >= 67
             and not (c in {"CALL", "PUT"} and c != s and context["confidence"] >= 80)
         )
     else:
         eligible = (
             s in {"CALL", "PUT"}
-            and score >= 72
+            and score >= 67
             and not (c in {"CALL", "PUT"} and c != s and context["confidence"] >= 82)
         )
 
