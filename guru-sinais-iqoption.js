@@ -2,7 +2,9 @@
   const TOOL_ID = "guru-dos-sinais-iqoption";
   const API = "/api/guru-sinais-iqoption";
   const SESSION_KEY = "resolvei_iqoption_session";
-  const timeframes = [["1m","1 minuto"],["5m","5 minutos"],["15m","15 minutos"],["30m","30 minutos"],["1h","1 hora"]];
+  const candlePeriods = [["1m","1 minuto"],["5m","5 minutos"],["15m","15 minutos"],["30m","30 minutos"],["1h","1 hora"]];
+  const optionTypes = [["binary","Binárias"],["digital","Digitais"],["blitz","Blitz"]];
+  const expiryOptions = {binary:[[1,"1 minuto"],[5,"5 minutos"],[15,"15 minutos"]],digital:[[1,"1 minuto"],[5,"5 minutos"],[15,"15 minutos"]],blitz:[[30,"30 segundos"],[60,"60 segundos"]]};
   const strategies = [["automatica","🤖 Automática — escolhe 1"],["tendencia","📈 Tendência"],["reversao","↩️ Reversão"],["rompimento","🚀 Rompimento"],["momentum","⚡ Momentum"]];
   const esc = v => String(v ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c]));
 
@@ -66,28 +68,52 @@
 
   function shell(assets){
     const hasAssets=(assets?.normal?.length||0)+(assets?.otc?.length||0)>0;
-    return `<div class="guru-simple">
+    return \`<div class="guru-simple">
       <section class="guru-simple-head"><span class="eyebrow">IQ OPTION · DADOS DIRETOS</span>
         <h1>🧙‍♂️ GURÚ DOS SINAIS IQOPTION</h1>
-        <p>Mesma leitura técnica do GURÚ DOS SINAIS, mas usando candles diretamente da IQ Option.</p>
+        <p>Motor técnico exclusivo do IQOPTION: período da vela, tempo de expiração e tipo de opção são analisados separadamente.</p>
       </section>
       <section class="card guru-control-card">
-        <div class="iq-connected-bar"><span><strong>● CONECTADO À IQ OPTION</strong><small>${hasAssets?"Ativos de opções disponíveis agora.":"Nenhum ativo de opções está aberto agora."}</small></span>
+        <div class="iq-connected-bar"><span><strong>● CONECTADO À IQ OPTION</strong><small>\${hasAssets?"Ativos de opções disponíveis agora.":"Nenhum ativo de opções está aberto agora."}</small></span>
           <button class="btn ghost small" id="iqRefreshAssets">↻ Atualizar ativos</button><button class="btn ghost small" id="iqLogout">Sair</button>
         </div>
-        <div class="guru-control-grid guru-control-grid-3">
-          <div class="field"><label for="guruIqPair">Par de moedas</label><select id="guruIqPair">${assetOptions(assets)}</select></div>
-          <div class="field"><label for="guruIqTimeframe">Timeframe de entrada</label><select id="guruIqTimeframe">${timeframes.map(([v,t])=>`<option value="${v}">${t}</option>`).join("")}</select></div>
-          <div class="field"><label for="guruIqStrategy">Estratégia</label><select id="guruIqStrategy">${strategies.map(([v,t])=>`<option value="${v}">${t}</option>`).join("")}</select></div>
+        <div class="guru-control-grid guru-control-grid-4">
+          <div class="field"><label for="guruIqOptionType">Tipo de opção</label><select id="guruIqOptionType">\${optionTypes.map(([v,t])=>\`<option value="\${v}">\${t}</option>\`).join("")}</select></div>
+          <div class="field"><label for="guruIqPair">Par de moedas</label><select id="guruIqPair">\${assetOptions(assets)}</select></div>
+          <div class="field"><label for="guruIqCandlePeriod">Período da vela</label><select id="guruIqCandlePeriod">\${candlePeriods.map(([v,t])=>\`<option value="\${v}">\${t}</option>\`).join("")}</select></div>
+          <div class="field"><label for="guruIqExpiry">Tempo de expiração</label><select id="guruIqExpiry"></select></div>
         </div>
-        <label class="guru-ai-toggle"><input type="checkbox" id="guruIqAnalyzeWithAI"><span>Analisar com I.A.</span><small>Valida somente a estratégia selecionada.</small></label>
-        <button class="guru-analyze-btn" id="guruIqAnalyzeBtn" ${hasAssets?"":"disabled"}>🔍 ANALISAR MERCADO</button>
+        <div class="guru-control-grid guru-control-grid-2">
+          <div class="field"><label for="guruIqStrategy">Estratégia</label><select id="guruIqStrategy">\${strategies.map(([v,t])=>\`<option value="\${v}">\${t}</option>\`).join("")}</select></div>
+          <label class="guru-ai-toggle"><input type="checkbox" id="guruIqAnalyzeWithAI"><span>Analisar com I.A.</span><small>Valida somente a estratégia selecionada.</small></label>
+        </div>
+        <div id="guruIqOptionHint" class="guru-option-hint"></div>
+        <button class="guru-analyze-btn" id="guruIqAnalyzeBtn" \${hasAssets?"":"disabled"}>🔍 ANALISAR MERCADO</button>
         <div id="guruIqMessage" class="notice" hidden></div>
       </section>
-      <section id="guruIqResult"><div class="card guru-empty"><div class="guru-empty-icon">📊</div><strong>Pronto para analisar</strong><span>Os candles serão buscados diretamente na sessão conectada da IQ Option.</span></div></section>
-      <section class="guru-foot-note"><span>Ferramenta de estudo. A API comunitária da IQ Option é não oficial, os indicadores não garantem resultado futuro e o sistema não executa operações.</span></section>
-    </div>`;
+      <section id="guruIqResult"><div class="card guru-empty"><div class="guru-empty-icon">📊</div><strong>Pronto para analisar</strong><span>Escolha separadamente o tipo da opção, o período das velas e o vencimento.</span></div></section>
+      <section class="guru-foot-note"><span>Ferramenta de estudo. A API comunitária da IQ Option é não oficial; o Resolvei não executa operações e os indicadores não garantem resultados futuros.</span></section>
+    </div>\`;
   }
+
+  function syncOptionControls(){
+    const type=document.getElementById("guruIqOptionType")?.value||"binary";
+    const expiry=document.getElementById("guruIqExpiry");
+    const hint=document.getElementById("guruIqOptionHint");
+    const current=expiry?.value||"";
+    if(expiry){
+      expiry.innerHTML=(expiryOptions[type]||expiryOptions.binary).map(([v,t])=>\`<option value="\${v}">\${t}</option>\`).join("");
+      if([...expiry.options].some(o=>o.value===current))expiry.value=current;
+    }
+    if(hint){
+      hint.textContent=type==="digital"
+        ?"Digital: a direção é analisada separadamente, mas o strike/preço de exercício da plataforma não é recebido pela API comunitária."
+        :type==="blitz"
+          ?"Blitz: expiração curta e confirmação em tempo real; o backtest histórico de segundos fica desativado com dados de candles de 1 minuto."
+          :"Binárias: o foco é a direção no momento do vencimento.";
+    }
+  }
+
 
   function classFor(signal) {
     return signal === "CALL" ? "guru-call" : signal === "PUT" ? "guru-put" : "guru-wait";
@@ -113,6 +139,8 @@
     const mtf = a.mtf || {};
     const tf = a.analysisTimeframes || {};
     const tfLabel = x => x === "1m" ? "1 min" : x === "5m" ? "5 min" : x === "15m" ? "15 min" : x === "30m" ? "30 min" : x === "1h" ? "1 hora" : x === "4h" ? "4 horas" : x;
+    const optionLabel = a.optionLabel || (a.optionType === "digital" ? "Digitais" : a.optionType === "blitz" ? "Blitz" : "Binárias");
+    const expiryLabel = a.optionType === "blitz" ? `${Number(a.expiryMinutes||0)} segundos` : `${Number(a.expiryMinutes||0)} minutos`;
     const mtfRows = [
       ["CONTEXTO", tf.context || mtf.context?.timeframe, mtf.context?.direction, mtf.context?.confidence],
       ["SETUP", tf.setup || mtf.setup?.timeframe, mtf.setup?.direction, mtf.setup?.confidence],
@@ -147,25 +175,21 @@
         </div>
         <div class="guru-meter"><span style="width:${score}%"></span></div>
         <div class="guru-backtest-box">
-          <div class="guru-backtest-head"><strong>📊 TESTE HISTÓRICO DA ESTRATÉGIA</strong><span>mesma lógica do sinal atual</span></div>
-          <div class="guru-backtest-grid">
-            <div><span>Sinais testados</span><strong>\${Number(a.backtest?.testedSignals || 0)}</strong></div>
-            <div><span>Acertos</span><strong>\${Number(a.backtest?.wins || 0)}</strong></div>
-            <div><span>Erros</span><strong>\${Number(a.backtest?.losses || 0)}</strong></div>
-            <div><span>Taxa de acerto</span><strong>\${Number(a.backtest?.hitRate || 0).toFixed(1)}%</strong></div>
-            <div><span>Parte anterior</span><strong>\${Number(a.backtest?.olderHitRate || 0).toFixed(1)}%</strong></div>
-            <div><span>Parte recente</span><strong>\${Number(a.backtest?.recentHitRate || 0).toFixed(1)}%</strong></div>
-          </div>
-          <div class="guru-backtest-note">\${
-            Number(a.backtest?.testedSignals || 0) >= 100
-              ? "Foram simulados 100 sinais históricos da mesma estratégia."
-              : \`Foram encontrados \${Number(a.backtest?.testedSignals || 0)} sinais históricos válidos no conjunto disponível.\`
-          } \${
-            a.backtest?.consistent
-              ? "O desempenho ficou acima de 50% nas duas metades da amostra."
-              : "A amostra não mostrou consistência suficiente entre as duas metades."
-          }</div>
-          <div class="guru-backtest-method">Modelo: entrada hipotética na abertura do candle seguinte à confirmação e resultado no fechamento correspondente à expiração de \${Number(a.backtest?.expiryMinutes || 0)} min.</div>
+          <div class="guru-backtest-head"><strong>📊 TESTE HISTÓRICO DA CONFIGURAÇÃO</strong><span>\${esc(optionLabel)} · expiração \${esc(expiryLabel)}</span></div>
+          \${a.backtest?.available === false ? \`
+            <div class="guru-backtest-unavailable"><strong>Backtest específico indisponível</strong><span>\${esc(a.backtest?.instrumentModel || "Não foi possível reproduzir esta expiração com os dados históricos disponíveis.")}</span></div>
+          \` : \`
+            <div class="guru-backtest-grid">
+              <div><span>Sinais testados</span><strong>\${Number(a.backtest?.testedSignals || 0)}</strong></div>
+              <div><span>Acertos</span><strong>\${Number(a.backtest?.wins || 0)}</strong></div>
+              <div><span>Erros</span><strong>\${Number(a.backtest?.losses || 0)}</strong></div>
+              <div><span>Taxa de acerto</span><strong>\${Number(a.backtest?.hitRate || 0).toFixed(1)}%</strong></div>
+              <div><span>Parte anterior</span><strong>\${Number(a.backtest?.olderHitRate || 0).toFixed(1)}%</strong></div>
+              <div><span>Parte recente</span><strong>\${Number(a.backtest?.recentHitRate || 0).toFixed(1)}%</strong></div>
+            </div>
+            <div class="guru-backtest-note">\${Number(a.backtest?.testedSignals || 0) >= 100 ? "Foram simulados 100 sinais históricos da mesma estratégia e do mesmo vencimento." : "Foram encontrados " + Number(a.backtest?.testedSignals || 0) + " sinais históricos válidos no conjunto disponível para esta configuração."} \${a.backtest?.consistent ? "O desempenho ficou acima de 50% nas duas metades da amostra." : "A amostra não mostrou consistência suficiente entre as duas metades."}</div>
+          \`}
+          <div class="guru-backtest-method">Modelo: entrada hipotética na abertura do candle seguinte ao gatilho e resultado no fechamento correspondente ao vencimento selecionado.\${a.optionType === "digital" ? " Para Digital, o strike não está disponível nesta integração; o teste reproduz somente a direção." : ""}</div>
         </div>
 
         <div class="guru-ai-box">
@@ -238,8 +262,10 @@
     return data;
   }
 
+  function iqMount(){return document.getElementById("guruIqToolHost")||document.getElementById("app");}
+
   function renderLogin(message=""){
-    const app=document.getElementById("app"); if(!app)return;
+    const app=iqMount(); if(!app)return;
     app.innerHTML=breadcrumbWrap(loginShell(message));
     document.getElementById("iqLoginBtn")?.addEventListener("click",login);
   }
@@ -254,7 +280,7 @@
       const d=await jsonResponse(r);
       sessionStorage.setItem(SESSION_KEY,d.session_id);
       if(d.requires_2fa){
-        const app=document.getElementById("app");app.innerHTML=breadcrumbWrap(twoFAShell());bindTwoFA();return;
+        const app=iqMount();if(app){app.innerHTML=breadcrumbWrap(twoFAShell());bindTwoFA();}return;
       }
       await renderConnected();
     }catch(e){if(msg){msg.hidden=false;msg.textContent="⚠️ "+e.message;}}
@@ -278,7 +304,7 @@
   async function loadAssets(){return jsonResponse(await iqFetch("/assets"));}
 
   async function renderConnected(){
-    const app=document.getElementById("app");if(!app)return;
+    const app=iqMount();if(!app)return;
     try{await jsonResponse(await iqFetch("/session"));const assets=await loadAssets();app.innerHTML=breadcrumbWrap(shell(assets));bindConnected();}
     catch(e){sessionStorage.removeItem(SESSION_KEY);renderLogin(e.message);}
   }
@@ -306,6 +332,8 @@
     document.getElementById("guruIqAnalyzeBtn")?.addEventListener("click",analyze);
     document.getElementById("iqRefreshAssets")?.addEventListener("click",refreshAssets);
     document.getElementById("iqLogout")?.addEventListener("click",()=>logout(true));
+    document.getElementById("guruIqOptionType")?.addEventListener("change",syncOptionControls);
+    syncOptionControls();
   }
 
   let monitorRunId=0;
@@ -315,7 +343,7 @@
 
   function setMonitoringUI(active){
     const btn=document.getElementById("guruIqAnalyzeBtn");
-    const controls=["guruIqPair","guruIqTimeframe","guruIqStrategy","guruIqAnalyzeWithAI"]
+    const controls=["guruIqPair","guruIqOptionType","guruIqCandlePeriod","guruIqExpiry","guruIqStrategy","guruIqAnalyzeWithAI"]
       .map(id=>document.getElementById(id)).filter(Boolean);
     controls.forEach(el=>{el.disabled=active;});
     if(btn){
@@ -366,8 +394,10 @@
   async function analyze(){
     const btn=document.getElementById("guruIqAnalyzeBtn"),result=document.getElementById("guruIqResult"),msg=document.getElementById("guruIqMessage");
     const symbol=document.getElementById("guruIqPair")?.value;
-    const timeframe=document.getElementById("guruIqTimeframe")?.value;
+    const timeframe=document.getElementById("guruIqCandlePeriod")?.value;
     const strategy=document.getElementById("guruIqStrategy")?.value||"automatica";
+    const optionType=document.getElementById("guruIqOptionType")?.value||"binary";
+    const expiryMinutes=Number(document.getElementById("guruIqExpiry")?.value||5);
     const analyzeWithAI=!!document.getElementById("guruIqAnalyzeWithAI")?.checked;
     if(!symbol||!timeframe||monitoring)return;
 
@@ -389,7 +419,7 @@
         const useAI=analyzeWithAI && (!lastAnalysis || cycle%5===0);
         const d=await jsonResponse(await iqFetch("/market-analysis",{
           method:"POST",
-          body:JSON.stringify({symbol,timeframe,strategy,analyze_with_ai:useAI})
+          body:JSON.stringify({symbol,timeframe,strategy,option_type:optionType,expiry_minutes:expiryMinutes,analyze_with_ai:useAI})
         }));
 
         if(runId!==monitorRunId)break;
@@ -427,6 +457,10 @@
     if(!hash.includes("/ferramenta/"+TOOL_ID)){
       monitoring=false;
       monitorRunId++;
+      return;
+    }
+    if(!document.getElementById("guruIqToolHost")){
+      setTimeout(renderRoute,0);
       return;
     }
     const existing=sessionStorage.getItem(SESSION_KEY);
