@@ -282,7 +282,10 @@ async def _mtf_for_symbol(
     if live_trigger:
         trigger_rows = rows.get(trigger_tf) or []
         last_ts = trigger_rows[-1]["datetime"] if trigger_rows else 0.0
-        if live_trigger["datetime"] > last_ts:
+        if trigger_rows and live_trigger["datetime"] == last_ts:
+            rows[trigger_tf] = trigger_rows[:-1] + [live_trigger]
+            live_used = True
+        elif live_trigger["datetime"] > last_ts:
             rows[trigger_tf] = trigger_rows + [live_trigger]
             live_used = True
 
@@ -573,14 +576,95 @@ def _iq_strategy_pack(rows: list[dict[str, float]], strategy: str) -> dict[str, 
     }
 
 
+
+def _trigger_state(
+    rows: list[dict[str, float]],
+    timeframe: str,
+    direction: str,
+) -> dict[str, Any]:
+    """Determina o momento operacional sem transformar o candle em formação no
+    único responsável pela direção do sinal."""
+    size = INTERVALS.get(timeframe, 60)
+    if not rows or direction not in {"CALL", "PUT"}:
+        return {
+            "ready": False,
+            "status": "SEM DIREÇÃO",
+            "instruction": "A análise ainda não definiu uma direção.",
+            "secondsRemaining": 0,
+            "elapsedSeconds": 0,
+        }
+
+    now = time.time()
+    candle = rows[-1]
+    start_ts = float(candle.get("datetime") or 0)
+    elapsed = max(0.0, now - start_ts) if start_ts else 0.0
+    remaining = max(0.0, size - elapsed)
+
+    cm = _candle_metrics(candle)
+    prev = rows[-2] if len(rows) >= 2 else candle
+    price_up = candle["close"] > prev["close"]
+    price_down = candle["close"] < prev["close"]
+
+    # A entrada deve ocorrer enquanto ainda existe tempo suficiente para a vela
+    # de gatilho confirmar, evitando entrar no fim do candle.
+    early = elapsed <= max(12.0, size * 0.55)
+    late = elapsed > max(45.0, size * 0.78)
+
+    if direction == "CALL":
+        confirmed = (
+            price_up
+            and cm["body_ratio"] >= 0.35
+            and cm["close_location"] >= 0.55
+        )
+    else:
+        confirmed = (
+            price_down
+            and cm["body_ratio"] >= 0.35
+            and cm["close_location"] <= 0.45
+        )
+
+    if confirmed and early and not late:
+        return {
+            "ready": True,
+            "status": "ENTRADA CONFIRMADA",
+            "instruction": f"CLIQUE NO {'CALL' if direction == 'CALL' else 'PUT'} AGORA, enquanto o candle de gatilho mantém a confirmação.",
+            "secondsRemaining": int(round(remaining)),
+            "elapsedSeconds": int(round(elapsed)),
+        }
+
+    if late:
+        return {
+            "ready": False,
+            "status": "PRÓXIMO CANDLE",
+            "instruction": f"Não entre no fim do candle. Aguarde o próximo candle de {timeframe} para nova confirmação de {'CALL' if direction == 'CALL' else 'PUT'}.",
+            "secondsRemaining": int(round(remaining)),
+            "elapsedSeconds": int(round(elapsed)),
+        }
+
+    if direction == "CALL":
+        instruction = "Aguarde o candle de gatilho começar a confirmar para cima; quando houver fechamento/pressão compradora clara, clique no CALL."
+    else:
+        instruction = "Aguarde o candle de gatilho começar a confirmar para baixo; quando houver fechamento/pressão vendedora clara, clique no PUT."
+
+    return {
+        "ready": False,
+        "status": "AGUARDE O GATILHO",
+        "instruction": instruction,
+        "secondsRemaining": int(round(remaining)),
+        "elapsedSeconds": int(round(elapsed)),
+    }
+
+
 def _iq_mtf_score(
     context: dict[str, Any],
     setup: dict[str, Any],
     trigger: dict[str, Any],
-) -> tuple[str, float, list[str]]:
+    trigger_rows: list[dict[str, float]] | None = None,
+    trigger_tf: str = "1m",
+) -> tuple[str, float, list[str], dict[str, Any]]:
     """
-    Contexto filtra, setup decide e gatilho temporiza.
-    A família de estratégia permanece isolada.
+    Contexto define o regime; setup define a oportunidade; gatilho define o
+    momento da entrada. O gatilho não precisa repetir todos os indicadores do setup.
     """
     strategy = setup["strategy"]
     s = setup["direction"]
@@ -590,69 +674,268 @@ def _iq_mtf_score(
     notes: list[str] = []
 
     if not setup.get("signalEligible"):
-        return "AGUARDAR", max(0.0, score - 8), ["O setup não atingiu os filtros mínimos da estratégia."]
+        return "AGUARDAR", max(0.0, score - 8), ["O setup não atingiu os filtros mínimos da estratégia."], {
+            "ready": False,
+            "status": "SEM SETUP",
+            "instruction": "Aguarde o setup atingir os critérios mínimos da estratégia.",
+            "secondsRemaining": 0,
+            "elapsedSeconds": 0,
+        }
 
-    if strategy == "reversao":
-        if c == s:
-            score += 9
-            notes.append(f"Contexto confirma a reversão em {s}.")
-        elif c == "NEUTRA":
-            score += 2
-            notes.append("Contexto maior está neutro, sem tendência forte contra a reversão.")
-        elif c in {"CALL", "PUT"} and c != s:
-            if context["confidence"] >= 70:
-                score -= 20
-                notes.append("Existe tendência maior forte contra a reversão.")
-            else:
-                score -= 8
-                notes.append("Contexto maior ainda é contrário, mas sem força máxima.")
-    else:
-        if c == s and context.get("signalEligible", context["confidence"] >= 65):
-            score += 11
-            notes.append(f"Contexto confirma {s}.")
-        elif c == s:
-            score += 5
-            notes.append(f"Contexto acompanha {s}, porém ainda sem força suficiente.")
-        elif c in {"CALL", "PUT"} and c != s:
-            score -= 20
-            notes.append("Contexto maior está contra a direção do setup.")
-        else:
-            score -= 5
-            notes.append("Contexto maior está neutro.")
-
-    if t == s and trigger.get("signalEligible", trigger["confidence"] >= 68):
-        score += 12
-        notes.append(f"Gatilho em tempo real confirma {s}.")
-    elif t == s:
+    # Contexto é filtro de regime; não precisa ficar 100% idêntico ao setup para
+    # permitir a direção, mas uma divergência forte reduz o score.
+    if c == s and context.get("signalEligible", context["confidence"] >= 64):
+        score += 11
+        notes.append(f"Contexto {c} confirma o setup.")
+    elif c == s:
         score += 6
-        notes.append(f"Gatilho acompanha {s}, mas a confirmação ainda é moderada.")
+        notes.append(f"Contexto acompanha {s}, mas ainda não é uma confirmação máxima.")
+    elif c in {"CALL", "PUT"} and c != s:
+        score -= 16 if context["confidence"] >= 72 else 9
+        notes.append("Contexto maior está contra o setup.")
+    else:
+        score -= 2
+        notes.append("Contexto maior está neutro.")
+
+    # O gatilho é confirmação de timing, não um novo voto de tendência.
+    if t == s:
+        score += 7
+        notes.append(f"Gatilho acompanha {s}.")
     elif t in {"CALL", "PUT"} and t != s:
-        score -= 18
+        score -= 10
         notes.append("Gatilho atual está contra o setup.")
     else:
-        score -= 7
-        notes.append("Gatilho atual ainda não confirmou o setup.")
+        notes.append("Gatilho ainda está em transição.")
 
     if strategy == "reversao":
-        eligible_mtf = (
+        eligible = (
             s in {"CALL", "PUT"}
-            and t == s
-            and score >= 78
-            and not (
-                c in {"CALL", "PUT"}
-                and c != s
-                and context["confidence"] >= 78
-            )
+            and score >= 73
+            and not (c in {"CALL", "PUT"} and c != s and context["confidence"] >= 80)
         )
     else:
-        eligible_mtf = (
+        eligible = (
             s in {"CALL", "PUT"}
-            and c == s
-            and t == s
-            and score >= 79
+            and score >= 72
+            and not (c in {"CALL", "PUT"} and c != s and context["confidence"] >= 82)
         )
 
-    return (s if eligible_mtf else "AGUARDAR"), round(max(0.0, min(99.0, score)), 1), notes
+    trigger_state = _trigger_state(trigger_rows or [], trigger_tf, s) if eligible else {
+        "ready": False,
+        "status": "SEM SETUP",
+        "instruction": "Aguarde o setup atingir os critérios mínimos da estratégia.",
+        "secondsRemaining": 0,
+        "elapsedSeconds": 0,
+    }
+
+    # Não devolvemos AGUARDAR como sinal principal quando existe uma direção
+    # técnica suficientemente estruturada. A indicação de timing fica separada.
+    return (s if eligible else "AGUARDAR"), round(max(0.0, min(99.0, score)), 1), notes, trigger_state
+
+
+async def _analyze(
+    client: Any,
+    session_id: str,
+    symbol: str,
+    timeframe: str,
+    strategy: str,
+    authorization: str | None,
+    analyze_with_ai: bool,
+) -> dict[str, Any]:
+    if timeframe not in INTERVALS:
+        raise HTTPException(status_code=400, detail="Timeframe não suportado.")
+
+    symbol = str(symbol or "").strip().upper()
+    if not symbol:
+        raise HTTPException(status_code=400, detail="Informe um ativo.")
+
+    mtf, plan, live_trigger_used = await _mtf_for_symbol(
+        client, session_id, symbol, timeframe
+    )
+    context_tf, setup_tf, trigger_tf = plan
+    setup_rows = mtf[setup_tf]
+    trigger_rows = mtf[trigger_tf]
+
+    if min(len(mtf[context_tf]), len(setup_rows), len(trigger_rows)) < 60:
+        raise HTTPException(
+            status_code=502,
+            detail="Não foram recebidos candles suficientes para a análise em múltiplos timeframes.",
+        )
+
+    families = ("tendencia", "reversao", "rompimento", "momentum")
+    context_strategies = [
+        _iq_strategy_pack(mtf[context_tf], strategy_name) for strategy_name in families
+    ]
+    setup_strategies = [
+        _iq_strategy_pack(setup_rows, strategy_name) for strategy_name in families
+    ]
+    trigger_strategies = [
+        _iq_strategy_pack(trigger_rows, strategy_name) for strategy_name in families
+    ]
+
+    candidates: list[tuple[float, dict[str, Any], str, list[str], dict[str, Any]]] = []
+    for setup in setup_strategies:
+        context = next(
+            x for x in context_strategies if x["strategy"] == setup["strategy"]
+        )
+        trigger = next(
+            x for x in trigger_strategies if x["strategy"] == setup["strategy"]
+        )
+        signal, score, notes, trigger_state = _iq_mtf_score(
+            context, setup, trigger, trigger_rows, trigger_tf
+        )
+        candidates.append((
+            score if signal != "AGUARDAR" else 0.0,
+            setup,
+            signal,
+            notes,
+            trigger_state,
+        ))
+
+    if strategy == "automatica":
+        valid = [x for x in candidates if x[2] in {"CALL", "PUT"}]
+        if valid:
+            valid.sort(key=lambda x: (x[0], x[4].get("ready", False)), reverse=True)
+            selected = valid[0][1]
+        else:
+            selected = max(setup_strategies, key=lambda x: x["confidence"])
+    else:
+        selected = next(
+            (x for x in setup_strategies if x["strategy"] == strategy),
+            None,
+        )
+        if not selected:
+            raise HTTPException(status_code=400, detail="Estratégia não suportada.")
+
+    context = next(
+        x for x in context_strategies if x["strategy"] == selected["strategy"]
+    )
+    trigger = next(
+        x for x in trigger_strategies if x["strategy"] == selected["strategy"]
+    )
+
+    base_signal, base_score, notes, trigger_state = _iq_mtf_score(
+        context, selected, trigger, trigger_rows, trigger_tf
+    )
+
+    gemini = (
+        guru_base._gemini_review(
+            symbol,
+            f"{context_tf} → {setup_tf} → {trigger_tf}",
+            selected["strategy"],
+            [selected],
+            setup_rows[-1]["close"],
+            setup_rows,
+            authorization,
+        )
+        if analyze_with_ai
+        else {"available": False, "reason": "Análise com IA desativada."}
+    )
+
+    gem_signal = gemini.get("signal")
+    gem_conf = float(gemini.get("confidence", 0)) if gem_signal else 0.0
+
+    if base_signal in {"CALL", "PUT"} and gem_signal == base_signal:
+        signal = base_signal
+        score = round(min(99, 0.82 * base_score + 0.18 * gem_conf))
+        quality = "MUITO FORTE" if score >= 84 else "FORTE" if score >= 76 else "MODERADA"
+    elif base_signal in {"CALL", "PUT"} and gem_signal in {"CALL", "PUT"}:
+        signal = base_signal
+        score = round(max(50, min(86, 0.90 * base_score + 0.10 * gem_conf - 6)))
+        quality = "CONFLUÊNCIA PARCIAL"
+    else:
+        signal = base_signal
+        score = round(base_score)
+        quality = "FORTE" if score >= 78 else "MODERADA" if score >= 68 else "BAIXA"
+
+    reasons = [
+        f"Contexto {context_tf}: {context['direction']} com {context['confidence']:.0f}% de confluência.",
+        f"Setup {setup_tf}: {selected['direction']} com {selected['confidence']:.0f}% de confluência.",
+        f"Gatilho {trigger_tf}: {trigger['direction']} com {trigger['confidence']:.0f}% de confluência.",
+    ] + notes
+
+    if live_trigger_used:
+        reasons.append("O gatilho foi atualizado por candle em tempo real da sessão da IQ Option.")
+
+    if gemini.get("available"):
+        reasons.append("Gemini: " + (gemini.get("reason") or "validação concluída."))
+
+    warnings: list[str] = []
+    if (
+        context["direction"] in {"CALL", "PUT"}
+        and selected["direction"] in {"CALL", "PUT"}
+        and context["direction"] != selected["direction"]
+    ):
+        warnings.append("Contexto e setup estão em direções opostas.")
+    if (
+        trigger["direction"] in {"CALL", "PUT"}
+        and selected["direction"] in {"CALL", "PUT"}
+        and trigger["direction"] != selected["direction"]
+    ):
+        warnings.append("O gatilho atual diverge do setup.")
+    if selected["values"].get("ExtensionATR", 0) > 0.95:
+        warnings.append("Preço está esticado em relação à EMA21; o motor evita perseguir a entrada.")
+    if gemini.get("available") and gem_signal in {"CALL", "PUT"} and gem_signal != base_signal:
+        warnings.append("O Gemini divergiu da leitura técnica em múltiplos timeframes.")
+    if gemini.get("available") and gemini.get("risk") == "alto":
+        warnings.append("O Gemini classificou o contexto como risco alto.")
+
+    entry_instruction = trigger_state.get("instruction") or (
+        f"Aguarde confirmação do gatilho para {'CALL' if signal == 'CALL' else 'PUT'}."
+        if signal in {"CALL", "PUT"}
+        else "Nenhuma direção técnica suficiente."
+    )
+
+    return {
+        "signal": signal,
+        "score": score,
+        "quality": quality,
+        "symbol": symbol,
+        "timeframe": timeframe,
+        "analysisTimeframes": {
+            "context": context_tf,
+            "setup": setup_tf,
+            "trigger": trigger_tf,
+        },
+        "price": setup_rows[-1]["close"],
+        "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "buyScore": selected["buy"],
+        "sellScore": selected["sell"],
+        "reasons": reasons[:10],
+        "warnings": warnings[:8],
+        "strategy": selected["strategy"],
+        "strategyLabel": selected["strategyLabel"],
+        "strategies": setup_strategies,
+        "entry": {
+            **trigger_state,
+            "direction": signal,
+            "triggerTimeframe": trigger_tf,
+            "setupTimeframe": setup_tf,
+        },
+        "mtf": {
+            "context": {
+                "timeframe": context_tf,
+                "direction": context["direction"],
+                "confidence": context["confidence"],
+            },
+            "setup": {
+                "timeframe": setup_tf,
+                "direction": selected["direction"],
+                "confidence": selected["confidence"],
+            },
+            "trigger": {
+                "timeframe": trigger_tf,
+                "direction": trigger["direction"],
+                "confidence": trigger["confidence"],
+            },
+            "score": base_score,
+            "notes": notes,
+            "liveTrigger": live_trigger_used,
+        },
+        "gemini": gemini,
+        "indicators": selected["values"],
+        "source": "IQ Option + motor técnico MTF + gatilho em tempo real",
+    }
 
 
 async def _analyze(
