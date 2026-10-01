@@ -459,7 +459,7 @@ def _strategy_pack(rows: list[dict[str, float]], strategy: str) -> dict[str, Any
 
 def _gemini_review(symbol: str, timeframe: str, selected_strategy: str, strategies: list[dict[str, Any]], price: float, rows: list[dict[str, float]], authorization: str | None = None) -> dict[str, Any]:
     api_key = GEMINI_API_KEY
-    model = os.getenv("GEMINI_MODEL", "gemini-3.8-flash").strip() or "gemini-3.8-flash"
+    model = os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite").strip() or "gemini-3.5-flash-lite"
 
     # Usuário autenticado pode fornecer sua própria credencial Gemini.
     if authorization:
