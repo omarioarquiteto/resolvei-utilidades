@@ -68,31 +68,34 @@
 
   function shell(assets){
     const hasAssets=(assets?.normal?.length||0)+(assets?.otc?.length||0)>0;
-    return `<div class="guru-simple">
-      <section class="guru-simple-head"><span class="eyebrow">IQ OPTION · DADOS DIRETOS</span>
-        <h1>🧙‍♂️ GURÚ DOS SINAIS IQOPTION</h1>
-        <p>Motor técnico exclusivo do IQOPTION: período da vela, tempo de expiração e tipo de opção são analisados separadamente.</p>
+    return `<div class="guru-simple guru-ux">
+      <section class="guru-hero">
+        <div><span class="eyebrow">IQ OPTION · ESTUDO TÉCNICO</span><h1>🧙‍♂️ GURÚ DOS SINAIS <b>IQOPTION</b></h1><p>Configure a operação uma única vez. O Guru separa vela, expiração e tipo de opção.</p></div>
+        <div class="guru-live-chip"><span></span> ${hasAssets?"CONECTADO":"SEM ATIVOS"}</div>
       </section>
-      <section class="card guru-control-card">
-        <div class="iq-connected-bar"><span><strong>● CONECTADO À IQ OPTION</strong><small>${hasAssets?"Ativos de opções disponíveis agora.":"Nenhum ativo de opções está aberto agora."}</small></span>
-          <button class="btn ghost small" id="iqRefreshAssets">↻ Atualizar ativos</button><button class="btn ghost small" id="iqLogout">Sair</button>
+
+      <section class="guru-config-card card">
+        <div class="guru-config-row">
+          <div class="guru-field guru-field-main"><label for="guruIqPair">PAR</label><select id="guruIqPair">${assetOptions(assets)}</select></div>
+          <div class="guru-field guru-field-main"><label for="guruIqOptionType">OPÇÃO</label><select id="guruIqOptionType">${optionTypes.map(([v,t])=>`<option value="${v}">${t}</option>`).join("")}</select></div>
+          <div class="guru-field"><label for="guruIqCandlePeriod">VELA</label><select id="guruIqCandlePeriod">${candlePeriods.map(([v,t])=>`<option value="${v}">${t}</option>`).join("")}</select></div>
+          <div class="guru-field"><label for="guruIqExpiry">EXPIRAÇÃO</label><select id="guruIqExpiry"></select></div>
+          <div class="guru-field guru-field-strategy"><label for="guruIqStrategy">ESTRATÉGIA</label><select id="guruIqStrategy">${strategies.map(([v,t])=>`<option value="${v}">${t}</option>`).join("")}</select></div>
+          <button class="guru-analyze-btn" id="guruIqAnalyzeBtn" ${hasAssets?"":"disabled"}>ANALISAR</button>
         </div>
-        <div class="guru-control-grid guru-control-grid-4">
-          <div class="field"><label for="guruIqOptionType">Tipo de opção</label><select id="guruIqOptionType">${optionTypes.map(([v,t])=>`<option value="${v}">${t}</option>`).join("")}</select></div>
-          <div class="field"><label for="guruIqPair">Par de moedas</label><select id="guruIqPair">${assetOptions(assets)}</select></div>
-          <div class="field"><label for="guruIqCandlePeriod">Período da vela</label><select id="guruIqCandlePeriod">${candlePeriods.map(([v,t])=>`<option value="${v}">${t}</option>`).join("")}</select></div>
-          <div class="field"><label for="guruIqExpiry">Tempo de expiração</label><select id="guruIqExpiry"></select></div>
+        <div class="guru-config-bottom">
+          <div id="guruIqOptionHint" class="guru-option-hint"></div>
+          <label class="guru-ai-toggle compact"><input type="checkbox" id="guruIqAnalyzeWithAI"><span>Validar com I.A.</span><small>Somente a estratégia selecionada</small></label>
+          <div class="guru-config-actions"><button class="btn ghost small" id="iqRefreshAssets">↻ Atualizar</button><button class="btn ghost small" id="iqLogout">Sair</button></div>
         </div>
-        <div class="guru-control-grid guru-control-grid-2">
-          <div class="field"><label for="guruIqStrategy">Estratégia</label><select id="guruIqStrategy">${strategies.map(([v,t])=>`<option value="${v}">${t}</option>`).join("")}</select></div>
-          <label class="guru-ai-toggle"><input type="checkbox" id="guruIqAnalyzeWithAI"><span>Analisar com I.A.</span><small>Valida somente a estratégia selecionada.</small></label>
-        </div>
-        <div id="guruIqOptionHint" class="guru-option-hint"></div>
-        <button class="guru-analyze-btn" id="guruIqAnalyzeBtn" ${hasAssets?"":"disabled"}>🔍 ANALISAR MERCADO</button>
-        <div id="guruIqMessage" class="notice" hidden></div>
+        <div id="guruIqMessage" class="notice guru-inline-message" hidden></div>
       </section>
-      <section id="guruIqResult"><div class="card guru-empty"><div class="guru-empty-icon">📊</div><strong>Pronto para analisar</strong><span>Escolha separadamente o tipo da opção, o período das velas e o vencimento.</span></div></section>
-      <section class="guru-foot-note"><span>Ferramenta de estudo. A API comunitária da IQ Option é não oficial; o Resolvei não executa operações e os indicadores não garantem resultados futuros.</span></section>
+
+      <section id="guruIqResult" class="guru-result-stage">
+        <div class="guru-empty card"><div class="guru-empty-icon">◈</div><strong>Pronto para analisar</strong><span>Selecione suas condições e clique em <b>Analisar</b>.</span></div>
+      </section>
+
+      <div class="guru-status-bar"><span>🟢 Sessão IQ Option</span><span>•</span><span>Estratégia isolada</span><span>•</span><span>Ferramenta de estudo</span></div>
     </div>`;
   }
 
@@ -126,44 +129,44 @@
     const signalClass=isCall?"guru-call":isPut?"guru-put":"guru-wait";
     const optionLabel=a.optionLabel||(a.optionType==="digital"?"Digitais":a.optionType==="blitz"?"Blitz":"Binárias");
     const candleLabel={"1m":"1 min","5m":"5 min","15m":"15 min","30m":"30 min","1h":"1 h","4h":"4 h"}[a.candlePeriod||a.timeframe]||(a.candlePeriod||a.timeframe||"—");
-    const expiryLabel=a.optionType==="blitz"?\`\${Number(a.expiryMinutes||0)} s\`:\`\${Number(a.expiryMinutes||0)} min\`;
+    const expiryLabel=a.optionType==="blitz"?`${Number(a.expiryMinutes||0)} s`:`${Number(a.expiryMinutes||0)} min`;
     const strategy=(a.strategyLabel||a.strategy||"—");
     const trigger=a.entry?.triggerTimeframe||a.analysisTimeframes?.trigger||"1m";
     const triggerLabel={"1m":"1 min","5m":"5 min","15m":"15 min","30m":"30 min","1h":"1 h"}[trigger]||trigger;
     const entryReady=!!a.entry?.ready;
     const entryStatus=entryReady?"ENTRADA CONFIRMADA":(a.entry?.status||"ANALISANDO");
-    const reasons=(a.reasons||[]).slice(0,3).map(x=>\`<li>✓ \${esc(x)}</li>\`).join("");
-    const warnings=(a.warnings||[]).slice(0,3).map(x=>\`<li>⚠ \${esc(x)}</li>\`).join("");
+    const reasons=(a.reasons||[]).slice(0,3).map(x=>`<li>✓ ${esc(x)}</li>`).join("");
+    const warnings=(a.warnings||[]).slice(0,3).map(x=>`<li>⚠ ${esc(x)}</li>`).join("");
     const back=a.backtest||{};
     const tested=Number(back.testedSignals||0);
     const hit=Number(back.hitRate||0);
     const mtf=a.mtf||{};
-    return \`
+    return `
       <div class="guru-dashboard">
         <section class="guru-signal-card card">
           <div class="guru-signal-head">
             <div>
-              <span class="eyebrow">\${esc(readableAsset(a.symbol))} · \${esc(strategy)}</span>
+              <span class="eyebrow">${esc(readableAsset(a.symbol))} · ${esc(strategy)}</span>
               <span class="guru-signal-kicker">DIREÇÃO ANALISADA</span>
             </div>
-            <div class="guru-price">\${a.price!=null?esc(Number(a.price).toFixed(5)):"—"}</div>
+            <div class="guru-price">${a.price!=null?esc(Number(a.price).toFixed(5)):"—"}</div>
           </div>
-          <div class="guru-signal-core \${signalClass}">
-            <span class="guru-signal-label">\${esc(signal)}</span>
-            <span class="guru-signal-quality">\${esc(a.quality||"LEITURA TÉCNICA")}</span>
+          <div class="guru-signal-core ${signalClass}">
+            <span class="guru-signal-label">${esc(signal)}</span>
+            <span class="guru-signal-quality">${esc(a.quality||"LEITURA TÉCNICA")}</span>
           </div>
-          <div class="guru-entry-compact \${entryReady?"ready":""}">
-            <div><span class="guru-entry-title">MOMENTO</span><strong>\${esc(entryStatus)}</strong></div>
-            <div class="guru-entry-direction">\${isCall?"CALL":isPut?"PUT":"—"}</div>
-            <div class="guru-entry-countdown">\${Number(a.entry?.secondsRemaining||0)}s</div>
+          <div class="guru-entry-compact ${entryReady?"ready":""}">
+            <div><span class="guru-entry-title">MOMENTO</span><strong>${esc(entryStatus)}</strong></div>
+            <div class="guru-entry-direction">${isCall?"CALL":isPut?"PUT":"—"}</div>
+            <div class="guru-entry-countdown">${Number(a.entry?.secondsRemaining||0)}s</div>
           </div>
           <div class="guru-score-compact">
-            <div><span>CONFLUÊNCIA</span><strong>\${score}%</strong></div>
-            <div class="guru-meter"><span style="width:\${score}%"></span></div>
+            <div><span>CONFLUÊNCIA</span><strong>${score}%</strong></div>
+            <div class="guru-meter"><span style="width:${score}%"></span></div>
           </div>
           <div class="guru-action-row">
             <button class="btn primary" id="guruNewAnalysis">↻ NOVA ANÁLISE</button>
-            <span>\${entryReady?"Confirmação encontrada no gatilho em tempo real.":"O Guru continua monitorando e atualiza o resultado automaticamente."}</span>
+            <span>${entryReady?"Confirmação encontrada no gatilho em tempo real.":"O Guru continua monitorando e atualiza o resultado automaticamente."}</span>
           </div>
         </section>
 
@@ -171,40 +174,40 @@
           <section class="guru-config-summary card">
             <div class="guru-panel-title"><strong>SUA CONFIGURAÇÃO</strong><span>IQOPTION</span></div>
             <div class="guru-summary-grid">
-              <div><span>OPÇÃO</span><strong>\${esc(optionLabel)}</strong></div>
-              <div><span>VELA</span><strong>\${esc(candleLabel)}</strong></div>
-              <div><span>EXPIRAÇÃO</span><strong>\${esc(expiryLabel)}</strong></div>
-              <div><span>ESTRATÉGIA</span><strong>\${esc(strategy)}</strong></div>
+              <div><span>OPÇÃO</span><strong>${esc(optionLabel)}</strong></div>
+              <div><span>VELA</span><strong>${esc(candleLabel)}</strong></div>
+              <div><span>EXPIRAÇÃO</span><strong>${esc(expiryLabel)}</strong></div>
+              <div><span>ESTRATÉGIA</span><strong>${esc(strategy)}</strong></div>
             </div>
-            <div class="guru-trigger-line"><span>Gatilho atual</span><strong>\${esc(triggerLabel)}</strong></div>
+            <div class="guru-trigger-line"><span>Gatilho atual</span><strong>${esc(triggerLabel)}</strong></div>
           </section>
 
           <section class="guru-evidence-card card">
-            <div class="guru-panel-title"><strong>POR QUE ESTE SINAL?</strong><span>\${score}%</span></div>
-            <ul class="guru-reason-list">\${reasons||"<li>Leitura técnica em atualização.</li>"}</ul>
-            \${warnings?\`<div class="guru-warning-mini">\${warnings}</div>\`:""}
+            <div class="guru-panel-title"><strong>POR QUE ESTE SINAL?</strong><span>${score}%</span></div>
+            <ul class="guru-reason-list">${reasons||"<li>Leitura técnica em atualização.</li>"}</ul>
+            ${warnings?`<div class="guru-warning-mini">${warnings}</div>`:""}
           </section>
 
           <details class="guru-details-card card">
             <summary>Ver desempenho histórico</summary>
             <div class="guru-mini-history">
-              \${back.available===false
-                ? \`<div class="guru-history-note">\${esc(back.instrumentModel||"Backtest específico indisponível para esta configuração.")}</div>\`
-                : \`<div><span>Sinais</span><strong>\${tested}</strong></div><div><span>Acertos</span><strong>\${Number(back.wins||0)}</strong></div><div><span>Erros</span><strong>\${Number(back.losses||0)}</strong></div><div><span>Taxa</span><strong>\${hit.toFixed(1)}%</strong></div>\`}
+              ${back.available===false
+                ? `<div class="guru-history-note">${esc(back.instrumentModel||"Backtest específico indisponível para esta configuração.")}</div>`
+                : `<div><span>Sinais</span><strong>${tested}</strong></div><div><span>Acertos</span><strong>${Number(back.wins||0)}</strong></div><div><span>Erros</span><strong>${Number(back.losses||0)}</strong></div><div><span>Taxa</span><strong>${hit.toFixed(1)}%</strong></div>`}
             </div>
           </details>
 
           <details class="guru-details-card card">
             <summary>Ver contexto técnico</summary>
             <div class="guru-mtf-compact">
-              <div><span>CONTEXTO</span><strong>\${esc(mtf.context?.timeframe||"—")}</strong><em>\${esc(mtf.context?.direction||"—")}</em></div>
-              <div><span>SETUP</span><strong>\${esc(mtf.setup?.timeframe||"—")}</strong><em>\${esc(mtf.setup?.direction||"—")}</em></div>
-              <div><span>GATILHO</span><strong>\${esc(mtf.trigger?.timeframe||"—")}</strong><em>\${esc(mtf.trigger?.direction||"—")}</em></div>
+              <div><span>CONTEXTO</span><strong>${esc(mtf.context?.timeframe||"—")}</strong><em>${esc(mtf.context?.direction||"—")}</em></div>
+              <div><span>SETUP</span><strong>${esc(mtf.setup?.timeframe||"—")}</strong><em>${esc(mtf.setup?.direction||"—")}</em></div>
+              <div><span>GATILHO</span><strong>${esc(mtf.trigger?.timeframe||"—")}</strong><em>${esc(mtf.trigger?.direction||"—")}</em></div>
             </div>
           </details>
           <div class="guru-disclaimer-mini">Estudo técnico. Não há garantia de resultado futuro. O Resolvei não executa operações.</div>
         </aside>
-      </div>\`;
+      </div>`;
   }
 
 
@@ -321,10 +324,10 @@
 
   function monitorStatusHtml(symbol,label,detail=""){
     const stage={"BUSCANDO SINAL":"1/4","CALCULANDO MERCADO":"2/4","TESTANDO SINAIS":"3/4","ATENÇÃO":"4/4","SINAL PRÓXIMO":"4/4","FAÇA A ENTRADA AGORA":"4/4"}[label]||"1/4";
-    return \`<div class="guru-monitor-compact card">
-      <div class="guru-monitor-main"><span class="guru-live-dot"></span><div><small>MONITORAMENTO ATIVO · \${esc(stage)}</small><strong>\${esc(label)}</strong><span>\${esc(readableAsset(symbol))}</span></div></div>
-      <div class="guru-monitor-detail">\${esc(detail||"Atualizando leitura técnica…")}</div>
-    </div>\`;
+    return `<div class="guru-monitor-compact card">
+      <div class="guru-monitor-main"><span class="guru-live-dot"></span><div><small>MONITORAMENTO ATIVO · ${esc(stage)}</small><strong>${esc(label)}</strong><span>${esc(readableAsset(symbol))}</span></div></div>
+      <div class="guru-monitor-detail">${esc(detail||"Atualizando leitura técnica…")}</div>
+    </div>`;
   }
 
   function monitoringLabel(analysis,cycle){
@@ -409,8 +412,10 @@
     if(!hash.includes("/ferramenta/"+TOOL_ID)){
       monitoring=false;
       monitorRunId++;
+      document.body.classList.remove("iq-tool-active");
       return;
     }
+    document.body.classList.add("iq-tool-active");
     if(!document.getElementById("guruIqToolHost")){
       setTimeout(renderRoute,0);
       return;
