@@ -309,7 +309,6 @@
   let monitorLastUpdateAt=0;
   let monitorClockOffsetMs=0;
   let monitorCurrentAnalysis=null;
-  const ANALYSIS_LIMIT_MS=60000;
 
   const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 
@@ -588,8 +587,7 @@
         }
 
         cycle++;
-        const waitMs=Math.min(2500,Math.max(0,deadlineAt-Date.now()));
-        if(waitMs>0)await sleep(waitMs);
+        await sleep(2000);
       }
 
     }catch(e){
