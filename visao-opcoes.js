@@ -106,6 +106,7 @@
             <div class="guru-option-hint">A Visão analisa continuamente o par selecionado e só interrompe quando encontra uma confirmação técnica de CALL ou PUT.</div>
             <div class="guru-config-actions">
               <button class="btn ghost small" id="iqRefreshAssets">↻ Atualizar</button>
+              <button class="btn ghost small" id="guruIqCancelBtn" hidden>✕ Cancelar</button>
               <button class="btn ghost small" id="iqLogout">Sair</button>
             </div>
           </div>
@@ -298,6 +299,16 @@
     document.getElementById("guruIqAnalyzeBtn")?.addEventListener("click",analyze);
     document.getElementById("iqRefreshAssets")?.addEventListener("click",refreshAssets);
     document.getElementById("iqLogout")?.addEventListener("click",()=>logout(true));
+    document.getElementById("guruIqCancelBtn")?.addEventListener("click",()=>{
+      monitoring=false;
+      monitorRunId++;
+      stopMonitorUiTicker();
+      setMonitoringUI(false);
+      const result=document.getElementById("guruIqResult");
+      if(result){
+        result.innerHTML='<div class="guru-empty card"><div class="guru-empty-icon">◈</div><strong>Análise cancelada</strong><span>Selecione o par, a expiração e a estratégia para iniciar novamente.</span></div>';
+      }
+    });
     document.getElementById("guruIqOptionType")?.addEventListener("change",syncOptionControls);
     syncOptionControls();
   }
@@ -379,14 +390,18 @@
 
   function setMonitoringUI(active){
     const btn=document.getElementById("guruIqAnalyzeBtn");
+    const cancel=document.getElementById("guruIqCancelBtn");
     const controls=["guruIqPair","guruIqOptionType","guruIqCandlePeriod","guruIqExpiry","guruIqStrategy","guruIqAnalyzeWithAI"]
       .map(id=>document.getElementById(id)).filter(Boolean);
+
     controls.forEach(el=>{el.disabled=active;});
+
     if(btn){
       btn.disabled=active;
-      btn.textContent=active?"⏳ ANALISANDO MERCADO…":"🔍 ANALISAR NOVAMENTE";
+      btn.textContent=active?"⏳ ANALISANDO MERCADO…":"🔍 ANALISAR MERCADO";
       btn.classList.toggle("guru-monitoring-active",active);
     }
+    if(cancel)cancel.hidden=!active;
   }
 
   function monitorStatusHtml(symbol,analysis=null){
@@ -514,71 +529,71 @@
     result.innerHTML=monitorStatusHtml(symbol,null);
     startMonitorUiTicker();
 
-    const scan=async()=>{
-      if(!monitoring||runId!==monitorRunId)return;
+    try{
+      while(monitoring&&runId===monitorRunId){
+        const controller=new AbortController();
+        const timeout=setTimeout(()=>controller.abort(),4500);
+        monitorRequestStartedAt=Date.now();
 
-      const controller=new AbortController();
-      const timeout=setTimeout(()=>controller.abort(),7000);
-      monitorRequestStartedAt=Date.now();
+        try{
+          const d=await jsonResponse(await iqFetch("/market-analysis",{
+            method:"POST",
+            signal:controller.signal,
+            body:JSON.stringify({
+              symbol,
+              timeframe:expiry===1?"1m":expiry===5?"5m":"15m",
+              strategy,
+              option_type:"binary",
+              expiry_minutes:expiry,
+              fast_mode:true
+            })
+          }));
 
-      try{
-        const d=await jsonResponse(await iqFetch("/market-analysis",{
-          method:"POST",
-          signal:controller.signal,
-          body:JSON.stringify({
-            symbol,
-            timeframe:expiry===1?"1m":expiry===5?"5m":"15m",
-            strategy,
-            expiry_minutes:expiry
-          })
-        }));
+          if(!monitoring||runId!==monitorRunId)break;
 
-        if(!monitoring||runId!==monitorRunId)return;
-        const analysis=d.analysis||{};
-        monitorCurrentAnalysis=analysis;
-        monitorLastUpdateAt=Date.now();
-        monitorRequestStartedAt=0;
+          const analysis=d.analysis||{};
+          monitorCurrentAnalysis=analysis;
+          monitorLastUpdateAt=Date.now();
+          monitorRequestStartedAt=0;
 
-        const confirmed=analysis.signalConfirmed===true && (analysis.signal==="CALL"||analysis.signal==="PUT");
-        if(confirmed){
-          monitoring=false;
-          setMonitoringUI(false);
-          result.innerHTML=resultHtml(analysis);
-          document.getElementById("guruNewAnalysis")?.addEventListener("click",analyze);
-          stopMonitorUiTicker();
-          return;
+          const confirmed=analysis.signalConfirmed===true && (analysis.signal==="CALL"||analysis.signal==="PUT");
+          if(confirmed){
+            monitoring=false;
+            setMonitoringUI(false);
+            result.innerHTML=resultHtml(analysis);
+            document.getElementById("guruNewAnalysis")?.addEventListener("click",analyze);
+            stopMonitorUiTicker();
+            return;
+          }
+
+          const state=String(analysis.analysisState||"ANALISANDO MERCADO").toUpperCase();
+          const normalizedState=state==="SINAL PRÓXIMO"?"SINAL PRÓXIMO":state==="ATENÇÃO"?"ATENÇÃO":"ANALISANDO MERCADO";
+          const detail=(analysis.signal==="CALL"||analysis.signal==="PUT")
+            ?analysis.entry?.instruction||("Direção "+analysis.signal+" encontrada. Acompanhando o gatilho em tempo real.")
+            :"Interpretando os indicadores atuais da estratégia selecionada.";
+
+          updateMonitorView(analysis,normalizedState,detail);
+        }catch(e){
+          if(e?.name!=="AbortError"&&runId===monitorRunId){
+            updateMonitorView(
+              monitorCurrentAnalysis||null,
+              "ANALISANDO MERCADO",
+              "Leitura momentaneamente indisponível. O monitor continua tentando a próxima atualização."
+            );
+          }
+        }finally{
+          clearTimeout(timeout);
+          monitorRequestStartedAt=0;
         }
 
-        const state=analysis.analysisState||"ANALISANDO MERCADO";
-        const detail=analysis.signal
-          ?analysis.entry?.instruction||"Direção encontrada; aguardando confirmação do momento."
-          :"Interpretando os indicadores atuais da estratégia selecionada.";
-        updateMonitorView(
-          analysis,
-          state==="SINAL PRÓXIMO"?"SINAL PRÓXIMO":state==="ATENÇÃO"?"ATENÇÃO":"ANALISANDO MERCADO",
-          detail
-        );
-      }catch(e){
-        if(e?.name!=="AbortError" && runId===monitorRunId){
-          updateMonitorView(
-            monitorCurrentAnalysis||null,
-            "ANALISANDO MERCADO",
-            "Falha momentânea na leitura. A Visão continuará automaticamente."
-          );
-        }
-      }finally{
-        clearTimeout(timeout);
-        monitorRequestStartedAt=0;
-      }
+        if(!monitoring||runId!==monitorRunId)break;
 
-      if(monitoring&&runId===monitorRunId){
-        monitorNextPollAt=Date.now()+1500;
-        await sleep(1500);
-        return scan();
+        const proximity=Number(monitorCurrentAnalysis?.proximity||0);
+        await sleep(proximity>=82?700:950);
       }
-    };
-
-    await scan();
+    }catch(_){
+      // O cancelamento/saída da ferramenta apenas encerra o loop.
+    }
   }
 
 async function renderRoute(){
