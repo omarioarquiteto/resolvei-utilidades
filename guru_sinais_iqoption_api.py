@@ -630,6 +630,7 @@ def _trigger_state(
             "instruction": f"CLIQUE NO {'CALL' if direction == 'CALL' else 'PUT'} AGORA, enquanto o candle de gatilho mantém a confirmação.",
             "secondsRemaining": int(round(remaining)),
             "elapsedSeconds": int(round(elapsed)),
+            "candleCloseAt": int(round(start_ts + size)),
         }
 
     if late:
@@ -639,6 +640,7 @@ def _trigger_state(
             "instruction": f"Não entre no fim do candle. Aguarde o próximo candle de {timeframe} para nova confirmação de {'CALL' if direction == 'CALL' else 'PUT'}.",
             "secondsRemaining": int(round(remaining)),
             "elapsedSeconds": int(round(elapsed)),
+            "candleCloseAt": int(round(start_ts + size)),
         }
 
     if direction == "CALL":
@@ -652,6 +654,7 @@ def _trigger_state(
         "instruction": instruction,
         "secondsRemaining": int(round(remaining)),
         "elapsedSeconds": int(round(elapsed)),
+        "candleCloseAt": int(round(start_ts + size)),
     }
 
 
@@ -680,6 +683,7 @@ def _iq_mtf_score(
             "instruction": "A leitura ainda está dividida; aguarde uma direção mais clara.",
             "secondsRemaining": 0,
             "elapsedSeconds": 0,
+            "candleCloseAt": 0,
         }
 
     # Contexto é filtro de regime; não precisa ficar 100% idêntico ao setup para
