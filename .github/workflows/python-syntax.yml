@@ -15,4 +15,4 @@ jobs:
         with:
           python-version: "3.10"
       - name: Compile Python files
-        run: python -m compileall -q server.py binary_analysis
+        run: python -m compileall -q server.py guru_sinais_api.py guru_sinais_iqoption_api.py binary_analysis
