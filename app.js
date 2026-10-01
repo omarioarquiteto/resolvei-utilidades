@@ -1236,10 +1236,25 @@ function resolveiBindAccountSections(){
  show("ia");
 }
 
-const RESOLVEI_PROVIDERS={gemini:{name:"Google Gemini",icon:"✨",defaultModel:"gemini-3.8-flash"},openai:{name:"OpenAI",icon:"◉",defaultModel:"gpt-4.1-mini"},anthropic:{name:"Anthropic Claude",icon:"◆",defaultModel:"claude-3-5-haiku-latest"},openrouter:{name:"OpenRouter",icon:"↗",defaultModel:"openai/gpt-4.1-mini"}};
+const RESOLVEI_PROVIDERS={
+ gemini:{name:"Google Gemini",icon:"✨",defaultModel:"gemini-3.5-flash-lite"},
+ openai:{name:"OpenAI",icon:"◉",defaultModel:"gpt-4.1-mini"},
+ anthropic:{name:"Anthropic Claude",icon:"◆",defaultModel:"claude-3-5-haiku-latest"},
+ openrouter:{name:"OpenRouter",icon:"↗",defaultModel:"openai/gpt-4.1-mini"}
+};
+const GEMINI_MODEL_OPTIONS=[
+ {id:"gemini-3.5-flash-lite",label:"Gemini 3.5 Flash-Lite — recomendado"},
+ {id:"gemini-3.8-flash",label:"Gemini 3.8 Flash"},
+ {id:"gemini-3.5-flash",label:"Gemini 3.5 Flash"},
+ {id:"gemini-3.1-flash-lite",label:"Gemini 3.1 Flash-Lite"}
+];
+function resolveiModelField(id,p){
+ if(id==="gemini") return `<label class="field"><span>Modelo</span><select id="model-${id}">${GEMINI_MODEL_OPTIONS.map(m=>`<option value="${m.id}" ${m.id===p.defaultModel?"selected":""}>${m.label}</option>`).join("")}</select><small class="muted">O identificador correto da API é preenchido automaticamente.</small></label>`;
+ return `<label class="field"><span>Modelo (opcional)</span><input id="model-${id}" value="${p.defaultModel}"></label>`;
+}
 function resolveiApiPage(){
  if(!resolveiUser)return `<div class="tool-layout"><section class="card panel"><h1>🔌 Conectar API</h1><p>Entre no Resolvei para conectar uma IA.</p><a class="btn primary" href="#/conta">Entrar / Criar conta</a></section></div>`;
- return `<div class="tool-layout"><section class="card panel"><span class="eyebrow">MINHAS IAS</span><h1>🔌 Conectar API</h1><p>Suas chaves são enviadas ao servidor por HTTPS e armazenadas criptografadas. Elas não ficam no código do site.</p><div class="notice"><strong>Gemini:</strong> usuários autenticados podem usar o Gemini do Resolvei sem cadastrar uma chave própria.</div><div class="provider-grid">${Object.entries(RESOLVEI_PROVIDERS).map(([id,p])=>`<div class="provider-card"><div class="provider-title"><span class="provider-icon">${p.icon}</span><strong>${p.name}</strong><span class="provider-status" id="status-${id}">Verificando…</span></div><label class="field"><span>API Key</span><input id="key-${id}" type="password" autocomplete="off" placeholder="Cole sua chave (opcional no Gemini)"></label><label class="field"><span>Modelo (opcional)</span><input id="model-${id}" value="${p.defaultModel}"></label><div class="row-actions"><button class="btn primary" data-connect-ai="${id}">Conectar</button><button class="btn" data-remove-ai="${id}">Desconectar</button></div></div>`).join("")}</div><div class="row-actions"><button class="btn" id="geminiDiagnose">🩺 Diagnosticar Gemini</button></div><div id="aiMsg" class="notice" hidden></div></section></div>`;
+ return `<div class="tool-layout"><section class="card panel"><span class="eyebrow">MINHAS IAS</span><h1>🔌 Conectar API</h1><p>Suas chaves são enviadas ao servidor por HTTPS e armazenadas criptografadas. Elas não ficam no código do site.</p><div class="notice"><strong>Gemini:</strong> escolha o modelo na lista. O Google atualmente restringe o acesso aos modelos 2.5 para usuários que já os utilizavam; para novos projetos, recomenda 3.5 Flash-Lite ou 3.8 Flash.</div><div class="provider-grid">${Object.entries(RESOLVEI_PROVIDERS).map(([id,p])=>`<div class="provider-card"><div class="provider-title"><span class="provider-icon">${p.icon}</span><strong>${p.name}</strong><span class="provider-status" id="status-${id}">Verificando…</span></div><label class="field"><span>API Key</span><input id="key-${id}" type="password" autocomplete="off" placeholder="Cole sua chave (opcional no Gemini)"></label>${resolveiModelField(id,p)}<div class="row-actions"><button class="btn primary" data-connect-ai="${id}">Conectar</button><button class="btn" data-remove-ai="${id}">Desconectar</button></div></div>`).join("")}</div><div class="row-actions"><button class="btn" id="geminiDiagnose">🩺 Diagnosticar Gemini</button></div><div id="aiMsg" class="notice" hidden></div></section></div>`;
 }
 async function resolveiGeminiDiagnose(){
  const m=document.getElementById("aiMsg"); if(m){m.hidden=false;m.textContent="🔎 Testando chave, modelos e generateContent…";}
