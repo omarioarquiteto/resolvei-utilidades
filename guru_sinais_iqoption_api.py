@@ -1219,7 +1219,7 @@ async def _analyze(
         timeframe,
         expiry_minutes,
         option_type,
-        960 if fast_mode else 1000,
+        1000 if fast_mode else 1000,
         fast_mode,
     )
     context_tf, setup_tf, trigger_tf = plan
