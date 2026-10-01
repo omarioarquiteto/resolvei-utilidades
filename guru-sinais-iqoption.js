@@ -490,6 +490,10 @@
 
     let cycle=0;
     let lastAnalysis=null;
+    monitorLastUpdateAt=0;
+    monitorClockOffsetMs=0;
+    monitorNextPollAt=0;
+    monitorCurrentAnalysis=null;
     result.innerHTML=monitorStatusHtml(symbol,null);
     startMonitorUiTicker();
 
