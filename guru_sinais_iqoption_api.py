@@ -380,8 +380,6 @@ def _iq_strategy_pack(rows: list[dict[str, float]], strategy: str) -> dict[str, 
     candle = guru_base.candle_pattern(rows)
 
     current_cm = _candle_metrics(rows[-1])
-    prev_cm = _candle_metrics(rows[-2])
-    current_range = current_cm["range"]
     current_body_ratio = current_cm["body_ratio"]
     close_location = current_cm["close_location"]
 
@@ -526,10 +524,7 @@ def _iq_strategy_pack(rows: list[dict[str, float]], strategy: str) -> dict[str, 
         direction in {"CALL", "PUT"}
         and confidence >= min_confidence
         and active_groups >= required_groups
-        and max(buy, sell) >= min(1.25 * min(buy, sell) if min(buy, sell) > 0 else 0, max(buy, sell))
     )
-
-    # O filtro acima não deve substituir uma checagem de dominância mínima.
     if min(buy, sell) > 0 and max(buy, sell) / min(buy, sell) < 1.25:
         signal_eligible = False
 
