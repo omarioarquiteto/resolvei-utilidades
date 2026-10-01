@@ -21,6 +21,31 @@ CANDLE_CACHE: dict[str, tuple[float, list[dict[str, float]]]] = {}
 
 INTERVALS = {"1m": 60, "5m": 300, "15m": 900, "30m": 1800, "1h": 3600, "4h": 14400}
 
+OPTION_LABELS = {"binary": "Binárias", "digital": "Digitais", "blitz": "Blitz"}
+OPTION_EXPIRIES = {"binary": (1, 5, 15), "digital": (1, 5, 15), "blitz": (30, 60)}
+
+def _normalize_option_config(option_type: str, expiry_minutes: int) -> tuple[str, int]:
+    option_type = str(option_type or "binary").strip().lower()
+    if option_type not in OPTION_LABELS:
+        raise HTTPException(status_code=400, detail="Tipo de opção não suportado.")
+    try:
+        expiry = int(expiry_minutes)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="Tempo de expiração inválido.")
+    if expiry not in OPTION_EXPIRIES[option_type]:
+        allowed = ", ".join(str(x) + (" min" if option_type != "blitz" else " s") for x in OPTION_EXPIRIES[option_type])
+        raise HTTPException(status_code=400, detail=f"Expiração inválida para {OPTION_LABELS[option_type]}. Escolha: {allowed}.")
+    return option_type, expiry
+
+def _iq_mtf_plan(candle_period: str, expiry_minutes: int) -> tuple[str, str, str]:
+    context_tf, setup_tf, trigger_tf = guru_base._mtf_plan(candle_period)
+    expiry_seconds = int(expiry_minutes) * 60
+    if INTERVALS.get(trigger_tf, 60) > expiry_seconds:
+        candidates = [tf for tf in ("1m", "5m", "15m") if INTERVALS[tf] <= expiry_seconds]
+        if candidates:
+            trigger_tf = max(candidates, key=lambda tf: INTERVALS[tf])
+    return context_tf, setup_tf, trigger_tf
+
 
 class IQLoginRequest(BaseModel):
     email: str
@@ -31,6 +56,8 @@ class MarketAnalysisRequest(BaseModel):
     symbol: str
     timeframe: str
     strategy: str = "automatica"
+    option_type: str = "binary"
+    expiry_minutes: int = 5
     analyze_with_ai: bool = False
 
 
@@ -261,8 +288,9 @@ async def _mtf_for_symbol(
     session_id: str,
     symbol: str,
     timeframe: str,
+    expiry_minutes: int,
 ) -> tuple[dict[str, list[dict[str, float]]], tuple[str, str, str], bool]:
-    plan = guru_base._mtf_plan(timeframe)
+    plan = _iq_mtf_plan(timeframe, expiry_minutes)
     rows: dict[str, list[dict[str, float]]] = {}
 
     unique_tfs = list(dict.fromkeys(plan))
@@ -664,6 +692,8 @@ def _iq_mtf_score(
     trigger: dict[str, Any],
     trigger_rows: list[dict[str, float]] | None = None,
     trigger_tf: str = "1m",
+    option_type: str = "binary",
+    expiry_minutes: int = 5,
 ) -> tuple[str, float, list[str], dict[str, Any]]:
     """
     Contexto define o regime; setup define a oportunidade; gatilho define o
@@ -673,8 +703,27 @@ def _iq_mtf_score(
     s = setup["direction"]
     c = context["direction"]
     t = trigger["direction"]
+    option_type = str(option_type or "binary").lower()
+    expiry_minutes = int(expiry_minutes or 5)
     score = float(setup["confidence"])
     notes: list[str] = []
+
+    if option_type == "blitz":
+        score += 4 if t == s else -4
+        notes.append("Blitz: prioridade para confirmação do gatilho em tempo real.")
+        min_signal_score = 75
+    elif option_type == "digital":
+        if expiry_minutes >= 5 and c == s:
+            score += 2
+            notes.append("Digital: contexto maior confirma a direção para o vencimento.")
+        notes.append("Digital: strike/preço de exercício não disponível na API comunitária; sinal é direcional.")
+        min_signal_score = 70
+    else:
+        if expiry_minutes <= 1 and t == s:
+            score += 2
+        elif expiry_minutes >= 15 and c == s:
+            score += 2
+        min_signal_score = 67
 
     if s not in {"CALL", "PUT"} or float(setup.get("confidence", 0)) < 60:
         return "AGUARDAR", max(0.0, score - 5), ["O setup ainda não apresenta direção técnica suficiente."], {
@@ -714,7 +763,7 @@ def _iq_mtf_score(
     if strategy == "reversao":
         eligible = (
             s in {"CALL", "PUT"}
-            and score >= 67
+            and score >= min_signal_score
             and not (c in {"CALL", "PUT"} and c != s and context["confidence"] >= 80)
         )
     else:
@@ -831,6 +880,8 @@ def _historical_strategy_result(
             trigger_pack,
             trigger_cut,
             "1m" if trigger_size == 60 else "5m" if trigger_size == 300 else "15m",
+            option_type,
+            expiry_minutes,
         )
         if signal not in {"CALL", "PUT"}:
             continue
@@ -907,7 +958,10 @@ def _historical_strategy_result(
             and older_rate >= 50
             and recent_rate >= 50
         ),
+        "available": True,
         "expiryMinutes": expiry_minutes,
+        "optionType": option_type,
+        "instrumentModel": "Direção no vencimento" if option_type == "binary" else "Direção no vencimento; strike não recebido pela API comunitária",
         "entryModel": "Próximo candle do gatilho após a confirmação",
         "occurrences": occurrences[-20:],
     }
@@ -926,6 +980,8 @@ def _backtest_selected(
     plan: tuple[str, str, str],
     strategy: str,
     timeframe: str,
+    expiry_minutes: int,
+    option_type: str,
     max_signals: int = 100,
 ) -> dict[str, Any]:
     context_tf, setup_tf, trigger_tf = plan
@@ -934,7 +990,7 @@ def _backtest_selected(
     context_rows = mtf[context_tf]
     setup_size = INTERVALS[setup_tf]
     trigger_size = INTERVALS[trigger_tf]
-    expiry_minutes = INTERVALS.get(timeframe, setup_size) // 60
+    expiry_minutes = int(expiry_minutes or 1)
 
     result = _historical_strategy_result(
         context_rows,
@@ -961,18 +1017,22 @@ async def _analyze(
     symbol: str,
     timeframe: str,
     strategy: str,
+    option_type: str,
+    expiry_minutes: int,
     authorization: str | None,
     analyze_with_ai: bool,
 ) -> dict[str, Any]:
     if timeframe not in INTERVALS:
-        raise HTTPException(status_code=400, detail="Timeframe não suportado.")
+        raise HTTPException(status_code=400, detail="Período de vela não suportado.")
+
+    option_type, expiry_minutes = _normalize_option_config(option_type, expiry_minutes)
 
     symbol = str(symbol or "").strip().upper()
     if not symbol:
         raise HTTPException(status_code=400, detail="Informe um ativo.")
 
     mtf, plan, live_trigger_used = await _mtf_for_symbol(
-        client, session_id, symbol, timeframe
+        client, session_id, symbol, timeframe, expiry_minutes
     )
     context_tf, setup_tf, trigger_tf = plan
     setup_rows = mtf[setup_tf]
@@ -1004,7 +1064,7 @@ async def _analyze(
             x for x in trigger_strategies if x["strategy"] == setup["strategy"]
         )
         signal, score, notes, trigger_state = _iq_mtf_score(
-            context, setup, trigger, trigger_rows, trigger_tf
+            context, setup, trigger, trigger_rows, trigger_tf, option_type, expiry_minutes
         )
         candidates.append((
             score if signal != "AGUARDAR" else 0.0,
@@ -1037,13 +1097,13 @@ async def _analyze(
     )
 
     base_signal, base_score, notes, trigger_state = _iq_mtf_score(
-        context, selected, trigger, trigger_rows, trigger_tf
+        context, selected, trigger, trigger_rows, trigger_tf, option_type, expiry_minutes
     )
 
     gemini = (
         guru_base._gemini_review(
             symbol,
-            f"{context_tf} → {setup_tf} → {trigger_tf}",
+            f"{context_tf} → {setup_tf} → {trigger_tf} | {OPTION_LABELS[option_type]} | expiração {expiry_minutes}{' s' if option_type == 'blitz' else ' min'}",
             selected["strategy"],
             [selected],
             setup_rows[-1]["close"],
@@ -1083,6 +1143,12 @@ async def _analyze(
         reasons.append("Gemini: " + (gemini.get("reason") or "validação concluída."))
 
     warnings: list[str] = []
+    if option_type == "digital":
+        warnings.append("Digital: o strike/preço de exercício não é recebido pela API comunitária; o motor calcula a direção, não a distância até o strike.")
+    if option_type == "blitz":
+        warnings.append("Blitz: o gatilho precisa de confirmação em tempo real; não há backtest histórico exato de expirações em segundos com candles de 1 minuto.")
+    if expiry_minutes == 1 and option_type != "blitz":
+        warnings.append("Expiração de 1 minuto: o timing do gatilho recebe peso adicional na seleção do momento.")
     if (
         context["direction"] in {"CALL", "PUT"}
         and selected["direction"] in {"CALL", "PUT"}
@@ -1109,13 +1175,34 @@ async def _analyze(
     )
 
     try:
-        backtest = _backtest_selected(
-            mtf,
-            plan,
-            selected["strategy"],
-            timeframe,
-            max_signals=100,
-        )
+        if option_type == "blitz":
+            backtest = {
+                "available": False,
+                "strategy": selected["strategy"],
+                "optionType": option_type,
+                "testedSignals": 0,
+                "wins": 0,
+                "losses": 0,
+                "ties": 0,
+                "hitRate": 0.0,
+                "wilsonLower95": 0.0,
+                "olderHitRate": 0.0,
+                "recentHitRate": 0.0,
+                "consistent": False,
+                "expiryMinutes": expiry_minutes,
+                "instrumentModel": "Sem backtest exato para expiração em segundos usando apenas candles de 1 minuto.",
+                "entryModel": "Gatilho em tempo real",
+            }
+        else:
+            backtest = _backtest_selected(
+                mtf,
+                plan,
+                selected["strategy"],
+                timeframe,
+                expiry_minutes,
+                option_type,
+                max_signals=100,
+            )
     except Exception as exc:
         backtest = {
             "strategy": selected["strategy"],
@@ -1128,7 +1215,10 @@ async def _analyze(
             "olderHitRate": 0.0,
             "recentHitRate": 0.0,
             "consistent": False,
-            "expiryMinutes": INTERVALS[timeframe] // 60,
+            "available": False,
+            "expiryMinutes": expiry_minutes,
+            "optionType": option_type,
+            "instrumentModel": "Indisponível",
             "entryModel": "Indisponível",
             "error": f"Falha no backtest: {str(exc)[:160]}",
         }
@@ -1139,6 +1229,10 @@ async def _analyze(
         "quality": quality,
         "symbol": symbol,
         "timeframe": timeframe,
+        "candlePeriod": timeframe,
+        "optionType": option_type,
+        "optionLabel": OPTION_LABELS[option_type],
+        "expiryMinutes": expiry_minutes,
         "analysisTimeframes": {
             "context": context_tf,
             "setup": setup_tf,
@@ -1182,7 +1276,7 @@ async def _analyze(
         },
         "gemini": gemini,
         "indicators": selected["values"],
-        "source": "IQ Option + motor técnico MTF + gatilho em tempo real",
+        "source": "IQ Option + motor técnico MTF + tipo de opção + expiração + gatilho em tempo real",
     }
 
 
@@ -1288,6 +1382,8 @@ async def iq_market_analysis(
             req.symbol,
             req.timeframe,
             req.strategy,
+            req.option_type,
+            req.expiry_minutes,
             authorization,
             req.analyze_with_ai,
         )
