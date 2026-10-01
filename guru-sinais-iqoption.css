@@ -193,3 +193,21 @@
   .guru-action-row{padding-top:8px}
   .guru-side-stack{gap:8px}
 }
+
+
+/* Monitor estável: atualizações acontecem no DOM, sem reconstruir o card a cada ciclo. */
+.guru-monitor-compact{display:flex!important;flex-direction:column;align-items:stretch;justify-content:flex-start;gap:14px;padding:18px!important;min-height:170px}
+.guru-monitor-head{display:flex;align-items:center;justify-content:flex-start}
+.guru-monitor-main{display:flex;align-items:center;gap:11px}
+.guru-monitor-main>div{display:flex;flex-direction:column;gap:3px}
+.guru-monitor-main small{font-size:8px;font-weight:900;letter-spacing:.08em;opacity:.48}
+.guru-monitor-main strong{font-size:21px;line-height:1.15}
+.guru-monitor-main span:last-child{font-size:10px;opacity:.62}
+.guru-live-dot{animation:none!important}
+.guru-monitor-progress{width:100%}
+.guru-monitor-progress-top{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:7px}
+.guru-monitor-progress-top span{font-size:9px;font-weight:900;letter-spacing:.08em;opacity:.56}
+.guru-monitor-progress-top strong{font-size:16px}
+.guru-progress-track{width:100%;height:9px;border-radius:999px;background:var(--border,#e5e7eb);overflow:hidden}
+.guru-progress-track>span{display:block;height:100%;width:0;border-radius:inherit;background:var(--primary,#111827);transition:width .35s ease}
+.guru-monitor-detail{max-width:none!important;margin-top:0!important;padding-top:11px;border-top:1px solid var(--border,#e5e7eb);font-size:11px;line-height:1.45;text-align:left}
