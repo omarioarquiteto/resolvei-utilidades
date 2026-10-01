@@ -681,6 +681,13 @@ def _iq_strategy_pack(rows: list[dict[str, float]], strategy: str) -> dict[str, 
     if min(buy, sell) > 0 and max(buy, sell) / min(buy, sell) < 1.25:
         signal_eligible = False
 
+    indicator_sets = {
+        "tendencia": ["EMA9/EMA21/EMA50", "ADX/DI", "MACD", "Inclinação EMA9", "RSI", "Estrutura de preço", "Candle de continuidade"],
+        "reversao": ["RSI", "Stochastic", "CCI", "Williams %R", "Suporte/Resistência", "Sweep/falso rompimento", "Candle de reversão"],
+        "rompimento": ["Rompimento de 20 candles", "Reteste da zona", "ADX/DI", "ATR/expansão", "MACD", "Estrutura de preço", "Candle de força"],
+        "momentum": ["EMA9/EMA21/EMA50", "ADX/DI", "MACD + aceleração", "Inclinação EMA9", "ROC", "RSI", "Estrutura", "Candle de impulso", "ATR anti-extensão"],
+    }
+
     values = {
         "EMA9": e9,
         "EMA21": e21,
@@ -710,6 +717,7 @@ def _iq_strategy_pack(rows: list[dict[str, float]], strategy: str) -> dict[str, 
     return {
         "strategy": strategy,
         "strategyLabel": label,
+        "indicatorSet": indicator_sets.get(strategy, []),
         "buy": round(buy, 2),
         "sell": round(sell, 2),
         "confidence": round(confidence, 1),
@@ -1211,7 +1219,7 @@ async def _analyze(
         timeframe,
         expiry_minutes,
         option_type,
-        140 if fast_mode else 1000,
+        960 if fast_mode else 1000,
         fast_mode,
     )
     context_tf, setup_tf, trigger_tf = plan
