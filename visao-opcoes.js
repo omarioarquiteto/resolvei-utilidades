@@ -590,7 +590,7 @@
         }
 
         cycle++;
-        const waitMs=Math.min(3000,Math.max(0,deadlineAt-Date.now()));
+        const waitMs=Math.min(2500,Math.max(0,deadlineAt-Date.now()));
         if(waitMs>0)await sleep(waitMs);
       }
 
