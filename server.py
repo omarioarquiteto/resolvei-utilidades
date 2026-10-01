@@ -72,10 +72,6 @@ if FIREBASE_PROJECT_ID and FIREBASE_CLIENT_EMAIL and FIREBASE_PRIVATE_KEY:
 
 app = FastAPI(title="Resolvei API", version="3.0.0")
 
-# GURÚ DOS SINAIS: análise técnica independente via TradingView webhook.
-from guru_sinais_api import router as guru_sinais_router
-app.include_router(guru_sinais_router)
-
 # GURÚ DOS SINAIS IQOPTION: integração isolada; o Guru original permanece intacto.
 from guru_sinais_iqoption_api import router as guru_sinais_iqoption_router
 app.include_router(guru_sinais_iqoption_router)
