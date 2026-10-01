@@ -770,7 +770,7 @@ def _historical_strategy_result(
     setup_size: int,
     trigger_size: int,
     expiry_minutes: int,
-    max_signals: int = 120,
+    max_signals: int = 100,
 ) -> dict[str, Any]:
     """
     Backtest sem look-ahead:
@@ -926,7 +926,7 @@ def _backtest_selected(
     plan: tuple[str, str, str],
     strategy: str,
     timeframe: str,
-    max_signals: int = 120,
+    max_signals: int = 100,
 ) -> dict[str, Any]:
     context_tf, setup_tf, trigger_tf = plan
     setup_rows = mtf[setup_tf]
@@ -1108,6 +1108,31 @@ async def _analyze(
         else "Nenhuma direção técnica suficiente."
     )
 
+    try:
+        backtest = _backtest_selected(
+            mtf,
+            plan,
+            selected["strategy"],
+            timeframe,
+            max_signals=100,
+        )
+    except Exception as exc:
+        backtest = {
+            "strategy": selected["strategy"],
+            "testedSignals": 0,
+            "wins": 0,
+            "losses": 0,
+            "ties": 0,
+            "hitRate": 0.0,
+            "wilsonLower95": 0.0,
+            "olderHitRate": 0.0,
+            "recentHitRate": 0.0,
+            "consistent": False,
+            "expiryMinutes": INTERVALS[timeframe] // 60,
+            "entryModel": "Indisponível",
+            "error": f"Falha no backtest: {str(exc)[:160]}",
+        }
+
     return {
         "signal": signal,
         "score": score,
@@ -1134,6 +1159,7 @@ async def _analyze(
             "triggerTimeframe": trigger_tf,
             "setupTimeframe": setup_tf,
         },
+        "backtest": backtest,
         "mtf": {
             "context": {
                 "timeframe": context_tf,
