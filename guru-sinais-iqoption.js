@@ -119,127 +119,93 @@
     return signal === "CALL" ? "guru-call" : signal === "PUT" ? "guru-put" : "guru-wait";
   }
 
-  function resultHtml(a) {
-    const reasons = (a.reasons || []).slice(0,7).map(x => `<li>✓ ${esc(x)}</li>`).join("");
-    const warnings = (a.warnings || []).slice(0,5).map(x => `<li>⚠ ${esc(x)}</li>`).join("");
-    const score = Math.max(0, Math.min(100, Number(a.score || 0)));
-    const selectedStrategy = (a.strategies || []).find(s => s.strategy === a.strategy) || a.strategies?.[0];
-    const strategyRows = selectedStrategy ? `
-      <div class="guru-strategy-card ${selectedStrategy.direction === "CALL" ? "guru-strategy-call" : selectedStrategy.direction === "PUT" ? "guru-strategy-put" : ""}">
-        <div><strong>${esc(selectedStrategy.strategyLabel)}</strong><span>${esc(selectedStrategy.direction)}</span></div>
-        <small>${Number(selectedStrategy.confidence || 0).toFixed(0)}% · ${Number(selectedStrategy.indicators?.length || 0)} indicadores · estratégia isolada</small>
-      </div>` : "";
-
-    const indicators = (a.strategies || []).find(s => s.strategy === a.strategy)?.indicators || [];
-    const indicatorRows = indicators.map(i => `
-      <div class="guru-indicator-row">
-        <span>${esc(i.name)}</span><strong>${esc(i.signal)}</strong>
-      </div>`).join("");
-    const gemini = a.gemini || {};
-    const mtf = a.mtf || {};
-    const tf = a.analysisTimeframes || {};
-    const tfLabel = x => x === "1m" ? "1 min" : x === "5m" ? "5 min" : x === "15m" ? "15 min" : x === "30m" ? "30 min" : x === "1h" ? "1 hora" : x === "4h" ? "4 horas" : x;
-    const optionLabel = a.optionLabel || (a.optionType === "digital" ? "Digitais" : a.optionType === "blitz" ? "Blitz" : "Binárias");
-    const expiryLabel = a.optionType === "blitz" ? `${Number(a.expiryMinutes||0)} segundos` : `${Number(a.expiryMinutes||0)} minutos`;
-    const mtfRows = [
-      ["CONTEXTO", tf.context || mtf.context?.timeframe, mtf.context?.direction, mtf.context?.confidence],
-      ["SETUP", tf.setup || mtf.setup?.timeframe, mtf.setup?.direction, mtf.setup?.confidence],
-      ["GATILHO", tf.trigger || mtf.trigger?.timeframe, mtf.trigger?.direction, mtf.trigger?.confidence]
-    ].map(([label,timeframe,direction,confidence]) =>
-      '<div class="guru-mtf-item"><span>' + label + '</span><strong>' + esc(tfLabel(timeframe || "—")) + '</strong><em class="' +
-      (direction === "CALL" ? "guru-call-text" : direction === "PUT" ? "guru-put-text" : "") + '">' +
-      esc(direction || "—") + '</em><small>' + (confidence != null ? Number(confidence).toFixed(0) + "%" : "—") + '</small></div>'
-    ).join("");
-    return `
-      <div class="card guru-result">
-        <div class="guru-result-top">
-          <div>
-            <span class="eyebrow">${esc(a.symbol)} · ${esc(a.timeframe)} · ${esc(a.strategyLabel || "estratégia")}</span>
-            <div class="guru-result-title">SINAL DE ENTRADA</div>
-          </div>
-          <div class="guru-price">${a.price != null ? esc(Number(a.price).toFixed(5)) : "—"}</div>
-        </div>
-
-        <div class="guru-big-signal ${classFor(a.signal)}">${esc(a.signal)}</div>
-        <div class="guru-quality">${esc(a.quality)}</div>
-        <div class="guru-entry-box ${a.entry?.ready ? "ready" : "wait"}">
-          <div class="guru-entry-head"><strong>⏱ MOMENTO DA ENTRADA</strong><span class="guru-entry-status">${esc(a.entry?.ready ? "FAÇA A ENTRADA AGORA" : (a.entry?.status || "AGUARDE O GATILHO"))}</span></div>
-          <div class="guru-entry-instruction">${esc(a.entry?.ready ? "FAÇA A ENTRADA AGORA" : (a.entry?.instruction || (a.signal === "CALL" ? "Aguarde a confirmação do gatilho antes de clicar no CALL." : a.signal === "PUT" ? "Aguarde a confirmação do gatilho antes de clicar no PUT." : "Aguarde uma direção técnica clara.")))}</div>
-          <div class="guru-entry-meta"><span>Direção: <strong>${esc(a.signal)}</strong></span><span>Gatilho: <strong>${esc(tfLabel(a.entry?.triggerTimeframe || tf.trigger || "1m"))}</strong></span><span>Tempo da vela: <strong>${Number(a.entry?.secondsRemaining || 0)}s</strong></span></div>
-          <div class="guru-entry-disclaimer">O sinal e o timing são uma leitura técnica de estudo. A condição pode mudar rapidamente e não garante o resultado da operação.</div>
-        </div>
-
-        <div class="guru-score-line">
-          <span>Confluência final</span>
-          <strong>${score}%</strong>
-        </div>
-        <div class="guru-meter"><span style="width:${score}%"></span></div>
-        <div class="guru-backtest-box">
-          <div class="guru-backtest-head"><strong>📊 TESTE HISTÓRICO DA CONFIGURAÇÃO</strong><span>${esc(optionLabel)} · expiração ${esc(expiryLabel)}</span></div>
-          ${a.backtest?.available === false ? `
-            <div class="guru-backtest-unavailable"><strong>Backtest específico indisponível</strong><span>${esc(a.backtest?.instrumentModel || "Não foi possível reproduzir esta expiração com os dados históricos disponíveis.")}</span></div>
-          ` : `
-            <div class="guru-backtest-grid">
-              <div><span>Sinais testados</span><strong>${Number(a.backtest?.testedSignals || 0)}</strong></div>
-              <div><span>Acertos</span><strong>${Number(a.backtest?.wins || 0)}</strong></div>
-              <div><span>Erros</span><strong>${Number(a.backtest?.losses || 0)}</strong></div>
-              <div><span>Taxa de acerto</span><strong>${Number(a.backtest?.hitRate || 0).toFixed(1)}%</strong></div>
-              <div><span>Parte anterior</span><strong>${Number(a.backtest?.olderHitRate || 0).toFixed(1)}%</strong></div>
-              <div><span>Parte recente</span><strong>${Number(a.backtest?.recentHitRate || 0).toFixed(1)}%</strong></div>
+  function resultHtml(a){
+    const score=Math.max(0,Math.min(100,Number(a.score||0)));
+    const signal=a.signal||"AGUARDAR";
+    const isCall=signal==="CALL", isPut=signal==="PUT";
+    const signalClass=isCall?"guru-call":isPut?"guru-put":"guru-wait";
+    const optionLabel=a.optionLabel||(a.optionType==="digital"?"Digitais":a.optionType==="blitz"?"Blitz":"Binárias");
+    const candleLabel={"1m":"1 min","5m":"5 min","15m":"15 min","30m":"30 min","1h":"1 h","4h":"4 h"}[a.candlePeriod||a.timeframe]||(a.candlePeriod||a.timeframe||"—");
+    const expiryLabel=a.optionType==="blitz"?\`\${Number(a.expiryMinutes||0)} s\`:\`\${Number(a.expiryMinutes||0)} min\`;
+    const strategy=(a.strategyLabel||a.strategy||"—");
+    const trigger=a.entry?.triggerTimeframe||a.analysisTimeframes?.trigger||"1m";
+    const triggerLabel={"1m":"1 min","5m":"5 min","15m":"15 min","30m":"30 min","1h":"1 h"}[trigger]||trigger;
+    const entryReady=!!a.entry?.ready;
+    const entryStatus=entryReady?"ENTRADA CONFIRMADA":(a.entry?.status||"ANALISANDO");
+    const reasons=(a.reasons||[]).slice(0,3).map(x=>\`<li>✓ \${esc(x)}</li>\`).join("");
+    const warnings=(a.warnings||[]).slice(0,3).map(x=>\`<li>⚠ \${esc(x)}</li>\`).join("");
+    const back=a.backtest||{};
+    const tested=Number(back.testedSignals||0);
+    const hit=Number(back.hitRate||0);
+    const mtf=a.mtf||{};
+    return \`
+      <div class="guru-dashboard">
+        <section class="guru-signal-card card">
+          <div class="guru-signal-head">
+            <div>
+              <span class="eyebrow">\${esc(readableAsset(a.symbol))} · \${esc(strategy)}</span>
+              <span class="guru-signal-kicker">DIREÇÃO ANALISADA</span>
             </div>
-            <div class="guru-backtest-note">${Number(a.backtest?.testedSignals || 0) >= 100 ? "Foram simulados 100 sinais históricos da mesma estratégia e do mesmo vencimento." : "Foram encontrados " + Number(a.backtest?.testedSignals || 0) + " sinais históricos válidos no conjunto disponível para esta configuração."} ${a.backtest?.consistent ? "O desempenho ficou acima de 50% nas duas metades da amostra." : "A amostra não mostrou consistência suficiente entre as duas metades."}</div>
-          `}
-          <div class="guru-backtest-method">Modelo: entrada hipotética na abertura do candle seguinte ao gatilho e resultado no fechamento correspondente ao vencimento selecionado.${a.optionType === "digital" ? " Para Digital, o strike não está disponível nesta integração; o teste reproduz somente a direção." : ""}</div>
-        </div>
-
-        <div class="guru-ai-box">
-          <strong>✨ Gemini</strong>
-          <span>${gemini.available ? "Validação da leitura técnica concluída." : "Validação IA indisponível; sinal calculado somente pela estratégia selecionada."}</span>
-          ${gemini.reason ? `<small>${esc(gemini.reason)}</small>` : ""}
-        </div>
-
-        <div class="guru-strategy-grid">${strategyRows}</div>
-
-        <div class="guru-mtf-box">
-          <div class="guru-mtf-head">
-            <strong>Leitura em múltiplos timeframes</strong>
-            <span>Contexto → Setup → Gatilho</span>
+            <div class="guru-price">\${a.price!=null?esc(Number(a.price).toFixed(5)):"—"}</div>
           </div>
-          <div class="guru-mtf-grid">${mtfRows}</div>
-          <small class="guru-mtf-note">A mesma estratégia é aplicada no contexto, setup e gatilho; nenhuma outra estratégia entra no cálculo.</small>
-        </div>
-
-        <div class="guru-columns">
-          <div>
-            <h3>Leitura do GURÚ</h3>
-            <ul>${reasons || "<li>Sem confirmação suficiente.</li>"}</ul>
+          <div class="guru-signal-core \${signalClass}">
+            <span class="guru-signal-label">\${esc(signal)}</span>
+            <span class="guru-signal-quality">\${esc(a.quality||"LEITURA TÉCNICA")}</span>
           </div>
-          <div>
-            <h3>Pontos de atenção</h3>
-            <ul>${warnings || "<li>Nenhum alerta relevante detectado.</li>"}</ul>
+          <div class="guru-entry-compact \${entryReady?"ready":""}">
+            <div><span class="guru-entry-title">MOMENTO</span><strong>\${esc(entryStatus)}</strong></div>
+            <div class="guru-entry-direction">\${isCall?"CALL":isPut?"PUT":"—"}</div>
+            <div class="guru-entry-countdown">\${Number(a.entry?.secondsRemaining||0)}s</div>
           </div>
-        </div>
+          <div class="guru-score-compact">
+            <div><span>CONFLUÊNCIA</span><strong>\${score}%</strong></div>
+            <div class="guru-meter"><span style="width:\${score}%"></span></div>
+          </div>
+          <div class="guru-action-row">
+            <button class="btn primary" id="guruNewAnalysis">↻ NOVA ANÁLISE</button>
+            <span>\${entryReady?"Confirmação encontrada no gatilho em tempo real.":"O Guru continua monitorando e atualiza o resultado automaticamente."}</span>
+          </div>
+        </section>
 
-        <details class="guru-indicators-details">
-          <summary>Ver os indicadores da estratégia (${indicatorRows ? indicators.length : 0})</summary>
-          <div class="guru-indicator-list">${indicatorRows}</div>
-        </details>
+        <aside class="guru-side-stack">
+          <section class="guru-config-summary card">
+            <div class="guru-panel-title"><strong>SUA CONFIGURAÇÃO</strong><span>IQOPTION</span></div>
+            <div class="guru-summary-grid">
+              <div><span>OPÇÃO</span><strong>\${esc(optionLabel)}</strong></div>
+              <div><span>VELA</span><strong>\${esc(candleLabel)}</strong></div>
+              <div><span>EXPIRAÇÃO</span><strong>\${esc(expiryLabel)}</strong></div>
+              <div><span>ESTRATÉGIA</span><strong>\${esc(strategy)}</strong></div>
+            </div>
+            <div class="guru-trigger-line"><span>Gatilho atual</span><strong>\${esc(triggerLabel)}</strong></div>
+          </section>
 
-        <div class="guru-mini-grid">
-          <div><span>RSI</span><strong>${a.indicators?.RSI != null ? Number(a.indicators.RSI).toFixed(1) : "—"}</strong></div>
-          <div><span>ADX</span><strong>${a.indicators?.ADX != null ? Number(a.indicators.ADX).toFixed(1) : "—"}</strong></div>
-          <div><span>Stochastic</span><strong>${a.indicators?.StochasticK != null ? Number(a.indicators.StochasticK).toFixed(1) : "—"}</strong></div>
-          <div><span>ATR</span><strong>${a.indicators?.ATRpct != null ? Number(a.indicators.ATRpct).toFixed(3) + "%" : "—"}</strong></div>
-        </div>
+          <section class="guru-evidence-card card">
+            <div class="guru-panel-title"><strong>POR QUE ESTE SINAL?</strong><span>\${score}%</span></div>
+            <ul class="guru-reason-list">\${reasons||"<li>Leitura técnica em atualização.</li>"}</ul>
+            \${warnings?\`<div class="guru-warning-mini">\${warnings}</div>\`:""}
+          </section>
 
-        <div class="guru-result-bottom">
-          <button class="btn primary" id="guruNewAnalysis">🔍 NOVA ANÁLISE</button>
-          <span>Atualizado: ${esc(a.timestamp)}</span>
-        </div>
-      </div>
-    `;
+          <details class="guru-details-card card">
+            <summary>Ver desempenho histórico</summary>
+            <div class="guru-mini-history">
+              \${back.available===false
+                ? \`<div class="guru-history-note">\${esc(back.instrumentModel||"Backtest específico indisponível para esta configuração.")}</div>\`
+                : \`<div><span>Sinais</span><strong>\${tested}</strong></div><div><span>Acertos</span><strong>\${Number(back.wins||0)}</strong></div><div><span>Erros</span><strong>\${Number(back.losses||0)}</strong></div><div><span>Taxa</span><strong>\${hit.toFixed(1)}%</strong></div>\`}
+            </div>
+          </details>
+
+          <details class="guru-details-card card">
+            <summary>Ver contexto técnico</summary>
+            <div class="guru-mtf-compact">
+              <div><span>CONTEXTO</span><strong>\${esc(mtf.context?.timeframe||"—")}</strong><em>\${esc(mtf.context?.direction||"—")}</em></div>
+              <div><span>SETUP</span><strong>\${esc(mtf.setup?.timeframe||"—")}</strong><em>\${esc(mtf.setup?.direction||"—")}</em></div>
+              <div><span>GATILHO</span><strong>\${esc(mtf.trigger?.timeframe||"—")}</strong><em>\${esc(mtf.trigger?.direction||"—")}</em></div>
+            </div>
+          </details>
+          <div class="guru-disclaimer-mini">Estudo técnico. Não há garantia de resultado futuro. O Resolvei não executa operações.</div>
+        </aside>
+      </div>\`;
   }
-
 
 
   async function iqFetch(path,options={}){
@@ -354,25 +320,11 @@
   }
 
   function monitorStatusHtml(symbol,label,detail=""){
-    const steps=[
-      ["BUSCANDO SINAL","🔎"],
-      ["CALCULANDO MERCADO","📐"],
-      ["TESTANDO SINAIS","🧪"],
-      ["ATENÇÃO","⚠️"],
-      ["SINAL PRÓXIMO","🎯"],
-      ["FAÇA A ENTRADA AGORA","🚨"]
-    ];
-    const activeIndex=steps.findIndex(x=>x[0]===label);
-    const stepHtml=steps.map((x,i)=>`<span class="guru-monitor-step ${i===activeIndex?"active":i<activeIndex?"done":""}"><b>${x[1]}</b> ${x[0]}</span>`).join("");
-    return `<div class="card guru-monitor-card">
-      <div class="guru-monitor-head">
-        <div><span class="eyebrow">IQ OPTION · MONITORAMENTO EM TEMPO REAL</span><strong>${esc(label)}</strong></div>
-        <span class="guru-monitor-pulse" aria-hidden="true"></span>
-      </div>
-      <div class="guru-monitor-asset">Acompanhando <strong>${esc(readableAsset(symbol))}</strong></div>
-      <div class="guru-monitor-steps">${stepHtml}</div>
-      <div class="guru-monitor-detail">${esc(detail||"Atualizando a leitura...")}</div>
-    </div>`;
+    const stage={"BUSCANDO SINAL":"1/4","CALCULANDO MERCADO":"2/4","TESTANDO SINAIS":"3/4","ATENÇÃO":"4/4","SINAL PRÓXIMO":"4/4","FAÇA A ENTRADA AGORA":"4/4"}[label]||"1/4";
+    return \`<div class="guru-monitor-compact card">
+      <div class="guru-monitor-main"><span class="guru-live-dot"></span><div><small>MONITORAMENTO ATIVO · \${esc(stage)}</small><strong>\${esc(label)}</strong><span>\${esc(readableAsset(symbol))}</span></div></div>
+      <div class="guru-monitor-detail">\${esc(detail||"Atualizando leitura técnica…")}</div>
+    </div>\`;
   }
 
   function monitoringLabel(analysis,cycle){
