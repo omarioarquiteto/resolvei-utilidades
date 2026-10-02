@@ -70,55 +70,100 @@
     const hasAssets=(assets?.normal?.length||0)+(assets?.otc?.length||0)>0;
     const opts=assetOptions(assets);
     return `
-      <div class="guru-simple guru-ux">
+      <div class="guru-simple guru-ux vo-app">
         <section class="guru-hero">
           <div>
-            <span class="eyebrow">IQ OPTION · OPÇÕES BINÁRIAS</span>
+            <span class="eyebrow">IQ OPTION · MARKET INSIGHT</span>
             <h1>🔭 VISÃO OPÇÕES</h1>
-            <p>Motor técnico dedicado à leitura de mercado por indicadores.</p>
+            <p>Terminal de análise de pares, contexto macroeconômico e leitura técnica em tempo real.</p>
           </div>
           <div class="guru-live-chip"><span></span>${hasAssets?"CONECTADO":"SEM ATIVOS"}</div>
         </section>
 
-        <section class="guru-config-card card">
-          <div class="guru-config-row">
-            <div class="guru-field guru-field-main">
-              <label for="guruIqPair">PAR</label>
-              <select id="guruIqPair">${opts}</select>
+        <nav class="vo-nav" aria-label="Módulos do Visão Opções">
+          <button class="vo-tab active" data-vo-tab="analysis">📊 Análise do par</button>
+          <button class="vo-tab" data-vo-tab="radar">📡 Radar de pares</button>
+          <button class="vo-tab" data-vo-tab="facts">📰 Fatos relevantes</button>
+          <button class="vo-tab" data-vo-tab="indicators">🧭 Indicadores</button>
+        </nav>
+
+        <section class="vo-panel active" id="voPanelAnalysis">
+          <section class="guru-config-card card">
+            <div class="guru-config-row">
+              <div class="guru-field guru-field-main">
+                <label for="guruIqPair">PAR</label>
+                <select id="guruIqPair">${opts}</select>
+              </div>
+              <div class="guru-field">
+                <label for="guruIqExpiry">EXPIRAÇÃO</label>
+                <select id="guruIqExpiry">
+                  <option value="1">1 minuto</option>
+                  <option value="5">5 minutos</option>
+                  <option value="15">15 minutos</option>
+                </select>
+              </div>
+              <div class="guru-field guru-field-strategy">
+                <label for="guruIqStrategy">ESTRATÉGIA</label>
+                <select id="guruIqStrategy">
+                  ${strategies.map(([v,t])=>`<option value="${v}">${t}</option>`).join("")}
+                </select>
+              </div>
+              <button class="guru-analyze-btn" id="guruIqAnalyzeBtn" ${hasAssets?"":"disabled"}>🔍 ANALISAR MERCADO</button>
             </div>
-            <div class="guru-field">
-              <label for="guruIqExpiry">EXPIRAÇÃO</label>
-              <select id="guruIqExpiry">
-                <option value="1">1 minuto</option>
-                <option value="5">5 minutos</option>
-                <option value="15">15 minutos</option>
-              </select>
+            <div class="guru-config-bottom">
+              <div class="guru-option-hint">Leitura técnica contínua. O VISÃO OPÇÕES analisa e informa, mas não envia ordens para a IQ Option.</div>
+              <div class="guru-config-actions">
+                <button class="btn ghost small" id="iqRefreshAssets">↻ Atualizar</button>
+                <button class="btn ghost small" id="guruIqCancelBtn" hidden>✕ Cancelar</button>
+                <button class="btn ghost small" id="iqLogout">Sair</button>
+              </div>
             </div>
-            <div class="guru-field guru-field-strategy">
-              <label for="guruIqStrategy">ESTRATÉGIA</label>
-              <select id="guruIqStrategy">
-                ${strategies.map(([v,t])=>`<option value="${v}">${t}</option>`).join("")}
-              </select>
+            <div id="guruIqMessage" class="notice guru-inline-message" hidden></div>
+          </section>
+
+          <section id="guruIqResult" class="guru-result-stage">
+            <div class="guru-empty card">
+              <div class="guru-empty-icon">◈</div>
+              <strong>Pronto para analisar</strong>
+              <span>Selecione o par, a expiração e a estratégia.</span>
             </div>
-            <button class="guru-analyze-btn" id="guruIqAnalyzeBtn" ${hasAssets?"":"disabled"}>🔍 ANALISAR MERCADO</button>
-          </div>
-          <div class="guru-config-bottom">
-            <div class="guru-option-hint">A Visão analisa continuamente o par selecionado e só interrompe quando encontra uma confirmação técnica de CALL ou PUT.</div>
-            <div class="guru-config-actions">
-              <button class="btn ghost small" id="iqRefreshAssets">↻ Atualizar</button>
-              <button class="btn ghost small" id="guruIqCancelBtn" hidden>✕ Cancelar</button>
-              <button class="btn ghost small" id="iqLogout">Sair</button>
-            </div>
-          </div>
-          <div id="guruIqMessage" class="notice guru-inline-message" hidden></div>
+          </section>
         </section>
 
-        <section id="guruIqResult" class="guru-result-stage">
-          <div class="guru-empty card">
-            <div class="guru-empty-icon">◈</div>
-            <strong>Pronto para analisar</strong>
-            <span>Selecione o par, a expiração e a estratégia.</span>
+        <section class="vo-panel" id="voPanelRadar">
+          <div class="vo-section-head">
+            <div><span class="eyebrow">SCAN DO MERCADO</span><h2>📡 Radar de pares</h2><p>Varre os pares disponíveis na sua sessão da IQ Option usando a mesma lógica técnica individual.</p></div>
+            <div class="vo-controls">
+              <select id="voRadarTf"><option value="1m">1m</option><option value="5m" selected>5m</option><option value="15m">15m</option></select>
+              <select id="voRadarExpiry"><option value="1">1 min</option><option value="5" selected>5 min</option><option value="15">15 min</option></select>
+              <select id="voRadarStrategy">${strategies.map(([v,t])=>`<option value="${v}">${t}</option>`).join("")}</select>
+              <label class="vo-check"><input id="voRadarOtc" type="checkbox" checked> OTC</label>
+              <button class="btn primary" id="voRadarRun">🔎 Atualizar radar</button>
+            </div>
           </div>
+          <div id="voRadarStatus" class="vo-status">Pronto para varrer os pares.</div>
+          <div id="voRadarGrid" class="vo-radar-grid"></div>
+        </section>
+
+        <section class="vo-panel" id="voPanelFacts">
+          <div class="vo-section-head">
+            <div><span class="eyebrow">CALENDÁRIO MACRO</span><h2>📰 Fatos relevantes</h2><p>Eventos econômicos fornecidos pela Biquote, filtrados por moeda do par quando um par está selecionado.</p></div>
+            <div class="vo-controls">
+              <select id="voFactsHours"><option value="12">12h</option><option value="24" selected>24h</option><option value="48">48h</option><option value="168">7 dias</option></select>
+              <select id="voFactsImportance"><option value="all" selected>Todos</option><option value="high">Alto impacto</option><option value="medium">Médio</option><option value="low">Baixo</option></select>
+              <select id="voFactsPair"><option value="">Todos os pares</option>${(assets.normal||[]).concat(assets.otc||[]).map(x=>`<option value="${esc(x.symbol)}">${esc(readableAsset(x.symbol))}</option>`).join("")}</select>
+              <button class="btn primary" id="voFactsRun">↻ Atualizar fatos</button>
+            </div>
+          </div>
+          <div id="voFactsStatus" class="vo-status">Consultando o calendário da Biquote quando você abrir esta aba.</div>
+          <div id="voFactsGrid" class="vo-facts-grid"></div>
+        </section>
+
+        <section class="vo-panel" id="voPanelIndicators">
+          <div class="vo-section-head">
+            <div><span class="eyebrow">LEITURA QUANTITATIVA</span><h2>🧭 Indicadores</h2><p>Valores da última análise do par selecionado. A leitura permanece somente informativa.</p></div>
+          </div>
+          <div id="voIndicatorGrid" class="vo-indicator-grid"><div class="vo-empty">Execute uma análise do par para preencher os indicadores.</div></div>
         </section>
       </div>`;
   }
@@ -300,17 +345,89 @@
     document.getElementById("iqRefreshAssets")?.addEventListener("click",refreshAssets);
     document.getElementById("iqLogout")?.addEventListener("click",()=>logout(true));
     document.getElementById("guruIqCancelBtn")?.addEventListener("click",()=>{
-      monitoring=false;
-      monitorRunId++;
-      stopMonitorUiTicker();
-      setMonitoringUI(false);
+      monitoring=false; monitorRunId++; stopMonitorUiTicker(); setMonitoringUI(false);
       const result=document.getElementById("guruIqResult");
-      if(result){
-        result.innerHTML='<div class="guru-empty card"><div class="guru-empty-icon">◈</div><strong>Análise cancelada</strong><span>Selecione o par, a expiração e a estratégia para iniciar novamente.</span></div>';
-      }
+      if(result) result.innerHTML='<div class="guru-empty card"><div class="guru-empty-icon">◈</div><strong>Análise cancelada</strong><span>Selecione o par, a expiração e a estratégia para iniciar novamente.</span></div>';
     });
-    document.getElementById("guruIqOptionType")?.addEventListener("change",syncOptionControls);
+    document.querySelectorAll("[data-vo-tab]").forEach(btn=>btn.addEventListener("click",()=>switchVoTab(btn.dataset.voTab)));
+    document.getElementById("voRadarRun")?.addEventListener("click",loadRadar);
+    document.getElementById("voFactsRun")?.addEventListener("click",loadFacts);
+    document.getElementById("guruIqPair")?.addEventListener("change",()=>syncFactsPair());
     syncOptionControls();
+  }
+
+  function switchVoTab(tab){
+    const map={analysis:"voPanelAnalysis",radar:"voPanelRadar",facts:"voPanelFacts",indicators:"voPanelIndicators"};
+    document.querySelectorAll(".vo-tab").forEach(b=>b.classList.toggle("active",b.dataset.voTab===tab));
+    Object.entries(map).forEach(([key,id])=>document.getElementById(id)?.classList.toggle("active",key===tab));
+    if(tab==="facts") loadFacts();
+    if(tab==="radar" && !document.getElementById("voRadarGrid")?.children.length) loadRadar();
+    if(tab==="indicators") renderIndicatorsFromLast();
+  }
+
+  function syncFactsPair(){
+    const src=document.getElementById("guruIqPair"),dst=document.getElementById("voFactsPair");
+    if(!src||!dst)return;
+    const value=src.value||"";
+    if([...dst.options].some(o=>o.value===value))dst.value=value;
+  }
+
+  function factHtml(ev){
+    const imp=String(ev?.importance||"low").toLowerCase();
+    const mins=ev?.time?Math.round((new Date(ev.time).getTime()-Date.now())/60000):null;
+    const timing=mins!=null?(mins<60?("em "+Math.max(0,mins)+" min"):(mins<1440?("hoje · "+Math.round(mins/60)+"h"):(Math.round(mins/1440)+"d"))):"—";
+    return `<article class="vo-fact-card impact-${esc(imp)}"><div class="vo-fact-top"><span>${esc(ev.currency||"—")}</span><strong>${esc(imp.toUpperCase())}</strong></div><h3>${esc(ev.title||"Evento econômico")}</h3><p>${esc(ev.description||"")}</p><div class="vo-fact-meta"><span>${esc(timing)}</span><span>${esc(ev.sector||"Macro")}</span></div><div class="vo-fact-values"><span>Anterior <b>${esc(ev.previous??"—")}</b></span><span>Previsão <b>${esc(ev.forecast??"—")}</b></span><span>Atual <b>${esc(ev.actual??"—")}</b></span></div></article>`;
+  }
+
+  async function loadFacts(){
+    const grid=document.getElementById("voFactsGrid"),status=document.getElementById("voFactsStatus"),btn=document.getElementById("voFactsRun");
+    if(!grid)return;
+    const hours=Number(document.getElementById("voFactsHours")?.value||24);
+    const importance=document.getElementById("voFactsImportance")?.value||"all";
+    const symbol=document.getElementById("voFactsPair")?.value||document.getElementById("guruIqPair")?.value||"";
+    if(btn){btn.disabled=true;btn.textContent="⏳ Atualizando…";}
+    if(status)status.textContent="Consultando a Biquote…";
+    try{
+      const d=await jsonResponse(await iqFetch("/facts?hours="+hours+"&importance="+encodeURIComponent(importance)+"&symbol="+encodeURIComponent(symbol)));
+      const events=d.events||[];
+      grid.innerHTML=events.length?events.map(factHtml).join(""):`<div class="vo-empty">Nenhum evento encontrado para o filtro selecionado.</div>`;
+      if(status)status.textContent=d.available?(`✓ ${events.length} evento(s) · fonte: Biquote`):("⚠️ "+(d.warning||"Calendário indisponível."));
+    }catch(e){grid.innerHTML='<div class="vo-empty">⚠️ '+esc(e.message)+'</div>';if(status)status.textContent="⚠️ "+e.message;}
+    finally{if(btn){btn.disabled=false;btn.textContent="↻ Atualizar fatos";}}
+  }
+
+  function radarCard(r){
+    const signal=r?.signal||"SEM SINAL", cls=signal==="CALL"?"call":signal==="PUT"?"put":"wait";
+    return `<article class="vo-radar-card ${cls}" data-pair="${esc(r?.symbol||"")}"><div class="vo-radar-head"><strong>${esc(readableAsset(r?.symbol))}</strong><span>${esc(r?.strategyLabel||r?.strategy||"")}</span></div><div class="vo-radar-main"><strong>${esc(signal)}</strong><span>${Number(r?.proximity||r?.confidence||0).toFixed(0)}%</span></div><div class="vo-radar-bar"><span style="width:${Math.max(0,Math.min(100,Number(r?.proximity||0)))}%"></span></div><div class="vo-radar-meta"><span>Preço <b>${r?.price!=null?Number(r.price).toFixed(5):"—"}</b></span><span>Biquote <b>${r?.newsCount||0}</b></span></div></article>`;
+  }
+
+  async function loadRadar(){
+    const grid=document.getElementById("voRadarGrid"),status=document.getElementById("voRadarStatus"),btn=document.getElementById("voRadarRun");
+    if(!grid)return;
+    const tf=document.getElementById("voRadarTf")?.value||"5m",expiry=Number(document.getElementById("voRadarExpiry")?.value||5),strategy=document.getElementById("voRadarStrategy")?.value||"automatica",otc=document.getElementById("voRadarOtc")?.checked!==false;
+    if(btn){btn.disabled=true;btn.textContent="⏳ Varrendo…";}
+    if(status)status.textContent="Lendo pares e candles da IQ Option…";
+    try{
+      const d=await jsonResponse(await iqFetch("/pair-radar?timeframe="+tf+"&expiry="+expiry+"&strategy="+encodeURIComponent(strategy)+"&limit=30&include_otc="+otc));
+      grid.innerHTML=(d.pairs||[]).map(radarCard).join("")||'<div class="vo-empty">Nenhum par retornou dados suficientes.</div>';
+      if(status)status.textContent=`✓ ${d.totalAnalyzed||0} pares processados pela IQ Option.`;
+      grid.querySelectorAll("[data-pair]").forEach(el=>el.addEventListener("click",()=>openPairFromRadar(el.dataset.pair)));
+    }catch(e){grid.innerHTML='<div class="vo-empty">⚠️ '+esc(e.message)+'</div>';if(status)status.textContent="⚠️ "+e.message;}
+    finally{if(btn){btn.disabled=false;btn.textContent="🔎 Atualizar radar";}}
+  }
+
+  async function openPairFromRadar(symbol){
+    const sel=document.getElementById("guruIqPair");if(sel&&[...sel.options].some(o=>o.value===symbol))sel.value=symbol;
+    switchVoTab("analysis");
+    setTimeout(()=>analyze(),0);
+  }
+
+  function renderIndicatorsFromLast(){
+    const grid=document.getElementById("voIndicatorGrid"),a=monitorCurrentAnalysis;
+    if(!grid)return;
+    const values=a?.indicators||{};
+    const keys=Object.keys(values);
+    grid.innerHTML=keys.length?keys.map(k=>`<div class="vo-ind-card"><span>${esc(k)}</span><strong>${esc(String(values[k]))}</strong></div>`).join(""):'<div class="vo-empty">Execute uma análise do par para preencher os indicadores.</div>';
   }
 
   let monitorRunId=0;
