@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
+import secrets
 import time
 from typing import Any
 
@@ -26,6 +28,7 @@ STRATEGIES = {
 # Cache somente de dados de mercado. Perfis de indicadores ficam no navegador
 # para que cada usuário tenha sua própria configuração.
 CANDLE_CACHE: dict[str, tuple[float, list[dict[str, float]]]] = {}
+ANALYSIS_MONITORS: dict[str, dict[str, Any]] = {}
 
 
 class MarketAnalysisRequest(BaseModel):
@@ -34,6 +37,7 @@ class MarketAnalysisRequest(BaseModel):
     strategy: str = "automatica"
     expiry_minutes: int = 1
     indicator_ids_by_strategy: dict[str, list[str]] | None = None
+    monitor_id: str | None = None
 
 
 def _session(x_iq_session: str | None) -> dict[str, Any]:
@@ -124,14 +128,76 @@ async def _get_base_candles(
     return rows
 
 
-def _analysis_result(
-    base: list[dict[str, float]],
-    expiry: int,
-    strategy: str,
-    profiles: dict[str, list[str]] | None,
-) -> dict[str, Any]:
-    return engine.analyze_market(base, expiry, strategy, profiles)
+async def _get_timeframe_candles(
+    client: Any,
+    sid: str,
+    symbol: str,
+    timeframe: str,
+    count: int,
+    timeout: float = 5.0,
+) -> list[dict[str, float]]:
+    if timeframe not in INTERVALS:
+        raise HTTPException(400, "Timeframe não suportado.")
+    symbol = symbol.upper().strip()
+    key = f"{sid}|{symbol}|{timeframe}|{count}"
+    cached = CANDLE_CACHE.get(key)
+    if cached and time.time() - cached[0] <= 1.2:
+        return cached[1]
 
+    try:
+        raw = await asyncio.wait_for(
+            client.get_candles(
+                symbol,
+                INTERVALS[timeframe],
+                min(max(int(count), 60), 240),
+                int(time.time()),
+            ),
+            timeout=timeout,
+        )
+    except asyncio.TimeoutError as exc:
+        raise HTTPException(504, f"A IQ Option demorou para responder aos candles de {symbol}.") from exc
+    except KeyError as exc:
+        raise HTTPException(502, f"O ativo {symbol} não está mapeado na API da IQ Option.") from exc
+    except Exception as exc:
+        raise HTTPException(502, f"Falha ao ler candles de {symbol}: {str(exc)[:180]}") from exc
+
+    rows = _clean_rows(raw)
+    if len(rows) < 60:
+        raise HTTPException(502, f"A IQ Option forneceu somente {len(rows)} candles de {timeframe} para {symbol}.")
+    CANDLE_CACHE[key] = (time.time(), rows)
+    return rows
+
+
+def _merge_candles(current: list[dict[str, float]], recent: list[dict[str, float]], limit: int = 160) -> list[dict[str, float]]:
+    merged = {int(float(row.get('time', 0))): row for row in current if float(row.get('time', 0)) > 0}
+    for row in recent:
+        ts = int(float(row.get('time', 0)))
+        if ts > 0:
+            merged[ts] = row
+    return [merged[k] for k in sorted(merged)][-limit:]
+
+
+def _next_boundary(interval: int, now: float | None = None) -> float:
+    now = time.time() if now is None else now
+    return ((int(now) // interval) + 1) * interval
+
+
+async def _load_analysis_frames(client: Any, sid: str, symbol: str, expiry: int) -> dict[str, list[dict[str, float]]]:
+    setup_tf, trigger_tf, context_tfs = engine.expiry_plan(expiry)
+    required = list(dict.fromkeys([setup_tf, trigger_tf, *context_tfs]))
+    counts = {"1m": 120, "5m": 70, "15m": 70}
+
+    async def load(tf: str):
+        return tf, await _get_timeframe_candles(client, sid, symbol, tf, counts[tf], timeout=6.0)
+
+    pairs = await asyncio.gather(*(load(tf) for tf in required))
+    return {tf: rows for tf, rows in pairs}
+
+
+def _monitor_profile_key(sid: str, symbol: str, expiry: int, strategy: str, profiles: dict[str, list[str]]) -> str:
+    profile_json = json.dumps(profiles, sort_keys=True, separators=(",", ":"))
+    digest = hashlib.sha1(profile_json.encode("utf-8")).hexdigest()[:12]
+    return f"{sid}|{symbol.upper().strip()}|{expiry}|{strategy}|{digest}"
 
 def _facts_for_symbol(symbol: str) -> dict[str, Any]:
     facts = biquote_service.get_facts(hours=24, importance="all", symbol=symbol)
@@ -389,29 +455,81 @@ async def market_analysis(
 
     try:
         started = time.perf_counter()
-        # A análise profunda usa contexto até 15m e exige >=60 candles
-        # fechados por timeframe. Com base de 1m, 1000 candles dão margem
-        # suficiente para formar ~66 candles de 15m mesmo após remover o candle atual.
-        candle_count = 1000
-        base = await _get_base_candles(
-            item["client"],
-            x_iq_session or "",
-            req.symbol,
-            candle_count,
-        )
         profiles = _profile_map(req.indicator_ids_by_strategy)
-        analysis = _analysis_result(
-            base,
+        sid = x_iq_session or ""
+        symbol = req.symbol.upper().strip()
+        monitor_id = (req.monitor_id or "").strip()
+        state = ANALYSIS_MONITORS.get(monitor_id) if monitor_id else None
+
+        valid_state = (
+            state
+            and state.get("sid") == sid
+            and state.get("symbol") == symbol
+            and int(state.get("expiry", 0)) == req.expiry_minutes
+            and state.get("strategy") == req.strategy
+        )
+
+        if not valid_state:
+            monitor_id = secrets.token_urlsafe(16)
+            frames = await _load_analysis_frames(item["client"], sid, symbol, req.expiry_minutes)
+            now = time.time()
+            state = {
+                "sid": sid,
+                "symbol": symbol,
+                "expiry": req.expiry_minutes,
+                "strategy": req.strategy,
+                "profiles": profiles,
+                "frames": frames,
+                "next_refresh": {
+                    tf: _next_boundary(INTERVALS[tf], now)
+                    for tf in frames
+                    if tf != "1m"
+                },
+            }
+            ANALYSIS_MONITORS[monitor_id] = state
+            mode = "initial"
+        else:
+            state["profiles"] = profiles
+            now = time.time()
+            recent = await _get_timeframe_candles(item["client"], sid, symbol, "1m", 4, timeout=2.5)
+            state["frames"]["1m"] = _merge_candles(state["frames"].get("1m", []), recent, 160)
+
+            due = [
+                tf
+                for tf, boundary in state.get("next_refresh", {}).items()
+                if now >= float(boundary)
+            ]
+            if due:
+                loaded = await asyncio.gather(*(
+                    _get_timeframe_candles(
+                        item["client"],
+                        sid,
+                        symbol,
+                        tf,
+                        {"5m": 70, "15m": 70}[tf],
+                        timeout=4.0,
+                    )
+                    for tf in due
+                ))
+                for tf, rows in zip(due, loaded):
+                    state["frames"][tf] = rows
+                    state["next_refresh"][tf] = _next_boundary(INTERVALS[tf], now)
+            mode = "incremental"
+
+        analysis = engine.analyze_market_frames(
+            state["frames"],
             req.expiry_minutes,
             req.strategy,
-            profiles,
+            _profile_map(state.get("profiles")),
         )
+        analysis["monitorId"] = monitor_id
+        analysis["monitorRefresh"] = {"mode": mode, "timeframes": sorted(state["frames"].keys())}
         analysis["timeframe"] = analysis["analysisTimeframes"]["setup"]
         analysis["candlePeriod"] = analysis["analysisTimeframes"]["setup"]
         analysis["expiryMinutes"] = req.expiry_minutes
         analysis["optionType"] = "binary"
         analysis["optionLabel"] = "Binárias"
-        analysis["symbol"] = req.symbol.upper().strip()
+        analysis["symbol"] = symbol
         analysis["timestamp"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
         analysis["serverEpoch"] = time.time()
         # O calendário Biquote fica na aba Fatos; não bloqueia a leitura técnica principal.
