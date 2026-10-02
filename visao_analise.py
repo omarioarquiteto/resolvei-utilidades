@@ -748,7 +748,24 @@ def _trigger_from_live_rows(rows:list[dict],timeframe:str,strategy:str,direction
     # O gatilho só aciona quando os mesmos indicadores selecionados
     # apontam novamente para a direção estrutural, com confluência mínima.
     aligned=live_dir==direction
-    ready=bool(aligned and confidence>=65.0 and directional>=max(1,math.ceil(len(selected_ids)*0.50)))
+    selected_count=len(selected_ids)
+    winner=max(int(live["bulls"]),int(live["bears"]))
+    loser=min(int(live["bulls"]),int(live["bears"]))
+    margin=winner-loser
+    coverage=(directional/selected_count*100) if selected_count else 0.0
+    required_directional=max(2,math.ceil(selected_count*0.60)) if selected_count else 99
+    required_margin=max(1,math.ceil(selected_count*0.30)) if selected_count else 99
+
+    # Estrutura de entrada segue o rigor de quórum do market-insight-ai,
+    # adaptado ao número de indicadores que o usuário habilitou na estratégia.
+    ready=bool(
+        aligned
+        and selected_count>=3
+        and confidence>=70.0
+        and directional>=required_directional
+        and margin>=required_margin
+        and coverage>=60.0
+    )
 
     proximity=min(99.0, round(confidence if aligned else confidence*0.55,1))
     if ready:
