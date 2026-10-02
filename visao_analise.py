@@ -85,7 +85,7 @@ INDICATOR_CATALOG = [
     {"id":"obv","name":"OBV","description":"On-Balance Volume; pressão acumulada.","kind":"indicador","weight":0.8},
     {"id":"engolfo","name":"Candle de engolfo","description":"Corpo atual engole o corpo anterior.","kind":"indicador","weight":0.9},
     {"id":"atr","name":"ATR (14)","description":"Expansão de volatilidade do candle.","kind":"indicador","weight":0.9},
-    {"id":"momentum10","name":"Momentum (10)","description":"Diferença do fechamento contra 10 velas atrás.","kind":"indicador","weight":0.8},
+    {"id":"momentum","name":"Momentum (10)","description":"Diferença do fechamento contra 10 velas atrás.","kind":"indicador","weight":0.8},
     {"id":"cmf","name":"CMF (20)","description":"Chaikin Money Flow; fluxo monetário.","kind":"indicador","weight":0.9},
     {"id":"donchian","name":"Donchian (20)","description":"Máxima/mínima da faixa de 20 velas.","kind":"indicador","weight":1.0},
     {"id":"rejeicao","name":"Vela de rejeição","description":"Sombra longa no topo ou na base.","kind":"indicador","weight":0.8},
@@ -452,7 +452,7 @@ GENERIC_VOTES = {
     "ema1020":lambda d,i:_vote_ema(d,i,"EMA10","EMA20"),
     "bollinger":_vote_bollinger,"adx":_vote_adx,"cci":_vote_cci,"williams":_vote_williams,
     "mfi":_vote_mfi,"roc":_vote_roc,"sar":_vote_sar,"obv":_vote_obv,"engolfo":_vote_engolfo,
-    "atr":_vote_atr,"momentum10":_vote_momentum10,"cmf":_vote_cmf,"donchian":_vote_donchian,
+    "atr":_vote_atr,"momentum":_vote_momentum10,"cmf":_vote_cmf,"donchian":_vote_donchian,
     "rejeicao":_vote_rejeicao,
 }
 
