@@ -155,9 +155,20 @@
 
   function resultHtml(a){const signal=a?.signal||"AGUARDAR",call=signal==="CALL",put=signal==="PUT",score=Math.max(0,Math.min(100,Number(a?.score||0)));const rows=(a?.indicatorReadings||[]).map(v=>`<div class="guru-indicator-row"><span>${esc(v.name)}</span><strong class="${v.signal==="CALL"?"call":v.signal==="PUT"?"put":"neutral"}">${esc(v.signal)}</strong><small>${esc(v.reason)}</small></div>`).join("");const names=(a?.profile?.indicatorNames||[]).map(x=>`<span class="vo-profile-chip">${esc(x)}</span>`).join("");const reasons=(a?.reasons||[]).slice(0,6).map(x=>`<li>✓ ${esc(x)}</li>`).join("");const warnings=(a?.warnings||[]).slice(0,4).map(x=>`<li>⚠ ${esc(x)}</li>`).join("");return `<div class="guru-dashboard"><section class="guru-signal-card card"><div class="guru-signal-head"><div><span class="eyebrow">VISÃO OPÇÕES · ${esc(a?.strategyLabel||a?.strategy||"")}</span><span class="guru-signal-kicker">${esc(readableAsset(a?.symbol))}</span></div><div class="guru-price">${a?.price!=null?esc(Number(a.price).toFixed(5)):"—"}</div></div><div class="guru-signal-core ${call?"guru-call":put?"guru-put":"guru-wait"}"><span class="guru-signal-label">${call?"CALL":put?"PUT":"AGUARDAR"}</span><span class="guru-signal-quality">${esc(a?.quality||"Leitura técnica")}</span></div><div class="guru-score-compact"><div><span>CONFLUÊNCIA TÉCNICA</span><strong>${score.toFixed(0)}%</strong></div><div class="guru-meter"><span style="width:${score}%"></span></div></div><div class="guru-summary-grid"><div><span>EXPIRAÇÃO</span><strong>${esc(a?.expiryMinutes)} min</strong></div><div><span>SETUP</span><strong>${esc(a?.analysisTimeframes?.setup||"—")}</strong></div><div><span>GATILHO</span><strong>${esc(a?.analysisTimeframes?.trigger||"—")}</strong></div><div><span>INDICADORES</span><strong>${Number(a?.profile?.totalSelected||0)}</strong></div></div><div class="guru-entry-compact ${a?.signalConfirmed?"ready":""}"><div><span class="guru-entry-title">MOMENTO</span><strong>${esc(a?.entry?.status||"ANALISANDO")}</strong></div><div class="guru-entry-direction">${call?"CALL":put?"PUT":"—"}</div><div class="guru-entry-countdown">${Number(a?.entry?.secondsRemaining||0)}s</div></div><div class="guru-action-row"><button class="btn primary" id="guruNewAnalysis">↻ NOVA ANÁLISE</button><span>${esc(a?.entry?.instruction||"O motor continua analisando o mercado.")}</span></div></section><aside class="guru-side-stack"><section class="guru-evidence-card card"><div class="guru-panel-title"><strong>INDICADORES DO PERFIL</strong><span>${Number(a?.profile?.totalSelected||0)}</span></div><div class="vo-profile-summary">${names||"<span class=\"muted\">Nenhum.</span>"}</div><div class="guru-indicator-list">${rows||"<span class=\"muted\">Nenhum voto.</span>"}</div></section><section class="guru-evidence-card card"><div class="guru-panel-title"><strong>INTERPRETAÇÃO</strong></div><ul class="guru-reason-list">${reasons||"<li>Leitura em atualização.</li>"}</ul>${warnings?`<div class="guru-warning-mini">${warnings}</div>`:""}</section><section class="guru-evidence-card card"><div class="guru-panel-title"><strong>CONTEXTO DO MERCADO</strong></div><p>Contexto: <b>${esc(a?.mtf?.context?.direction||"—")}</b> · Setup: <b>${esc(a?.mtf?.setup?.direction||"—")}</b> · Gatilho: <b>${esc(a?.mtf?.trigger?.direction||"—")}</b></p></section><section class="guru-evidence-card card"><div class="guru-panel-title"><strong>FATOS RELEVANTES · BIQUOTE</strong><span>${Number(a?.relevantFacts?.events?.length||0)} evento(s)</span></div><div class="vo-inline-facts">${(a?.relevantFacts?.events||[]).slice(0,4).map(ev=>`<div><strong>${esc(ev.currency||"—")}</strong><span>${esc(ev.title||"Evento")}</span><em>${esc(ev.importance||"")}</em></div>`).join("")||"<span class=\"muted\">Nenhum evento no período.</span>"}</div></section><div class="guru-disclaimer-mini">Motor técnico baseado no market-insight-ai. Seleção de indicadores é independente por estratégia. Não há execução automática.</div></aside></div>`;}
 
-  function monitoringLabel(a){const entry=a?.entry||{};if(entry.ready||a?.signalConfirmed)return "SINAL CONFIRMADO";const state=String(a?.analysisState||entry.state||entry.status||"").toUpperCase();const p=Math.max(0,Math.min(100,Number(a?.proximity||0)));if(state.includes("PRÓXIMO")||p>=82)return "SINAL PRÓXIMO";if(state.includes("ATENÇÃO")||p>=65)return "ATENÇÃO";return "ANALISANDO MERCADO";}
-  function monitoringDetail(a,label){const entry=a?.entry||{};if(label==="SINAL CONFIRMADO")return "Confirmação técnica encontrada. O monitoramento foi encerrado.";if(label==="SINAL PRÓXIMO")return entry.instruction||"Acompanhando o gatilho até a confirmação.";const d=a?.mtf?.setup?.direction;return d==="CALL"||d==="PUT"?`Direção ${d} identificada. Conferindo a confluência do perfil e o gatilho.`:"Interpretando os indicadores selecionados."}
-  function monitorStatusHtml(symbol,a=null){const p=Math.max(0,Math.min(100,Number(a?.proximity||0)));return `<div class="guru-monitor-compact card"><div class="guru-monitor-head"><div class="guru-monitor-main"><span class="guru-live-dot"></span><div><small>ANÁLISE · MARKET-INSIGHT-AI</small><strong id="guruIqMonitorLabel">${esc(monitoringLabel(a))}</strong><span>${esc(readableAsset(symbol))}</span></div></div></div><div class="guru-monitor-progress"><div class="guru-monitor-progress-top"><span>PROXIMIDADE PARA CONFIRMAÇÃO</span><strong id="guruIqMonitorPercent">${p.toFixed(0)}%</strong></div><div class="guru-progress-track"><span id="guruIqMonitorBar" style="width:${p}%"></span></div></div><div class="guru-monitor-live-meta"><div><span>ETAPA</span><strong id="guruIqMonitorStage">PREPARANDO LEITURA</strong></div><div><span>ÚLTIMA LEITURA</span><strong id="guruIqMonitorLastUpdate">aguardando</strong></div><div><span>PRÓXIMA</span><strong id="guruIqMonitorNext">AGORA</strong></div><div><span>PROCESSAMENTO</span><strong id="guruIqMonitorElapsed">iniciando</strong></div><div><span>CANDLE DO GATILHO</span><strong id="guruIqMonitorCandle">—</strong></div><div><span>STATUS</span><strong id="guruIqMonitorRequest">Consultando o motor técnico…</strong></div></div><div class="guru-monitor-detail" id="guruIqMonitorDetail">${esc(monitoringDetail(a,monitoringLabel(a)))}</div></div>`;}
+  function monitoringLabel(a){
+  const phase=String(a?.phase||a?.analysisState||"ANALISANDO MERCADO").toUpperCase();
+  if(phase.includes("EXECUTE"))return "EXECUTE A OPERAÇÃO";
+  if(phase.includes("GATILHO"))return "BUSCANDO GATILHO";
+  if(phase.includes("PRÓXIMO")||phase.includes("PROXIMO"))return "SINAL PRÓXIMO";
+  return "ANALISANDO MERCADO";
+}
+function monitoringDetail(a,label){
+  if(label==="EXECUTE A OPERAÇÃO")return a?.entry?.instruction||"Confirmação técnica encontrada. Clique em CALL ou PUT agora.";
+  if(label==="BUSCANDO GATILHO")return a?.entry?.instruction||"A direção estrutural está confirmada. Procurando a confirmação final.";
+  if(label==="SINAL PRÓXIMO")return a?.entry?.instruction||"Setup encontrado. Aguardando o gatilho técnico.";
+  return "Analisando estrutura, contexto, estratégia e indicadores selecionados.";
+}
+function monitorStatusHtml(symbol,a=null){const p=Math.max(0,Math.min(100,Number(a?.proximity||0)));return `<div class="guru-monitor-compact card"><div class="guru-monitor-head"><div class="guru-monitor-main"><span class="guru-live-dot"></span><div><small>ANÁLISE · MARKET-INSIGHT-AI</small><strong id="guruIqMonitorLabel">${esc(monitoringLabel(a))}</strong><span>${esc(readableAsset(symbol))}</span></div></div></div><div class="guru-monitor-progress"><div class="guru-monitor-progress-top"><span>PROXIMIDADE PARA CONFIRMAÇÃO</span><strong id="guruIqMonitorPercent">${p.toFixed(0)}%</strong></div><div class="guru-progress-track"><span id="guruIqMonitorBar" style="width:${p}%"></span></div></div><div class="guru-monitor-live-meta"><div><span>ETAPA</span><strong id="guruIqMonitorStage">PREPARANDO LEITURA</strong></div><div><span>ÚLTIMA LEITURA</span><strong id="guruIqMonitorLastUpdate">aguardando</strong></div><div><span>PRÓXIMA</span><strong id="guruIqMonitorNext">AGORA</strong></div><div><span>PROCESSAMENTO</span><strong id="guruIqMonitorElapsed">iniciando</strong></div><div><span>CANDLE DO GATILHO</span><strong id="guruIqMonitorCandle">—</strong></div><div><span>STATUS</span><strong id="guruIqMonitorRequest">Consultando o motor técnico…</strong></div></div><div class="guru-monitor-detail" id="guruIqMonitorDetail">${esc(monitoringDetail(a,monitoringLabel(a)))}</div></div>`;}
   function updateMonitorView(a,label,detail){const p=Math.max(0,Math.min(100,Number(a?.proximity||0)));monitorCurrentAnalysis=a||null;if(Number(a?.serverEpoch))monitorClockOffsetMs=Number(a.serverEpoch)*1000-Date.now();const l=document.getElementById("guruIqMonitorLabel"),pe=document.getElementById("guruIqMonitorPercent"),b=document.getElementById("guruIqMonitorBar"),d=document.getElementById("guruIqMonitorDetail");if(l)l.textContent=label;if(pe)pe.textContent=p.toFixed(0)+"%";if(b)b.style.width=p+"%";if(d)d.textContent=detail||"Atualizando leitura técnica…";}
   function startMonitorUiTicker(){clearInterval(monitorUiTimer);monitorUiTimer=setInterval(()=>{if(!monitoring){clearInterval(monitorUiTimer);monitorUiTimer=null;return;}const stage=document.getElementById("guruIqMonitorStage"),req=document.getElementById("guruIqMonitorRequest"),elapsed=document.getElementById("guruIqMonitorElapsed"),next=document.getElementById("guruIqMonitorNext"),last=document.getElementById("guruIqMonitorLastUpdate"),candle=document.getElementById("guruIqMonitorCandle");const now=Date.now();if(monitorRequestStartedAt){const s=(now-monitorRequestStartedAt)/1000;if(stage)stage.textContent="ANALISANDO INDICADORES";if(req)req.textContent="Lendo candles e interpretando os indicadores selecionados.";if(elapsed)elapsed.textContent=s.toFixed(1)+"s em processamento";if(next)next.textContent="AGORA";}else{const ns=Math.max(0,(monitorNextPollAt-now)/1000),label=monitoringLabel(monitorCurrentAnalysis);if(stage)stage.textContent=label;if(req)req.textContent=label==="SINAL PRÓXIMO"?"Acompanhando o gatilho até a confirmação.":"Interpretando a estratégia e o perfil atual.";if(elapsed)elapsed.textContent="Leitura concluída";if(next)next.textContent=ns<=0?"AGORA":ns.toFixed(1)+"s";}if(last)last.textContent=monitorLastUpdateAt?new Date(monitorLastUpdateAt).toLocaleTimeString("pt-BR",{hour12:false}):"aguardando";const closeAt=Number(monitorCurrentAnalysis?.entry?.candleCloseAt||0)*1000;if(candle)candle.textContent=closeAt?Math.max(0,(closeAt-(Date.now()+monitorClockOffsetMs))/1000).toFixed(0)+"s":"—";},250);}
   function stopMonitorUiTicker(){clearInterval(monitorUiTimer);monitorUiTimer=null;monitorRequestStartedAt=0;monitorNextPollAt=0;monitorCurrentAnalysis=null;}
@@ -174,42 +185,61 @@
       expiry=Number(document.getElementById("guruIqExpiry")?.value||1),
       strategy=document.getElementById("guruIqStrategy")?.value||"automatica";
     if(!symbol || btn?.disabled)return;
-
     const profiles=profileForRequest();
-    if(btn){btn.disabled=true;btn.textContent="⏳ ANALISANDO…";}
+    const runId=++monitorRunId;
+    monitoring=true;
+    setMonitoringUI(true);
     if(msg){msg.hidden=true;msg.textContent="";}
     if(result)result.innerHTML=monitorStatusHtml(symbol);
-
-    let timer=0;
+    startMonitorUiTicker();
     try{
-      const controller=new AbortController();
-      timer=setTimeout(()=>controller.abort(),12000);
-      const d=await jsonResponse(await iqFetch("/market-analysis",{
-        method:"POST",
-        signal:controller.signal,
-        body:JSON.stringify({
-          symbol,
-          timeframe:expiry===1?"1m":expiry===5?"5m":"15m",
-          strategy,
-          expiry_minutes:expiry,
-          indicator_ids_by_strategy:profiles
-        })
-      }));
-      const a=d.analysis||{};
-      lastCompletedAnalysis=a;
-      monitorCurrentAnalysis=a;
-      if(result){
-        result.innerHTML=resultHtml(a);
-        document.getElementById("guruNewAnalysis")?.addEventListener("click",analyze);
+      while(monitoring&&runId===monitorRunId){
+        monitorRequestStartedAt=Date.now();
+        let timeoutId=0;
+        try{
+          const controller=new AbortController();
+          timeoutId=setTimeout(()=>controller.abort(),9000);
+          const d=await jsonResponse(await iqFetch("/market-analysis",{
+            method:"POST",
+            signal:controller.signal,
+            body:JSON.stringify({
+              symbol,
+              timeframe:expiry===1?"1m":expiry===5?"5m":"15m",
+              strategy,
+              expiry_minutes:expiry,
+              indicator_ids_by_strategy:profiles
+            })
+          }));
+          const a=d.analysis||{};
+          lastCompletedAnalysis=a;
+          monitorCurrentAnalysis=a;
+          monitorLastUpdateAt=Date.now();
+          const phase=monitoringLabel(a);
+          if(phase==="EXECUTE A OPERAÇÃO"&&a.signalConfirmed===true&&(a.signal==="CALL"||a.signal==="PUT")){
+            monitoring=false;
+            setMonitoringUI(false);
+            stopMonitorUiTicker();
+            if(result){
+              result.innerHTML=resultHtml(a);
+              document.getElementById("guruNewAnalysis")?.addEventListener("click",analyze);
+            }
+            return;
+          }
+          updateMonitorView(a,phase,monitoringDetail(a,phase));
+        }catch(e){
+          if(e?.name!=="AbortError"&&msg){
+            msg.hidden=false;
+            msg.textContent="⚠️ "+e.message;
+          }
+        }finally{
+          if(timeoutId)clearTimeout(timeoutId);
+          monitorRequestStartedAt=0;
+        }
+        if(!monitoring||runId!==monitorRunId)break;
+        monitorNextPollAt=Date.now()+1000;
+        await sleep(1000);
       }
-    }catch(e){
-      if(result)result.innerHTML=`<div class="guru-empty card"><div class="guru-empty-icon">⚠</div><strong>Falha na análise</strong><span>${esc(e?.name==="AbortError"?"A IQ Option demorou para responder aos candles.":e.message)}</span><button class="btn primary" id="guruRetryAnalysis" style="margin-top:12px">↻ Tentar novamente</button></div>`;
-      document.getElementById("guruRetryAnalysis")?.addEventListener("click",analyze);
-      if(msg){msg.hidden=false;msg.textContent=e?.name==="AbortError"?"A IQ Option demorou para responder.":"⚠️ "+e.message;}
-    }finally{
-      if(timer)clearTimeout(timer);
-      if(btn){btn.disabled=false;btn.textContent="🔍 ANALISAR MERCADO";}
-    }
+    }catch(_){}
   }
 function bindConnected(){document.getElementById("guruIqAnalyzeBtn")?.addEventListener("click",analyze);document.getElementById("iqRefreshAssets")?.addEventListener("click",refreshAssets);document.getElementById("iqLogout")?.addEventListener("click",()=>logout(true));document.getElementById("guruIqCancelBtn")?.addEventListener("click",()=>{monitoring=false;monitorRunId++;stopMonitorUiTicker();setMonitoringUI(false);const r=document.getElementById("guruIqResult");if(r)r.innerHTML="<div class=\"guru-empty card\"><div class=\"guru-empty-icon\">◈</div><strong>Análise cancelada</strong><span>Selecione o par e a estratégia para iniciar novamente.</span></div>";});document.querySelectorAll("[data-vo-tab]").forEach(btn=>btn.addEventListener("click",()=>switchVoTab(btn.dataset.voTab)));document.getElementById("voRadarRun")?.addEventListener("click",loadRadar);document.getElementById("voFactsRun")?.addEventListener("click",loadFacts);document.getElementById("voMarkAll")?.addEventListener("click",()=>configureProfileAll(true));document.getElementById("voClearAll")?.addEventListener("click",()=>configureProfileAll(false));document.getElementById("voRestoreDefault")?.addEventListener("click",restoreDefaultProfile);document.getElementById("voSaveProfile")?.addEventListener("click",saveAllProfiles);document.getElementById("guruIqPair")?.addEventListener("change",()=>{const src=document.getElementById("guruIqPair"),dst=document.getElementById("voFactsPair");if(src&&dst&&[...dst.options].some(o=>o.value===src.value))dst.value=src.value;});}
   async function renderRoute(){const hash=location.hash||"";if(!hash.includes("/ferramenta/"+TOOL_ID)){monitoring=false;monitorRunId++;stopMonitorUiTicker();document.body.classList.remove("iq-tool-active");return;}document.body.classList.add("iq-tool-active");if(!document.getElementById("visaoOpcoesToolHost")){setTimeout(renderRoute,0);return;}if(sessionStorage.getItem(SESSION_KEY))await renderConnected();else renderLogin();document.title="VISÃO OPÇÕES | Resolvei";window.scrollTo({top:0,behavior:"auto"});}
