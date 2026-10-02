@@ -77,7 +77,12 @@
   }
 
   function sanitizeProfilesLocal(raw){
-    const out={}; ["tendencia","reversao","rompimento","momentum"].forEach(s=>{ const ids=Array.isArray(raw?.[s])?raw[s]:[]; out[s]=[...new Set(ids.map(x=>String(x||"").trim().toLowerCase()))].filter(id=>indicatorCatalog.some(i=>i.id===id)); }); return out;
+    const out={};
+    ["trend_pullback","breakout","mean_reversion","support_resistance","momentum","stoch_adx","banda_stoch","rsi_divergencia"].forEach(s=>{
+      const ids=Array.isArray(raw?.[s])?raw[s]:[];
+      out[s]=[...new Set(ids.map(x=>String(x||"").trim().toLowerCase()))].filter(id=>indicatorCatalog.some(i=>i.id===id));
+    });
+    return out;
   }
   function readProfiles(){ try{return sanitizeProfilesLocal(JSON.parse(localStorage.getItem(PROFILE_KEY)||"null")||defaultProfiles);}catch(_){return sanitizeProfilesLocal(defaultProfiles);} }
   function persistProfiles(){ indicatorProfiles=sanitizeProfilesLocal(indicatorProfiles); localStorage.setItem(PROFILE_KEY,JSON.stringify(indicatorProfiles)); }
