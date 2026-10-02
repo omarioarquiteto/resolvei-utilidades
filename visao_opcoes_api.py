@@ -506,11 +506,7 @@ def _pair_assets() -> list[str]:
 
 async def _radar_one(client: Any, sid: str, symbol: str, timeframe: str, expiry: int, strategy: str) -> dict[str, Any]:
     try:
-        rows_1m = await _get_base_candles(client, sid, symbol, 180)
-        if timeframe == "1m":
-            rows = rows_1m
-        else:
-            rows = _resample(rows_1m, int(timeframe[:-1]))
+        rows = await iq_auth._candles(client, sid, symbol, timeframe, 100, include_forming=False, cache_ttl=8.0, request_timeout=8.0)
         if len(rows) < 60:
             return {"symbol": symbol, "status": "dados insuficientes"}
 
