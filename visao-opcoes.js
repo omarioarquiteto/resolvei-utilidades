@@ -6,20 +6,37 @@
 
   const strategies = [
     ["automatica", "🤖 Automática — escolhe 1"],
-    ["tendencia", "📈 Tendência"],
-    ["reversao", "↩️ Reversão"],
-    ["rompimento", "🚀 Rompimento"],
-    ["momentum", "⚡ Momentum"]
+    ["trend_pullback", "📈 Retração na tendência"],
+    ["breakout", "🚀 Rompimento de faixa"],
+    ["mean_reversion", "↩️ Reversão à média"],
+    ["support_resistance", "🧱 Suporte e resistência"],
+    ["momentum", "⚡ Momentum"],
+    ["stoch_adx", "📊 Tendência com estocástico"],
+    ["banda_stoch", "🎯 Banda com estocástico"],
+    ["rsi_divergencia", "🔀 Divergência de RSI"]
   ];
   let indicatorCatalog = [];
-  let defaultProfiles = { tendencia:["ema_structure","adx","rsi","candle_continuity"], reversao:["bollinger","rsi","stoch","rejeicao"], rompimento:["donchian","atr","candle_expansion","adx"], momentum:["ema_structure","macd","adx","rsi"] };
+  let defaultProfiles = {
+    trend_pullback:["ema_pullback","adx","rsi","candle_direction"],
+    breakout:["donchian","atr","candle_expansion"],
+    mean_reversion:["bollinger","rsi","rsi_reversal"],
+    support_resistance:["support_zone","rejeicao","candle_direction"],
+    momentum:["ema921","macd","adx","rsi"],
+    stoch_adx:["ema921","adx","stoch","candle_direction"],
+    banda_stoch:["bollinger","stoch","stoch_reversal"],
+    rsi_divergencia:["rsi","rsi_divergence","candle_direction"]
+  };
   let indicatorProfiles = {};
-  let selectedProfileStrategy = "tendencia";
+  let selectedProfileStrategy = "trend_pullback";
   let strategyDescriptions = {
-    tendencia:"Estrutura de tendência, força direcional, RSI e candle de continuidade.",
-    reversao:"Extremos de Bollinger, RSI, Stochastic e rejeição.",
-    rompimento:"Quebra de faixa, expansão de ATR, candle de força e ADX/DI.",
-    momentum:"Estrutura de médias, MACD, força direcional e RSI."
+    trend_pullback:"Busca uma correção até a média em uma tendência confirmada.",
+    breakout:"Exige fechamento além da máxima ou mínima recente com expansão de volatilidade.",
+    mean_reversion:"Procura exaustão nas bandas e confirmação de retorno pelo RSI.",
+    support_resistance:"Procura rejeição clara em zonas extremas recentes.",
+    momentum:"Exige alinhamento de médias, MACD e força direcional.",
+    stoch_adx:"Tendência confirmada por EMA e ADX, com estocástico na mesma direção.",
+    banda_stoch:"Reversão na banda de Bollinger confirmada por virada do estocástico.",
+    rsi_divergencia:"Preço faz extremo mas o RSI não acompanha; reversão na divergência."
   };
 
   const fallbackCatalog = [
@@ -68,7 +85,7 @@
   function showProfileStatus(msg){ const el=document.getElementById("voStrategyConfigStatus"); if(el){el.textContent="✓ "+msg;setTimeout(()=>{if(el)el.textContent="✓ Perfil salvo neste navegador.";},1800);} }
   function renderStrategyEditor(){
     const menu=document.getElementById("voStrategyMenu"),grid=document.getElementById("voIndicatorConfigGrid"); if(!menu||!grid)return;
-    menu.innerHTML=["tendencia","reversao","rompimento","momentum"].map(id=>`<button class="${selectedProfileStrategy===id?"active":""}" data-profile-strategy="${id}"><strong>${esc(strategyName(id))}</strong><br><small>${indicatorProfiles[id]?.length||0} indicadores ativos</small></button>`).join("");
+    menu.innerHTML=["trend_pullback","breakout","mean_reversion","support_resistance","momentum","stoch_adx","banda_stoch","rsi_divergencia"].map(id=>`<button class="${selectedProfileStrategy===id?"active":""}" data-profile-strategy="${id}"><strong>${esc(strategyName(id))}</strong><br><small>${indicatorProfiles[id]?.length||0} indicadores ativos</small></button>`).join("");
     document.getElementById("voStrategyTitle").textContent=strategyName(selectedProfileStrategy); document.getElementById("voStrategyDescription").textContent=strategyDescriptions[selectedProfileStrategy];
     const active=new Set(indicatorProfiles[selectedProfileStrategy]||[]); document.getElementById("voStrategyCount").textContent=active.size+" indicador(es) ativo(s)";
     grid.innerHTML=indicatorCatalog.map(ind=>`<label class="vo-indicator-option"><input type="checkbox" data-indicator-id="${esc(ind.id)}" ${active.has(ind.id)?"checked":""}><span><strong>${esc(ind.name)}</strong><small>${esc(ind.description||"")}</small></span><span class="vo-indicator-kind">${esc(ind.kind||"indicador")}</span></label>`).join("");
