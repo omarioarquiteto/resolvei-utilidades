@@ -389,11 +389,12 @@ async def market_analysis(
 
     try:
         started = time.perf_counter()
+        candle_count = {1:240, 5:420, 15:1000}[req.expiry_minutes]
         base = await _get_base_candles(
             item["client"],
             x_iq_session or "",
             req.symbol,
-            1000,
+            candle_count,
         )
         profiles = _profile_map(req.indicator_ids_by_strategy)
         analysis = _analysis_result(
@@ -410,7 +411,8 @@ async def market_analysis(
         analysis["symbol"] = req.symbol.upper().strip()
         analysis["timestamp"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
         analysis["serverEpoch"] = time.time()
-        analysis["relevantFacts"] = _facts_for_symbol(req.symbol)
+        # O calendário Biquote fica na aba Fatos; não bloqueia a leitura técnica principal.
+        analysis["relevantFacts"] = {"source":"Biquote","events":[],"available":None,"warning":None}
         analysis["automation"] = {"enabled": False, "orders": False, "execution": False}
         analysis["diagnostics"]["serverDurationMs"] = round((time.perf_counter() - started) * 1000)
         analysis["diagnostics"]["profileSource"] = "navegador" if req.indicator_ids_by_strategy else "padrão market-insight-ai"
