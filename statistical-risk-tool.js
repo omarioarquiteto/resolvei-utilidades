@@ -1,6 +1,6 @@
 (function(){
 'use strict';
-var API='/api/laboratorio-iqoption',KEY='resolvei_iq_session',session=sessionStorage.getItem(KEY)||'',state=load();
+var API='/api/laboratorio-iqoption',KEY='resolvei_lab_iq_session',session=sessionStorage.getItem(KEY)||'',state=load();
 function $(id){return document.getElementById(id)}
 function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
 function money(n){return 'R$ '+Number(n||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})}
