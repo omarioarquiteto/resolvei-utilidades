@@ -149,7 +149,7 @@ async def _get_timeframe_candles(
             client.get_candles(
                 symbol,
                 INTERVALS[timeframe],
-                min(max(int(count), 60), 240),
+                min(max(int(count), 1), 240),
                 int(time.time()),
             ),
             timeout=timeout,
@@ -162,7 +162,8 @@ async def _get_timeframe_candles(
         raise HTTPException(502, f"Falha ao ler candles de {symbol}: {str(exc)[:180]}") from exc
 
     rows = _clean_rows(raw)
-    if len(rows) < 60:
+    minimum = 60 if int(count) >= 60 else 1
+    if len(rows) < minimum:
         raise HTTPException(502, f"A IQ Option forneceu somente {len(rows)} candles de {timeframe} para {symbol}.")
     CANDLE_CACHE[key] = (time.time(), rows)
     return rows
