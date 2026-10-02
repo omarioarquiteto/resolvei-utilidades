@@ -389,7 +389,10 @@ async def market_analysis(
 
     try:
         started = time.perf_counter()
-        candle_count = {1:420, 5:420, 15:1000}[req.expiry_minutes]
+        # A análise profunda usa contexto até 15m e exige >=60 candles
+        # fechados por timeframe. Com base de 1m, 1000 candles dão margem
+        # suficiente para formar ~66 candles de 15m mesmo após remover o candle atual.
+        candle_count = 1000
         base = await _get_base_candles(
             item["client"],
             x_iq_session or "",
