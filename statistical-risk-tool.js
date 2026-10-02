@@ -1,6 +1,6 @@
 (function(){
 'use strict';
-var API='/api/iq',KEY='resolvei_iq_session',session=sessionStorage.getItem(KEY)||'',state=load();
+var API='/api/laboratorio-iqoption',KEY='resolvei_iq_session',session=sessionStorage.getItem(KEY)||'',state=load();
 function $(id){return document.getElementById(id)}
 function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
 function money(n){return 'R$ '+Number(n||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})}
@@ -13,7 +13,7 @@ function calc(p,payout){var b=Math.max(.0001,payout/100),q=1-p,be=1/(1+b),ev=p*b
 function guard(){var peak=Number(state.peak)||Number(state.capital)||500,dd=peak?Math.max(0,(peak-state.capital)/peak*100):0,streak=0,i;for(i=state.history.length-1;i>=0&&state.history[i].result==='LOSS';i--)streak++;return{dd:dd,streak:streak,blocked:dd>=Number(state.dailyStop)||streak>=Number(state.maxLossStreak)}}
 function ui(){
 var h='<div id="statLabRoot" class="sl-page"><div class="sl-head"><div><div class="sl-kicker">RESOLVEI · ESTUDO QUANTITATIVO</div><h1>🧠 Laboratório Estatístico</h1><p>Valide histórico, payout, valor esperado e risco antes de considerar qualquer operação.</p></div><div class="sl-badge">MODO ESTUDO · SEM EXECUÇÃO</div></div>';
-h+='<div class="sl-login-note">A sessão IQ Option usada pela ferramenta é a mesma da <b>Análise de opções binárias</b>. Conecte-se lá primeiro.</div><div class="sl-grid">';
+h+='<div class="sl-login-note">A conexão IQ Option é compartilhada com o GURÚ DOS SINAIS IQOPTION. Faça login nele primeiro; o Laboratório reutiliza a mesma sessão com segurança.</div><div class="sl-grid">';
 h+='<section class="sl-card"><div class="sl-card-title"><span>1</span><div><h2>Parâmetros</h2><small>Dados históricos vêm da conexão IQ Option.</small></div></div><div class="sl-form">';
 h+='<label>Capital<input id="slCapital" type="number" min="1" step=".01" value="'+state.capital+'"></label><label>Ativo<select id="slAsset"><option>'+esc(state.asset)+'</option></select></label>';
 h+='<label>Expiração<select id="slExpiry"><option value="1min" '+(state.expiry==='1min'?'selected':'')+'>1 minuto</option><option value="5min" '+(state.expiry==='5min'?'selected':'')+'>5 minutos</option></select></label>';
