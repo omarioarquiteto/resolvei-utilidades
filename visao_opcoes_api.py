@@ -11,6 +11,7 @@ from pydantic import BaseModel
 # SOMENTE autenticação/sessão/ativos: preserva o sistema de login da Visão atual.
 import guru_sinais_iqoption_api as iq_auth
 import guru_sinais_api as guru_base
+import biquote_service
 
 router = APIRouter(prefix="/api/visao-opcoes", tags=["VISÃO OPÇÕES"])
 
@@ -491,6 +492,148 @@ def _trigger(rows: list[dict[str, float]], timeframe: str, direction: str) -> di
         "secondsRemaining": int(round(remaining)),
         "elapsedSeconds": int(round(elapsed)),
         "candleCloseAt": int(round(start + size)) if start else 0,
+    }
+
+
+
+def _pair_assets() -> list[str]:
+    assets = iq_auth._asset_list()
+    normal = [x["symbol"] for x in assets.get("normal", []) if x.get("symbol")]
+    otc = [x["symbol"] for x in assets.get("otc", []) if x.get("symbol")]
+    # Mantém o radar enxuto para não abrir dezenas de chamadas simultâneas.
+    return list(dict.fromkeys((normal + otc)))
+
+
+async def _radar_one(client: Any, sid: str, symbol: str, timeframe: str, expiry: int, strategy: str) -> dict[str, Any]:
+    try:
+        rows_1m = await _get_base_candles(client, sid, symbol, 180)
+        if timeframe == "1m":
+            rows = rows_1m
+        else:
+            rows = _resample(rows_1m, int(timeframe[:-1]))
+        if len(rows) < 60:
+            return {"symbol": symbol, "status": "dados insuficientes"}
+
+        selected = _select_auto_strategy(rows) if strategy == "automatica" else strategy
+        pack = _vision_fast_strategy(rows, selected)
+        news = biquote_service.get_facts(hours=2, importance="high", symbol=symbol)
+        direction = pack.get("direction")
+        confidence = float(pack.get("confidence") or 0)
+        proximity = min(99.0, confidence)
+        if news.get("events"):
+            proximity = max(0.0, proximity - 12)
+
+        return {
+            "symbol": symbol,
+            "direction": direction,
+            "signal": direction if direction in {"CALL", "PUT"} else "SEM SINAL",
+            "confidence": round(confidence, 1),
+            "proximity": round(proximity, 1),
+            "strategy": selected,
+            "strategyLabel": pack.get("strategyLabel", selected),
+            "price": rows[-1]["close"],
+            "buyScore": pack.get("callScore", 0),
+            "sellScore": pack.get("putScore", 0),
+            "newsCount": len(news.get("events") or []),
+            "newsBlocked": bool(news.get("events")),
+        }
+    except Exception as exc:
+        return {"symbol": symbol, "signal": "ERRO", "status": str(exc)[:120]}
+
+
+async def _pair_radar(
+    client: Any,
+    sid: str,
+    timeframe: str,
+    expiry: int,
+    strategy: str,
+    include_otc: bool = True,
+) -> list[dict[str, Any]]:
+    assets = _pair_assets()
+    if not include_otc:
+        assets = [x for x in assets if not x.endswith("-OTC")]
+    # Concorrência limitada para evitar sobrecarregar o WebSocket da IQ Option.
+    sem = asyncio.Semaphore(6)
+
+    async def run(symbol: str):
+        async with sem:
+            return await _radar_one(client, sid, symbol, timeframe, expiry, strategy)
+
+    results = await asyncio.gather(*(run(a) for a in assets), return_exceptions=False)
+    valid = [r for r in results if isinstance(r, dict) and r.get("signal") != "ERRO"]
+    valid.sort(key=lambda x: (x.get("newsBlocked", False), -float(x.get("proximity", 0))), reverse=False)
+    return valid
+
+
+@router.get("/facts")
+async def visao_facts(
+    hours: int = 24,
+    importance: str = "all",
+    symbol: str = "",
+    x_iq_session: str | None = Header(default=None),
+) -> dict[str, Any]:
+    _session(x_iq_session)
+    return biquote_service.get_facts(hours=max(1, min(hours, 168)), importance=importance, symbol=symbol)
+
+
+@router.get("/pair-analysis/{symbol}")
+async def visao_pair_analysis(
+    symbol: str,
+    timeframe: str = "5m",
+    strategy: str = "automatica",
+    expiry: int = 5,
+    x_iq_session: str | None = Header(default=None),
+) -> dict[str, Any]:
+    item = _session(x_iq_session)
+    if timeframe not in INTERVALS:
+        raise HTTPException(400, "Timeframe inválido.")
+    if expiry not in EXPIRIES:
+        raise HTTPException(400, "Expiração inválida.")
+    if strategy not in STRATEGIES:
+        raise HTTPException(400, "Estratégia inválida.")
+
+    analysis = await _analyze_fast(item["client"], x_iq_session or "", symbol, timeframe, strategy, expiry)
+    facts = biquote_service.get_facts(hours=24, importance="all", symbol=symbol)
+    high = [e for e in facts.get("events", []) if e.get("importance") in {"high", "holiday"}]
+
+    analysis["relevantFacts"] = {
+        "source": "Biquote",
+        "events": facts.get("events", []),
+        "highImpactNearby": high,
+        "available": facts.get("available", False),
+        "warning": facts.get("warning"),
+    }
+    analysis["automation"] = {"enabled": False, "orders": False, "execution": False}
+    return analysis
+
+
+@router.get("/pair-radar")
+async def visao_pair_radar(
+    timeframe: str = "5m",
+    strategy: str = "automatica",
+    expiry: int = 5,
+    limit: int = 16,
+    include_otc: bool = True,
+    x_iq_session: str | None = Header(default=None),
+) -> dict[str, Any]:
+    item = _session(x_iq_session)
+    if timeframe not in INTERVALS:
+        raise HTTPException(400, "Timeframe inválido.")
+    if expiry not in EXPIRIES:
+        raise HTTPException(400, "Expiração inválida.")
+    if strategy not in STRATEGIES:
+        raise HTTPException(400, "Estratégia inválida.")
+
+    results = await _pair_radar(item["client"], x_iq_session or "", timeframe, expiry, strategy, include_otc)
+    return {
+        "ok": True,
+        "timeframe": timeframe,
+        "expiry": expiry,
+        "strategy": strategy,
+        "pairs": results[:max(1, min(limit, 30))],
+        "totalAnalyzed": len(results),
+        "source": "IQ Option + motor técnico do VISÃO + Biquote",
+        "automation": {"enabled": False, "orders": False, "execution": False},
     }
 
 
