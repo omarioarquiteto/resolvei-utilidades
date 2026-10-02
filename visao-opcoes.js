@@ -249,6 +249,12 @@
             <div class="guru-panel-title"><strong>CONTEXTO DO MERCADO</strong></div>
             <p>Contexto: <b>${esc(a?.mtf?.context?.direction||"—")}</b> · Setup: <b>${esc(a?.mtf?.setup?.direction||"—")}</b> · Gatilho: <b>${esc(a?.mtf?.trigger?.direction||"—")}</b></p>
           </section>
+          <section class="guru-evidence-card card">
+            <div class="guru-panel-title"><strong>FATOS RELEVANTES · BIQUOTE</strong><span>${Number(a?.relevantFacts?.events?.length||0)} evento(s)</span></div>
+            <div class="vo-inline-facts">
+              ${(a?.relevantFacts?.events||[]).slice(0,4).map(ev=>`<div><strong>${esc(ev.currency||"—")}</strong><span>${esc(ev.title||"Evento")}</span><em>${esc(ev.importance||"")}</em></div>`).join("")||"<span class='muted'>Nenhum evento no período.</span>"}
+            </div>
+          </section>
           <div class="guru-disclaimer-mini">Esta ferramenta interpreta os indicadores e o comportamento atual do preço. Não utiliza backtest para escolher o sinal. Confluência técnica não é garantia de resultado futuro.</div>
         </aside>
       </div>`;
@@ -677,6 +683,10 @@
 
           const confirmed=analysis.signalConfirmed===true && (analysis.signal==="CALL"||analysis.signal==="PUT");
           if(confirmed){
+            try{
+              const facts=await jsonResponse(await iqFetch("/facts?hours=24&importance=all&symbol="+encodeURIComponent(symbol)));
+              analysis.relevantFacts=facts;
+            }catch(_){}
             monitoring=false;
             setMonitoringUI(false);
             result.innerHTML=resultHtml(analysis);
