@@ -40,9 +40,35 @@
   };
 
   const fallbackCatalog = [
-    ["ema_structure","EMA 9/21/50","Estrutura de tendência pelas EMAs 9, 21 e 50."],["ema510","EMA 5/10","Médias curtas de tendência."],["ema1020","EMA 10/20","Médias médias de direção recente."],["rsi","RSI (14)","Momentum, extremos e viés direcional."],["stoch","Stochastic","Posição do preço na faixa recente e cruzamentos."],["stochrsi","Stoch RSI","RSI normalizado em sua própria faixa."],["macd","MACD","Convergência/divergência e aceleração."],["bollinger","Bollinger","Bandas de volatilidade e extremos."],["adx","ADX / DI","Força e direção da tendência."],["cci","CCI","Extremos do preço típico."],["williams","Williams %R","Oscilador de extremos."],["mfi","MFI (14)","Fluxo monetário com volume."],["roc","ROC (10)","Rate of Change e momentum percentual."],["sar","Parabolic SAR","Ponto de reversão acompanhado do preço."],["obv","OBV","Pressão compradora/vendedora por volume."],["engolfo","Candle de engolfo","Padrão de vela de engolfo."],["atr","ATR (14)","Expansão de volatilidade."],["momentum","Momentum (10)","Diferença do fechamento contra 10 velas atrás."],["cmf","CMF (20)","Chaikin Money Flow."],["donchian","Donchian (20)","Máxima/mínima da faixa de 20 velas."],["rejeicao","Vela de rejeição","Pavio longo no topo ou na base."],["candle_continuity","Candle de continuidade","Candle confirmando continuidade da direção."],["candle_expansion","Candle de expansão","Candle forte fechando próximo da extremidade."]
+    ["rsi","RSI (14)","Oscilador de momentum; sobrevenda/sobrecompra e viés direcional."],
+    ["stoch","Stochastic","Posição do preço na faixa recente, com cruzamentos."],
+    ["stochrsi","Stoch RSI","RSI dentro da própria faixa; extremos de sobrevenda/sobrecompra."],
+    ["macd","MACD","Convergência/divergência de médias com histograma."],
+    ["ema510","EMA 5/10","Médias curtas; tendência de curtíssimo prazo."],
+    ["ema1020","EMA 10/20","Médias médias; direção da tendência recente."],
+    ["bollinger","Bollinger","Bandas de volatilidade; extremos sugerem reversão."],
+    ["adx","ADX / DI","Força direcional da tendência."],
+    ["cci","CCI","Extremos do preço típico."],
+    ["williams","Williams %R","Oscilador de momento."],
+    ["mfi","MFI (14)","Money Flow Index com volume."],
+    ["roc","ROC (10)","Rate of Change."],
+    ["sar","Parabolic SAR","Ponto de reversão que acompanha o preço."],
+    ["obv","OBV","On-Balance Volume."],
+    ["engolfo","Candle de engolfo","Corpo atual engole o corpo anterior."],
+    ["atr","ATR (14)","Expansão de volatilidade."],
+    ["momentum","Momentum (10)","Diferença do fechamento contra 10 velas atrás."],
+    ["cmf","CMF (20)","Chaikin Money Flow."],
+    ["donchian","Donchian (20)","Máxima/mínima da faixa de 20 velas."],
+    ["rejeicao","Vela de rejeição","Sombra longa no topo ou na base."],
+    ["ema_pullback","EMA 20/50 + Pullback","Regra nativa da Retração na tendência."],
+    ["ema921","EMA 9/21","Regra nativa de alinhamento rápido."],
+    ["candle_direction","Candle direcional","Regra nativa de direção do candle."],
+    ["candle_expansion","Candle de expansão","Regra nativa de expansão."],
+    ["rsi_reversal","Reversão do RSI","Regra nativa de virada do RSI."],
+    ["support_zone","Zona de suporte/resistência","Regra nativa de proximidade da zona."],
+    ["stoch_reversal","Reversão do Stoch","Regra nativa de virada do Stochastic."],
+    ["rsi_divergence","Divergência de RSI","Regra nativa de divergência."],
   ].map(x => ({ id:x[0], name:x[1], description:x[2], kind:"indicador" }));
-
   let monitorRunId = 0, monitoring = false, monitorUiTimer = null, monitorRequestStartedAt = 0, monitorNextPollAt = 0, monitorLastUpdateAt = 0, monitorClockOffsetMs = 0, monitorCurrentAnalysis = null, lastCompletedAnalysis = null;
   const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
   const esc = v => String(v ?? "").replace(/[&<>"]/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;" }[c]));
@@ -84,7 +110,18 @@
     });
     return out;
   }
-  function readProfiles(){ try{return sanitizeProfilesLocal(JSON.parse(localStorage.getItem(PROFILE_KEY)||"null")||defaultProfiles);}catch(_){return sanitizeProfilesLocal(defaultProfiles);} }
+  function readProfiles(){
+    try{
+      const raw=JSON.parse(localStorage.getItem(PROFILE_KEY)||"null");
+      if(!raw || typeof raw!=="object") return sanitizeProfilesLocal(defaultProfiles);
+      const out=sanitizeProfilesLocal(raw);
+      const keys=["trend_pullback","breakout","mean_reversion","support_resistance","momentum","stoch_adx","banda_stoch","rsi_divergencia"];
+      keys.forEach(key=>{
+        if(!Array.isArray(raw[key])) out[key]=[...(defaultProfiles[key]||[])];
+      });
+      return out;
+    }catch(_){ return sanitizeProfilesLocal(defaultProfiles); }
+  }
   function persistProfiles(){ indicatorProfiles=sanitizeProfilesLocal(indicatorProfiles); localStorage.setItem(PROFILE_KEY,JSON.stringify(indicatorProfiles)); }
   function strategyName(id){ return ({trend_pullback:"Retração na tendência",breakout:"Rompimento de faixa",mean_reversion:"Reversão à média",support_resistance:"Suporte e resistência",momentum:"Momentum",stoch_adx:"Tendência com estocástico",banda_stoch:"Banda com estocástico",rsi_divergencia:"Divergência de RSI"})[id] || id; }
   function showProfileStatus(msg){ const el=document.getElementById("voStrategyConfigStatus"); if(el){el.textContent="✓ "+msg;setTimeout(()=>{if(el)el.textContent="✓ Perfil salvo neste navegador.";},1800);} }
