@@ -790,12 +790,18 @@ def _trigger_from_live_rows(rows:list[dict],timeframe:str,strategy:str,direction
     }
 
 
-def analyze_market(base_candles:list[dict],expiry:int,strategy:str,profiles:dict[str,list[str]]|None=None) -> dict:
-    """Análise profunda + monitoramento de gatilho baseada no market-insight-ai.
 
-    A leitura estrutural usa candles fechados e pode considerar contexto
-    multitemporal, sem combinar estratégias. A confirmação de entrada usa
-    novamente a estratégia escolhida e seus indicadores no candle de gatilho.
+def analyze_market_frames(
+    frames:dict[str,list[dict]],
+    expiry:int,
+    strategy:str,
+    profiles:dict[str,list[str]]|None=None,
+) -> dict:
+    """Análise MTF enxuta recebendo candles já agregados por timeframe.
+
+    A Visão Opções usa este caminho para não reconstruir 5m/15m a partir
+    de uma enorme série de 1m a cada polling. As fórmulas/estratégias são
+    as mesmas do motor Visão; a diferença é a camada de aquisição dos dados.
     """
     if expiry not in (1,5,15):
         raise ValueError("Expiração deve ser 1, 5 ou 15 minutos.")
@@ -804,27 +810,27 @@ def analyze_market(base_candles:list[dict],expiry:int,strategy:str,profiles:dict
 
     profiles=sanitize_profiles(profiles)
     setup_tf,trigger_tf,context_tfs=expiry_plan(expiry)
-    base=list(base_candles)
 
-    # Estrutura: somente candles fechados.
-    frames={
-        "1m":list(base),
-        "5m":resample(base,5),
-        "15m":resample(base,15),
+    normalized={
+        tf:list(frames.get(tf) or [])
+        for tf in ("1m","5m","15m")
     }
     closed={
-        tf:drop_forming(frames[tf],TIMEFRAMES[tf]["minutes"]*60)
+        tf:drop_forming(normalized[tf],TIMEFRAMES[tf]["minutes"]*60)
         for tf in ("1m","5m","15m")
     }
     setup_rows=closed[setup_tf]
     context_rows=[closed[x] for x in context_tfs]
-    if len(setup_rows)<60 or any(len(x)<25 for x in context_rows):
-        raise ValueError("Dados insuficientes para a análise atual.")
+
+    # Os indicadores com maior lookback usam 50 períodos; mantemos margem
+    # operacional, mas sem exigir a carga de 900–1000 candles do polling antigo.
+    if len(setup_rows)<60 or any(len(x)<60 for x in context_rows):
+        raise ValueError("Dados fechados insuficientes para a análise atual.")
 
     setup_df=compute_indicators(candles_to_df(setup_rows))
     context_dfs=[compute_indicators(candles_to_df(x)) for x in context_rows]
     if setup_df.empty or any(x.empty for x in context_dfs):
-        raise ValueError("Dados insuficientes para a análise atual.")
+        raise ValueError("Dados fechados insuficientes para a análise atual.")
 
     if strategy=="automatica":
         packs={s:_analyze_prepared_frame(setup_df,setup_tf,s,profiles[s]) for s in STRATEGIES}
@@ -852,8 +858,7 @@ def analyze_market(base_candles:list[dict],expiry:int,strategy:str,profiles:dict
         and bool(selected_ids)
     )
 
-    # Gatilho: para qualquer expiração, a confirmação é lida no 1m.
-    trigger_rows=frames[trigger_tf]
+    trigger_rows=normalized[trigger_tf]
     trigger_state=_trigger_from_live_rows(
         trigger_rows,
         trigger_tf,
@@ -865,7 +870,7 @@ def analyze_market(base_candles:list[dict],expiry:int,strategy:str,profiles:dict
     if not structural:
         phase="ANALISANDO MERCADO"
         signal="AGUARDAR"
-        instruction="Analisando tendência, contexto, estratégia e indicadores selecionados."
+        instruction="Analisando estrutura, contexto, estratégia e indicadores selecionados."
     elif trigger_state["ready"]:
         phase="EXECUTE A OPERAÇÃO"
         signal=direction
@@ -895,7 +900,7 @@ def analyze_market(base_candles:list[dict],expiry:int,strategy:str,profiles:dict
 
     indicator_readings=setup["indicators"]
     reasons=[
-        f"{STRATEGIES[selected]['name']}: leitura estrutural do market-insight-ai.",
+        f"{STRATEGIES[selected]['name']}: leitura estrutural da estratégia.",
         f"Setup {setup_tf}: {direction} com {float(setup['confidence']):.1f}% de confluência." if direction in {"CALL","PUT"} else f"Setup {setup_tf}: sem direção dominante.",
         f"Contexto: {same} alinhado(s) e {opposite} divergente(s).",
         f"Gatilho {trigger_tf}: {trigger_state.get('triggerDirection','—')} com {float(trigger_state.get('confidence') or 0):.1f}%." if structural else "Gatilho aguardando uma direção estrutural.",
@@ -909,6 +914,21 @@ def analyze_market(base_candles:list[dict],expiry:int,strategy:str,profiles:dict
         warnings.append("Há divergência no contexto multitemporal.")
     if phase!="EXECUTE A OPERAÇÃO":
         warnings.append("CALL/PUT só é liberado quando o gatilho técnico confirmar a direção.")
+
+    chart_rows=normalized[setup_tf][-120:]
+    chart={
+        "timeframe":setup_tf,
+        "candles":[
+            {
+                "time":int(float(x.get("time",0))),
+                "open":float(x["open"]),
+                "high":float(x["high"]),
+                "low":float(x["low"]),
+                "close":float(x["close"]),
+            }
+            for x in chart_rows if float(x.get("time",0))>0
+        ],
+    }
 
     return {
         "signal":signal,
@@ -925,12 +945,14 @@ def analyze_market(base_candles:list[dict],expiry:int,strategy:str,profiles:dict
         "indicatorReadings":indicator_readings,
         "triggerIndicatorReadings":trigger_state.get("indicatorReadings",[]),
         "indicatorSet":selected_names,
+        "indicatorNames":selected_names,
         "indicators":setup["values"],
         "buyScore":setup["weightedCall"],
         "sellScore":setup["weightedPut"],
         "coverage":setup["coverage"],
         "reasons":reasons,
         "warnings":warnings[:4],
+        "chart":chart,
         "mtf":{
             "context":{
                 "timeframe":",".join(context_tfs),
@@ -966,10 +988,24 @@ def analyze_market(base_candles:list[dict],expiry:int,strategy:str,profiles:dict
             "triggerMonitoring":True,
             "backtest":False,
             "aiBlocking":False,
+            "fastAcquisition":True,
+            "directTimeframes":True,
             "strategyEvaluations":len(STRATEGIES) if strategy=="automatica" else 1,
         },
     }
 
+
+def analyze_market(base_candles:list[dict],expiry:int,strategy:str,profiles:dict[str,list[str]]|None=None) -> dict:
+    """Compatibilidade legada: converte a base 1m em frames e delega ao motor enxuto."""
+    if expiry not in (1,5,15):
+        raise ValueError("Expiração deve ser 1, 5 ou 15 minutos.")
+    base=list(base_candles)
+    frames={
+        "1m":base,
+        "5m":resample(base,5),
+        "15m":resample(base,15),
+    }
+    return analyze_market_frames(frames,expiry,strategy,profiles)
 
 def indicator_catalog() -> list[dict]:
     return [
