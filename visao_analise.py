@@ -724,89 +724,103 @@ def trigger(rows:list[dict],timeframe:str,direction:str) -> dict:
 
 
 def analyze_market(base_candles:list[dict],expiry:int,strategy:str,profiles:dict[str,list[str]]|None=None) -> dict:
+    """Executa uma única leitura do motor market-insight-ai no timeframe da expiração.
+
+    O botão da Visão faz uma chamada única: estratégia + indicadores do perfil.
+    Não há polling, espera por gatilho, MTF obrigatório, backtest bloqueante ou
+    execução de ordem.
+    """
+    if expiry not in (1,5,15):
+        raise ValueError("Expiração deve ser 1, 5 ou 15 minutos.")
     if strategy!="automatica" and strategy not in STRATEGIES:
         raise ValueError("Estratégia inválida.")
-    profiles=sanitize_profiles(profiles)
-    setup_tf,trigger_tf,context_tfs=expiry_plan(expiry)
-    frames={"1m":list(base_candles),"5m":resample(base_candles,5),"15m":resample(base_candles,15)}
-    closed={tf:drop_forming(frames[tf],TIMEFRAMES[tf]["minutes"]*60) for tf in ("1m","5m","15m")}
-    setup_rows=closed[setup_tf]; trigger_rows=frames[trigger_tf]; context_frames=[closed[x] for x in context_tfs]
-    if len(setup_rows)<60 or any(len(x)<25 for x in context_frames) or len(trigger_rows)<2:
-        raise ValueError("Dados insuficientes para a análise atual.")
 
-    prepared_setup = compute_indicators(candles_to_df(setup_rows))
-    prepared_contexts = [compute_indicators(candles_to_df(rows)) for rows in context_frames]
-    if prepared_setup.empty or any(frame.empty for frame in prepared_contexts):
+    profiles=sanitize_profiles(profiles)
+    timeframe=f"{expiry}m"
+
+    if expiry==1:
+        rows=drop_forming(list(base_candles),60)
+    else:
+        rows=drop_forming(resample(base_candles,expiry),expiry*60)
+
+    if len(rows)<60:
+        raise ValueError("Candles fechados insuficientes para a análise atual.")
+
+    prepared=compute_indicators(candles_to_df(rows))
+    if prepared.empty:
         raise ValueError("Dados insuficientes para a análise atual.")
 
     if strategy=="automatica":
-        packs={s:_analyze_prepared_frame(prepared_setup,setup_tf,s,profiles[s]) for s in STRATEGIES}
+        packs={s:_analyze_prepared_frame(prepared,timeframe,s,profiles[s]) for s in STRATEGIES}
         selected=choose_automatic(packs)
     else:
         selected=strategy
-        packs={selected:_analyze_prepared_frame(prepared_setup,setup_tf,selected,profiles[selected])}
+        packs={selected:_analyze_prepared_frame(prepared,timeframe,selected,profiles[selected])}
 
-    setup=packs[selected]
-    contexts=[_analyze_prepared_frame(frame,tf,selected,profiles[selected]) for tf,frame in zip(context_tfs,prepared_contexts)]
-    direction=setup["signal"]
-    same=sum(1 for p in contexts if p["signal"]==direction and direction in {"CALL","PUT"})
-    opposite=sum(1 for p in contexts if p["signal"] in {"CALL","PUT"} and p["signal"]!=direction)
-    context_bonus=7*same-8*opposite if direction in {"CALL","PUT"} else 0
-
-    trigger_state=trigger(trigger_rows,trigger_tf,direction)
-    final_score=max(0,min(99,setup["confidence"]+context_bonus+(trigger_state["confidence"]-50)*0.12))
-    indicator_ready=bool(direction in {"CALL","PUT"} and setup["confidence"]>=55 and
-                         (same>=1 or opposite==0) and setup["total"]>0)
-    final_ready=bool(indicator_ready and trigger_state["ready"])
+    result=packs[selected]
+    direction=result["signal"]
+    signal=direction if direction in {"CALL","PUT"} else "AGUARDAR"
+    confidence=float(result["confidence"])
+    quality="MUITO FORTE" if signal in {"CALL","PUT"} and confidence>=86 else "FORTE" if signal in {"CALL","PUT"} and confidence>=76 else "MODERADA" if signal in {"CALL","PUT"} and confidence>=55 else "SEM DIREÇÃO"
 
     selected_ids=profiles[selected]
-    selected_names=[INDICATOR_BY_ID[x]["name"] for x in selected_ids]
+    selected_names=[INDICATOR_BY_ID[x]["name"] for x in selected_ids if x in INDICATOR_BY_ID]
+    reasons=[
+        f"{STRATEGIES[selected]['name']}: leitura direta do motor market-insight-ai.",
+        f"Timeframe analisado: {timeframe}.",
+        f"Confluência técnica: {confidence:.1f}%.",
+        *[f"{v['name']}: {v['signal']} — {v['reason']}" for v in result["indicators"]],
+    ][:12]
+    warnings=[]
+    if not selected_ids:
+        warnings.append("Nenhum indicador selecionado para esta estratégia.")
+    if direction=="NEUTRAL":
+        warnings.append("Os indicadores selecionados não formaram direção suficiente neste candle.")
+
     return {
-        "signal":direction if final_ready else "AGUARDAR",
-        "signalConfirmed":final_ready,
-        "score":round(final_score,1),
-        "quality":"MUITO FORTE" if final_ready and final_score>=86 else "FORTE" if final_ready and final_score>=76 else "MODERADA" if final_ready else "SINAL PRÓXIMO" if indicator_ready else "ANALISANDO MERCADO",
+        "signal":signal,
+        "signalConfirmed":False,
+        "score":round(confidence,1),
+        "quality":quality,
         "strategy":selected,
         "strategyLabel":STRATEGIES[selected]["name"],
         "strategyDescription":STRATEGIES[selected]["description"],
-        "price":setup["price"],
-        "indicatorReadings":setup["indicators"],
+        "price":result["price"],
+        "indicatorReadings":result["indicators"],
         "indicatorSet":selected_names,
-        "indicators":setup["values"],
-        "buyScore":setup["weightedCall"],
-        "sellScore":setup["weightedPut"],
-        "coverage":setup["coverage"],
-        "reasons":[
-            f"{STRATEGIES[selected]['name']}: motor de estratégia do market-insight-ai.",
-            f"Setup {setup_tf}: {setup['signal']} com {setup['confidence']:.1f}% de confluência.",
-            f"Contexto: {same} alinhado(s) e {opposite} divergente(s).",
-            *[f"{v['name']}: {v['signal']} — {v['reason']}" for v in setup["indicators"]],
-        ][:10],
-        "warnings":[
-            "A pontuação é confluência técnica; não é probabilidade estatística de acerto.",
-            *([ "Contexto divergente; a confirmação permanece bloqueada." ] if opposite else []),
-            *([ "Nenhum indicador selecionado para esta estratégia." ] if not selected_ids else []),
-        ][:4],
+        "indicators":result["values"],
+        "buyScore":result["weightedCall"],
+        "sellScore":result["weightedPut"],
+        "coverage":result["coverage"],
+        "reasons":reasons,
+        "warnings":warnings[:4],
+        "analysisTimeframes":{"context":[],"setup":timeframe,"trigger":None},
         "mtf":{
-            "context":{"timeframe":",".join(context_tfs),
-                       "direction":direction if same==len(contexts) and direction in {"CALL","PUT"} else "MISTO",
-                       "confidence":round(sum(p["confidence"] for p in contexts)/len(contexts),1)},
-            "setup":{"timeframe":setup_tf,"direction":setup["signal"],"confidence":setup["confidence"]},
-            "trigger":{"timeframe":trigger_tf,"direction":direction,"confidence":trigger_state["confidence"]},
-            "score":round(final_score,1),"liveTrigger":True,
+            "context":{"timeframe":"","direction":"N/A","confidence":0},
+            "setup":{"timeframe":timeframe,"direction":direction,"confidence":confidence},
+            "trigger":{"timeframe":None,"direction":direction,"confidence":0},
+            "score":round(confidence,1),
+            "liveTrigger":False,
         },
         "entry":{
-            **trigger_state,
-            "ready":final_ready,
-            "direction":direction if final_ready else "AGUARDAR",
-            "triggerTimeframe":trigger_tf,"setupTimeframe":setup_tf,
-            "status":"ENTRADA CONFIRMADA" if final_ready else "SINAL PRÓXIMO" if indicator_ready else "ANALISANDO MERCADO",
-            "instruction":f"CLIQUE NO {direction} AGORA. Confirmação técnica encontrada." if final_ready else f"Monitorando a próxima confirmação para {direction}." if indicator_ready else "Interpretando novamente os indicadores selecionados.",
+            "ready":False,
+            "direction":signal,
+            "status":"ANÁLISE CONCLUÍDA",
+            "instruction":"Resultado calculado em uma única leitura.",
         },
-        "analysisTimeframes":{"context":context_tfs,"setup":setup_tf,"trigger":trigger_tf},
+        "expiryMinutes":expiry,
+        "candlePeriod":timeframe,
         "profile":{"strategy":selected,"indicatorIds":selected_ids,"indicatorNames":selected_names,"totalSelected":len(selected_ids)},
-        "diagnostics":{"engine":"market-insight-ai","strategyMode":"individual","fastMode":True,"backtest":False,"aiBlocking":False,
-                       "strategyEvaluations":len(STRATEGIES) if strategy=="automatica" else 1},
+        "diagnostics":{
+            "engine":"market-insight-ai",
+            "strategyMode":"individual",
+            "oneShot":True,
+            "polling":False,
+            "triggerMonitoring":False,
+            "backtest":False,
+            "aiBlocking":False,
+            "strategyEvaluations":len(STRATEGIES) if strategy=="automatica" else 1,
+        },
     }
 
 
