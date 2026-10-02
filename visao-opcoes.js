@@ -170,8 +170,48 @@ function monitoringDetail(a,label){
 }
 function monitorStatusHtml(symbol,a=null){const p=Math.max(0,Math.min(100,Number(a?.proximity||0)));return `<div class="guru-monitor-compact card"><div class="guru-monitor-head"><div class="guru-monitor-main"><span class="guru-live-dot"></span><div><small>ANÁLISE · MARKET-INSIGHT-AI</small><strong id="guruIqMonitorLabel">${esc(monitoringLabel(a))}</strong><span>${esc(readableAsset(symbol))}</span></div></div></div><div class="guru-monitor-progress"><div class="guru-monitor-progress-top"><span>PROXIMIDADE PARA CONFIRMAÇÃO</span><strong id="guruIqMonitorPercent">${p.toFixed(0)}%</strong></div><div class="guru-progress-track"><span id="guruIqMonitorBar" style="width:${p}%"></span></div></div><div class="guru-monitor-live-meta"><div><span>ETAPA</span><strong id="guruIqMonitorStage">PREPARANDO LEITURA</strong></div><div><span>ÚLTIMA LEITURA</span><strong id="guruIqMonitorLastUpdate">aguardando</strong></div><div><span>PRÓXIMA</span><strong id="guruIqMonitorNext">AGORA</strong></div><div><span>PROCESSAMENTO</span><strong id="guruIqMonitorElapsed">iniciando</strong></div><div><span>CANDLE DO GATILHO</span><strong id="guruIqMonitorCandle">—</strong></div><div><span>STATUS</span><strong id="guruIqMonitorRequest">Consultando o motor técnico…</strong></div></div><div class="guru-monitor-detail" id="guruIqMonitorDetail">${esc(monitoringDetail(a,monitoringLabel(a)))}</div></div>`;}
   function updateMonitorView(a,label,detail){const p=Math.max(0,Math.min(100,Number(a?.proximity||0)));monitorCurrentAnalysis=a||null;if(Number(a?.serverEpoch))monitorClockOffsetMs=Number(a.serverEpoch)*1000-Date.now();const l=document.getElementById("guruIqMonitorLabel"),pe=document.getElementById("guruIqMonitorPercent"),b=document.getElementById("guruIqMonitorBar"),d=document.getElementById("guruIqMonitorDetail");if(l)l.textContent=label;if(pe)pe.textContent=p.toFixed(0)+"%";if(b)b.style.width=p+"%";if(d)d.textContent=detail||"Atualizando leitura técnica…";}
-  function startMonitorUiTicker(){clearInterval(monitorUiTimer);monitorUiTimer=setInterval(()=>{if(!monitoring){clearInterval(monitorUiTimer);monitorUiTimer=null;return;}const stage=document.getElementById("guruIqMonitorStage"),req=document.getElementById("guruIqMonitorRequest"),elapsed=document.getElementById("guruIqMonitorElapsed"),next=document.getElementById("guruIqMonitorNext"),last=document.getElementById("guruIqMonitorLastUpdate"),candle=document.getElementById("guruIqMonitorCandle");const now=Date.now();if(monitorRequestStartedAt){const s=(now-monitorRequestStartedAt)/1000;if(stage)stage.textContent="ANALISANDO INDICADORES";if(req)req.textContent="Lendo candles e interpretando os indicadores selecionados.";if(elapsed)elapsed.textContent=s.toFixed(1)+"s em processamento";if(next)next.textContent="AGORA";}else{const ns=Math.max(0,(monitorNextPollAt-now)/1000),label=monitoringLabel(monitorCurrentAnalysis);if(stage)stage.textContent=label;if(req)req.textContent=label==="SINAL PRÓXIMO"?"Acompanhando o gatilho até a confirmação.":"Interpretando a estratégia e o perfil atual.";if(elapsed)elapsed.textContent="Leitura concluída";if(next)next.textContent=ns<=0?"AGORA":ns.toFixed(1)+"s";}if(last)last.textContent=monitorLastUpdateAt?new Date(monitorLastUpdateAt).toLocaleTimeString("pt-BR",{hour12:false}):"aguardando";const closeAt=Number(monitorCurrentAnalysis?.entry?.candleCloseAt||0)*1000;if(candle)candle.textContent=closeAt?Math.max(0,(closeAt-(Date.now()+monitorClockOffsetMs))/1000).toFixed(0)+"s":"—";},250);}
-  function stopMonitorUiTicker(){clearInterval(monitorUiTimer);monitorUiTimer=null;monitorRequestStartedAt=0;monitorNextPollAt=0;monitorCurrentAnalysis=null;}
+  function startMonitorUiTicker(){
+    clearInterval(monitorUiTimer);
+    monitorUiTimer=setInterval(()=>{
+      if(!monitoring){
+        clearInterval(monitorUiTimer);
+        monitorUiTimer=null;
+        return;
+      }
+      const stage=document.getElementById("guruIqMonitorStage"),
+        req=document.getElementById("guruIqMonitorRequest"),
+        elapsed=document.getElementById("guruIqMonitorElapsed"),
+        next=document.getElementById("guruIqMonitorNext"),
+        last=document.getElementById("guruIqMonitorLastUpdate"),
+        candle=document.getElementById("guruIqMonitorCandle"),
+        now=Date.now();
+
+      if(monitorRequestStartedAt){
+        const seconds=(now-monitorRequestStartedAt)/1000;
+        if(stage)stage.textContent="ANALISANDO MERCADO";
+        if(req)req.textContent="Executando análise técnica profunda da estratégia e dos indicadores selecionados.";
+        if(elapsed)elapsed.textContent=seconds.toFixed(1)+"s";
+        if(next)next.textContent="AGORA";
+      }else{
+        const seconds=Math.max(0,(monitorNextPollAt-now)/1000);
+        const label=monitoringLabel(monitorCurrentAnalysis);
+        if(stage)stage.textContent=label;
+        if(req)req.textContent=monitoringDetail(monitorCurrentAnalysis,label);
+        if(elapsed)elapsed.textContent="Leitura concluída";
+        if(next)next.textContent=seconds<=0?"AGORA":seconds.toFixed(1)+"s";
+      }
+
+      if(last)last.textContent=monitorLastUpdateAt
+        ?new Date(monitorLastUpdateAt).toLocaleTimeString("pt-BR",{hour12:false})
+        :"aguardando";
+
+      const closeAt=Number(monitorCurrentAnalysis?.entry?.candleCloseAt||0)*1000;
+      if(candle)candle.textContent=closeAt
+        ?Math.max(0,(closeAt-(Date.now()+monitorClockOffsetMs))/1000).toFixed(0)+"s"
+        :"—";
+    },250);
+  }
+function stopMonitorUiTicker(){clearInterval(monitorUiTimer);monitorUiTimer=null;monitorRequestStartedAt=0;monitorNextPollAt=0;monitorCurrentAnalysis=null;}
   function setMonitoringUI(active){["guruIqPair","guruIqExpiry","guruIqStrategy"].map(id=>document.getElementById(id)).filter(Boolean).forEach(el=>el.disabled=active);const btn=document.getElementById("guruIqAnalyzeBtn"),cancel=document.getElementById("guruIqCancelBtn");if(btn){btn.disabled=active;btn.textContent=active?"⏳ ANALISANDO MERCADO…":"🔍 ANALISAR MERCADO";}if(cancel)cancel.hidden=!active;}
   function renderIndicatorsFromLast(){const grid=document.getElementById("voIndicatorGrid"),a=lastCompletedAnalysis||monitorCurrentAnalysis;if(!grid)return;if(!a){grid.innerHTML="<div class=\"vo-empty\">Execute uma análise para preencher os indicadores.</div>";return;}const vals=Object.entries(a.indicators||{}).map(([k,v])=>`<div class="vo-ind-card"><span>${esc(k)}</span><strong>${esc(v)}</strong></div>`).join("");const votes=(a.indicatorReadings||[]).map(v=>`<div class="guru-indicator-row"><span>${esc(v.name)}</span><strong class="${v.signal==="CALL"?"call":v.signal==="PUT"?"put":"neutral"}">${esc(v.signal)}</strong><small>${esc(v.reason)}</small></div>`).join("");grid.innerHTML=`<div style="width:100%"><div class="vo-indicator-grid">${vals}</div><section class="guru-evidence-card card" style="margin-top:14px"><div class="guru-panel-title"><strong>VOTOS DO PERFIL</strong><span>${(a.indicatorReadings||[]).length}</span></div><div class="guru-indicator-list">${votes||"<span class=\"muted\">Nenhum voto.</span>"}</div></section></div>`;}
   async function loadFacts(){const grid=document.getElementById("voFactsGrid"),status=document.getElementById("voFactsStatus"),btn=document.getElementById("voFactsRun");if(!grid)return;const hours=Number(document.getElementById("voFactsHours")?.value||24),importance=document.getElementById("voFactsImportance")?.value||"all",symbol=document.getElementById("voFactsPair")?.value||document.getElementById("guruIqPair")?.value||"";if(btn){btn.disabled=true;btn.textContent="⏳ Atualizando…";}try{const d=await jsonResponse(await iqFetch("/facts?hours="+hours+"&importance="+encodeURIComponent(importance)+"&symbol="+encodeURIComponent(symbol)));const events=d.events||[];grid.innerHTML=events.length?events.map(ev=>`<article class="vo-fact-card impact-${esc(String(ev.importance||"low").toLowerCase())}"><div class="vo-fact-top"><span>${esc(ev.currency||"—")}</span><strong>${esc(String(ev.importance||"low").toUpperCase())}</strong></div><h3>${esc(ev.title||"Evento econômico")}</h3><p>${esc(ev.description||"")}</p><div class="vo-fact-meta"><span>${esc(ev.time||"—")}</span><span>${esc(ev.sector||"Macro")}</span></div><div class="vo-fact-values"><span>Anterior <b>${esc(ev.previous??"—")}</b></span><span>Previsão <b>${esc(ev.forecast??"—")}</b></span><span>Atual <b>${esc(ev.actual??"—")}</b></span></div></article>`).join(""):"<div class=\"vo-empty\">Nenhum evento encontrado.</div>";if(status)status.textContent=d.available?`✓ ${events.length} evento(s) · fonte: Biquote`:"⚠️ "+(d.warning||"Calendário indisponível.");}catch(e){grid.innerHTML="<div class=\"vo-empty\">⚠️ "+esc(e.message)+"</div>";if(status)status.textContent="⚠️ "+e.message;}finally{if(btn){btn.disabled=false;btn.textContent="↻ Atualizar fatos";}}}
