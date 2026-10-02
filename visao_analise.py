@@ -605,17 +605,12 @@ def _aggregate(votes:list[dict],native_total:int) -> dict:
     }
 
 
-def analyze_frame(candles:list[dict],timeframe:str,strategy:str,selected_ids:list[str]) -> dict:
-    df=candles_to_df(candles)
+def _analyze_prepared_frame(df:pd.DataFrame,timeframe:str,strategy:str,selected_ids:list[str]) -> dict:
     if len(df)<60: raise ValueError("Candles fechados insuficientes para a análise.")
-    df=compute_indicators(df)
     selected=set(selected_ids)
     native_components=_strategy_components(df,strategy)
     native_by_id={x["id"]:x for x in native_components}
-    votes=[]
-    for component in native_components:
-        if component["id"] in selected:
-            votes.append(component)
+    votes=[component for component in native_components if component["id"] in selected]
     votes.extend(_generic_votes(df,selected-set(native_by_id)))
     agg=_aggregate(votes,len(native_components))
     values=_indicator_values(df)
@@ -631,6 +626,12 @@ def analyze_frame(candles:list[dict],timeframe:str,strategy:str,selected_ids:lis
         "indicators":votes,"values":values,
         "nativeRequired":agg["nativeRequired"],
     }
+
+
+def analyze_frame(candles:list[dict],timeframe:str,strategy:str,selected_ids:list[str]) -> dict:
+    df=candles_to_df(candles)
+    if len(df)<60: raise ValueError("Candles fechados insuficientes para a análise.")
+    return _analyze_prepared_frame(compute_indicators(df),timeframe,strategy,selected_ids)
 
 
 def _indicator_values(df:pd.DataFrame) -> dict:
@@ -733,15 +734,20 @@ def analyze_market(base_candles:list[dict],expiry:int,strategy:str,profiles:dict
     if len(setup_rows)<60 or any(len(x)<25 for x in context_frames) or len(trigger_rows)<2:
         raise ValueError("Dados insuficientes para a análise atual.")
 
+    prepared_setup = compute_indicators(candles_to_df(setup_rows))
+    prepared_contexts = [compute_indicators(candles_to_df(rows)) for rows in context_frames]
+    if prepared_setup.empty or any(frame.empty for frame in prepared_contexts):
+        raise ValueError("Dados insuficientes para a análise atual.")
+
     if strategy=="automatica":
-        packs={s:analyze_frame(setup_rows,setup_tf,s,profiles[s]) for s in STRATEGIES}
+        packs={s:_analyze_prepared_frame(prepared_setup,setup_tf,s,profiles[s]) for s in STRATEGIES}
         selected=choose_automatic(packs)
     else:
         selected=strategy
-        packs={selected:analyze_frame(setup_rows,setup_tf,selected,profiles[selected])}
+        packs={selected:_analyze_prepared_frame(prepared_setup,setup_tf,selected,profiles[selected])}
 
     setup=packs[selected]
-    contexts=[analyze_frame(rows,tf,selected,profiles[selected]) for tf,rows in zip(context_tfs,context_frames)]
+    contexts=[_analyze_prepared_frame(frame,tf,selected,profiles[selected]) for tf,frame in zip(context_tfs,prepared_contexts)]
     direction=setup["signal"]
     same=sum(1 for p in contexts if p["signal"]==direction and direction in {"CALL","PUT"})
     opposite=sum(1 for p in contexts if p["signal"] in {"CALL","PUT"} and p["signal"]!=direction)
