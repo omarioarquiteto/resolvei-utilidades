@@ -423,7 +423,7 @@
   }
 
   function renderIndicatorsFromLast(){
-    const grid=document.getElementById("voIndicatorGrid"),a=monitorCurrentAnalysis;
+    const grid=document.getElementById("voIndicatorGrid"),a=lastCompletedAnalysis||monitorCurrentAnalysis;
     if(!grid)return;
     const values=a?.indicators||{};
     const keys=Object.keys(values);
@@ -438,6 +438,7 @@
   let monitorLastUpdateAt=0;
   let monitorClockOffsetMs=0;
   let monitorCurrentAnalysis=null;
+  let lastCompletedAnalysis=null;
 
   const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 
@@ -670,6 +671,7 @@
 
           const analysis=d.analysis||{};
           monitorCurrentAnalysis=analysis;
+          lastCompletedAnalysis=analysis;
           monitorLastUpdateAt=Date.now();
           monitorRequestStartedAt=0;
 
