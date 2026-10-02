@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import time
 from typing import Any
 
@@ -23,8 +24,7 @@ STRATEGIES = {
 }
 
 # Cache somente de dados de mercado. Perfis de indicadores ficam no navegador
-# para que cada usuário tenha sua própria configuração, sem compartilhar
-# configuração entre contas.
+# para que cada usuário tenha sua própria configuração.
 CANDLE_CACHE: dict[str, tuple[float, list[dict[str, float]]]] = {}
 
 
@@ -58,6 +58,20 @@ def _clean_rows(raw: Any) -> list[dict[str, float]]:
             continue
     rows.sort(key=lambda item: item["time"])
     return [row for row in rows if row["time"] > 0 and row["high"] >= row["low"]]
+
+
+def _profile_map(raw: dict[str, list[str]] | None) -> dict[str, list[str]]:
+    return engine.sanitize_profiles(raw)
+
+
+def _profiles_from_query(profiles_json: str | None) -> dict[str, list[str]]:
+    if not profiles_json:
+        return engine.default_profiles()
+    try:
+        raw = json.loads(profiles_json)
+    except Exception:
+        return engine.default_profiles()
+    return _profile_map(raw)
 
 
 def _is_forming(row: dict[str, float], timeframe: str, now: float | None = None) -> bool:
@@ -108,10 +122,6 @@ async def _get_base_candles(
         raise HTTPException(502, f"A IQ Option forneceu poucos candles para {symbol}.")
     CANDLE_CACHE[key] = (time.time(), rows)
     return rows
-
-
-def _profile_map(raw: dict[str, list[str]] | None) -> dict[str, list[str]]:
-    return engine.sanitize_profiles(raw)
 
 
 def _analysis_result(
@@ -167,32 +177,23 @@ async def _analyze_pair_for_radar(
     try:
         base = await _get_base_candles(client, sid, symbol, 1000)
         result = _analysis_result(base, expiry, strategy, profiles)
-        selected = result["strategy"]
 
-        high_nearby = []
-        currency_a, currency_b = symbol.replace("-OTC", "").split("/") if "/" in symbol else ("", "")
         base_symbol = symbol.replace("-OTC", "").replace("/", "")
-        if len(base_symbol) == 6:
-            currency_a, currency_b = base_symbol[:3], base_symbol[3:]
-        for event in events:
-            if str(event.get("currency", "")).upper() in {currency_a, currency_b}:
-                if event.get("importance") in {"high", "holiday"}:
-                    high_nearby.append(event)
+        currencies = {base_symbol[:3], base_symbol[3:]} if len(base_symbol) == 6 else set()
+        high_nearby = [
+            event
+            for event in events
+            if str(event.get("currency", "")).upper() in currencies
+            and event.get("importance") in {"high", "holiday"}
+        ]
 
-        # O radar não transforma fato macro em sinal. Apenas o exibe como risco contextual.
-        result["relevantFacts"] = {
-            "source": "Biquote",
-            "events": high_nearby[:5],
-            "highImpactNearby": high_nearby[:5],
-            "available": True,
-        }
         return {
             "symbol": symbol,
             "signal": result["signal"] if result["signal"] in {"CALL", "PUT"} else "SEM SINAL",
             "direction": result["mtf"]["setup"]["direction"],
             "proximity": round(float(result["score"] or 0), 1),
             "confidence": round(float(result["mtf"]["setup"]["confidence"] or 0), 1),
-            "strategy": selected,
+            "strategy": result["strategy"],
             "strategyLabel": result["strategyLabel"],
             "price": result["price"],
             "buyScore": result["buyScore"],
@@ -218,7 +219,6 @@ async def _pair_radar(
     if not include_otc:
         assets = [symbol for symbol in assets if not symbol.endswith("-OTC")]
 
-    # Uma consulta de fatos por varredura. A Biquote tem cache de curta duração.
     all_facts = biquote_service.get_facts(hours=2, importance="high", symbol="")
     events = all_facts.get("events", [])
     semaphore = asyncio.Semaphore(5)
@@ -242,6 +242,9 @@ async def _pair_radar(
     return valid
 
 
+# -----------------------------------------------------------------------------
+# Login: deliberadamente delegado ao módulo já existente. Não alterar o fluxo.
+# -----------------------------------------------------------------------------
 @router.post("/login")
 async def login(req: iq_auth.IQLoginRequest):
     return await iq_auth.iq_login(req)
@@ -308,6 +311,7 @@ async def visao_pair_analysis(
     timeframe: str = "5m",
     strategy: str = "automatica",
     expiry: int = 5,
+    profiles_json: str = "",
     x_iq_session: str | None = Header(default=None),
 ) -> dict[str, Any]:
     item = _session(x_iq_session)
@@ -318,13 +322,12 @@ async def visao_pair_analysis(
     if strategy not in STRATEGIES:
         raise HTTPException(400, "Estratégia inválida.")
 
-    # A análise detalhada recebe os perfis enviados pelo navegador no endpoint
-    # principal; este endpoint usa os perfis padrão do market-insight-ai.
+    profiles = _profiles_from_query(profiles_json)
     analysis = _analysis_result(
         await _get_base_candles(item["client"], x_iq_session or "", symbol, 1000),
         expiry,
         strategy,
-        None,
+        profiles,
     )
     analysis["relevantFacts"] = _facts_for_symbol(symbol)
     analysis["automation"] = {"enabled": False, "orders": False, "execution": False}
@@ -338,6 +341,7 @@ async def visao_pair_radar(
     expiry: int = 5,
     limit: int = 16,
     include_otc: bool = True,
+    profiles_json: str = "",
     x_iq_session: str | None = Header(default=None),
 ) -> dict[str, Any]:
     item = _session(x_iq_session)
@@ -348,13 +352,14 @@ async def visao_pair_radar(
     if strategy not in STRATEGIES:
         raise HTTPException(400, "Estratégia inválida.")
 
+    profiles = _profiles_from_query(profiles_json)
     results = await _pair_radar(
         item["client"],
         x_iq_session or "",
         timeframe,
         expiry,
         strategy,
-        engine.default_profiles(),
+        profiles,
         include_otc,
     )
     return {
