@@ -389,7 +389,7 @@ async def market_analysis(
 
     try:
         started = time.perf_counter()
-        candle_count = {1:240, 5:420, 15:1000}[req.expiry_minutes]
+        candle_count = {1:420, 5:420, 15:1000}[req.expiry_minutes]
         base = await _get_base_candles(
             item["client"],
             x_iq_session or "",
