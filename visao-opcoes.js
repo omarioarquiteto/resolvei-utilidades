@@ -232,8 +232,67 @@ function monitoringDetail(a,label){
   if(label==="SINAL PRÓXIMO")return a?.entry?.instruction||"Setup encontrado. Aguardando o gatilho técnico.";
   return "Analisando estrutura, contexto, estratégia e indicadores selecionados.";
 }
-function monitorStatusHtml(symbol,a=null){const p=Math.max(0,Math.min(100,Number(a?.proximity||0)));return `<div class="guru-monitor-compact card"><div class="guru-monitor-head"><div class="guru-monitor-main"><span class="guru-live-dot"></span><div><small>ANÁLISE · MARKET-INSIGHT-AI</small><strong id="guruIqMonitorLabel">${esc(monitoringLabel(a))}</strong><span>${esc(readableAsset(symbol))}</span></div></div></div><div class="guru-monitor-progress"><div class="guru-monitor-progress-top"><span>PROXIMIDADE PARA CONFIRMAÇÃO</span><strong id="guruIqMonitorPercent">${p.toFixed(0)}%</strong></div><div class="guru-progress-track"><span id="guruIqMonitorBar" style="width:${p}%"></span></div></div><div class="guru-monitor-live-meta"><div><span>ETAPA</span><strong id="guruIqMonitorStage">PREPARANDO LEITURA</strong></div><div><span>ÚLTIMA LEITURA</span><strong id="guruIqMonitorLastUpdate">aguardando</strong></div><div><span>PRÓXIMA</span><strong id="guruIqMonitorNext">AGORA</strong></div><div><span>PROCESSAMENTO</span><strong id="guruIqMonitorElapsed">iniciando</strong></div><div><span>CANDLE DO GATILHO</span><strong id="guruIqMonitorCandle">—</strong></div><div><span>STATUS</span><strong id="guruIqMonitorRequest">Consultando o motor técnico…</strong></div></div><div class="guru-monitor-detail" id="guruIqMonitorDetail">${esc(monitoringDetail(a,monitoringLabel(a)))}</div></div>`;}
-  function updateMonitorView(a,label,detail){const p=Math.max(0,Math.min(100,Number(a?.proximity||0)));monitorCurrentAnalysis=a||null;if(Number(a?.serverEpoch))monitorClockOffsetMs=Number(a.serverEpoch)*1000-Date.now();const l=document.getElementById("guruIqMonitorLabel"),pe=document.getElementById("guruIqMonitorPercent"),b=document.getElementById("guruIqMonitorBar"),d=document.getElementById("guruIqMonitorDetail");if(l)l.textContent=label;if(pe)pe.textContent=p.toFixed(0)+"%";if(b)b.style.width=p+"%";if(d)d.textContent=detail||"Atualizando leitura técnica…";}
+function monitorStatusHtml(symbol,a=null){
+    const p=Math.max(0,Math.min(100,Number(a?.proximity||0)));
+    return `<div class="vo-terminal-grid vo-monitor-grid">
+      <section class="vo-market-card card">
+        <div class="vo-market-head"><div><span class="eyebrow">MERCADO · AO VIVO</span><h2>${esc(readableAsset(symbol))}</h2><span class="vo-muted-line">Atualizando a leitura do mercado.</span></div><span class="vo-monitor-pill">● AO VIVO</span></div>
+        <div class="vo-chart-box" id="voMarketChart"><div class="vo-chart-empty">Carregando dados de mercado…</div></div>
+        <div class="vo-chart-footer"><span>Atualização incremental</span><span>1m + contexto MTF</span></div>
+      </section>
+      <aside class="vo-decision-card card">
+        <span class="eyebrow">MONITORAMENTO</span>
+        <div class="vo-phase" id="guruIqMonitorLabel">${esc(monitoringLabel(a))}</div>
+        <div class="vo-big-signal wait" id="guruIqMonitorSignal">AGUARDAR</div>
+        <div class="vo-score"><span>PROXIMIDADE</span><strong id="guruIqMonitorPercent">${p.toFixed(0)}%</strong><div><i id="guruIqMonitorBar" style="width:${p}%"></i></div></div>
+        <div class="vo-monitor-step-grid">
+          <div><span>ETAPA</span><b id="guruIqMonitorStage">ANALISANDO MERCADO</b></div>
+          <div><span>PROCESSAMENTO</span><b id="guruIqMonitorElapsed">iniciando</b></div>
+          <div><span>PRÓXIMA LEITURA</span><b id="guruIqMonitorNext">AGORA</b></div>
+          <div><span>CANDLE</span><b id="guruIqMonitorCandle">—</b></div>
+        </div>
+        <div class="vo-monitor-detail" id="guruIqMonitorDetail">${esc(monitoringDetail(a,monitoringLabel(a)))}</div>
+      </aside>
+    </div>`;
+  }
+  function updateMonitorView(a,label,detail){
+    const p=Math.max(0,Math.min(100,Number(a?.proximity||0)));
+    monitorCurrentAnalysis=a||null;
+    if(Number(a?.serverEpoch))monitorClockOffsetMs=Number(a.serverEpoch)*1000-Date.now();
+    const l=document.getElementById("guruIqMonitorLabel"),
+      pe=document.getElementById("guruIqMonitorPercent"),
+      b=document.getElementById("guruIqMonitorBar"),
+      s=document.getElementById("guruIqMonitorSignal"),
+      d=document.getElementById("guruIqMonitorDetail");
+    if(l)l.textContent=label;
+    if(pe)pe.textContent=p.toFixed(0)+"%";
+    if(b)b.style.width=p+"%";
+    if(d)d.textContent=detail||"Atualizando leitura técnica…";
+    if(s){
+      s.textContent="AGUARDAR";
+      s.className="vo-big-signal wait";
+    }
+    renderVoChart(a);
+  }
+
+  function renderVoChart(a){
+    const el=document.getElementById("voMarketChart");
+    const candles=Array.isArray(a?.chart?.candles)?a.chart.candles:[];
+    if(!el||!candles.length||!window.LightweightCharts)return;
+    const tf=String(a?.chart?.timeframe||a?.analysisTimeframes?.setup||"");
+    const last=Number(candles[candles.length-1]?.time||0);
+    const key=tf+"|"+last+"|"+candles.length;
+    if(!voChart||!voCandleSeries||voChartKey!==key){
+      if(voChart){try{voChart.remove();}catch(_){ }voChart=null;voCandleSeries=null;}
+      voChart=window.LightweightCharts.createChart(el,{width:Math.max(280,el.clientWidth),height:330,layout:{background:{color:"transparent"},textColor:"#64748b"},grid:{vertLines:{visible:false},horzLines:{color:"#eef2f7"}},rightPriceScale:{borderVisible:false},timeScale:{borderVisible:false,timeVisible:true,secondsVisible:false},crosshair:{mode:1}});
+      voCandleSeries=voChart.addCandlestickSeries({upColor:"#16a34a",downColor:"#dc2626",borderUpColor:"#16a34a",borderDownColor:"#dc2626",wickUpColor:"#16a34a",wickDownColor:"#dc2626"});
+      voChartKey=key;
+    }
+    voCandleSeries.setData(candles.map(x=>({time:Number(x.time),open:Number(x.open),high:Number(x.high),low:Number(x.low),close:Number(x.close)})));
+    requestAnimationFrame(()=>{if(voChart&&el.isConnected)voChart.applyOptions({width:Math.max(280,el.clientWidth)});});
+  }
+
+
   function startMonitorUiTicker(){
     clearInterval(monitorUiTimer);
     monitorUiTimer=setInterval(()=>{
@@ -302,7 +361,8 @@ function stopMonitorUiTicker(){clearInterval(monitorUiTimer);monitorUiTimer=null
         let timeoutId=0;
         try{
           const controller=new AbortController();
-          timeoutId=setTimeout(()=>controller.abort(),9000);
+          const requestTimeout=monitorCurrentAnalysis?.monitorId?3500:6500;
+          timeoutId=setTimeout(()=>controller.abort(),requestTimeout);
           const d=await jsonResponse(await iqFetch("/market-analysis",{
             method:"POST",
             signal:controller.signal,
@@ -311,7 +371,8 @@ function stopMonitorUiTicker(){clearInterval(monitorUiTimer);monitorUiTimer=null
               timeframe:expiry===1?"1m":expiry===5?"5m":"15m",
               strategy,
               expiry_minutes:expiry,
-              indicator_ids_by_strategy:profiles
+              indicator_ids_by_strategy:profiles,
+              monitor_id:monitorCurrentAnalysis?.monitorId||null
             })
           }));
           const a=d.analysis||{};
@@ -340,8 +401,8 @@ function stopMonitorUiTicker(){clearInterval(monitorUiTimer);monitorUiTimer=null
           monitorRequestStartedAt=0;
         }
         if(!monitoring||runId!==monitorRunId)break;
-        monitorNextPollAt=Date.now()+1000;
-        await sleep(1000);
+        monitorNextPollAt=Date.now()+700;
+        await sleep(700);
       }
     }catch(_){}
   }
