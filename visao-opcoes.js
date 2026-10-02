@@ -81,7 +81,7 @@
   }
   function readProfiles(){ try{return sanitizeProfilesLocal(JSON.parse(localStorage.getItem(PROFILE_KEY)||"null")||defaultProfiles);}catch(_){return sanitizeProfilesLocal(defaultProfiles);} }
   function persistProfiles(){ indicatorProfiles=sanitizeProfilesLocal(indicatorProfiles); localStorage.setItem(PROFILE_KEY,JSON.stringify(indicatorProfiles)); }
-  function strategyName(id){ return id==="tendencia"?"Tendência":id==="reversao"?"Reversão":id==="rompimento"?"Rompimento":"Momentum"; }
+  function strategyName(id){ return ({trend_pullback:"Retração na tendência",breakout:"Rompimento de faixa",mean_reversion:"Reversão à média",support_resistance:"Suporte e resistência",momentum:"Momentum",stoch_adx:"Tendência com estocástico",banda_stoch:"Banda com estocástico",rsi_divergencia:"Divergência de RSI"})[id] || id; }
   function showProfileStatus(msg){ const el=document.getElementById("voStrategyConfigStatus"); if(el){el.textContent="✓ "+msg;setTimeout(()=>{if(el)el.textContent="✓ Perfil salvo neste navegador.";},1800);} }
   function renderStrategyEditor(){
     const menu=document.getElementById("voStrategyMenu"),grid=document.getElementById("voIndicatorConfigGrid"); if(!menu||!grid)return;
