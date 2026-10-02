@@ -77,6 +77,8 @@ from guru_sinais_iqoption_api import router as guru_sinais_iqoption_router
 app.include_router(guru_sinais_iqoption_router)
 from visao_opcoes_api import router as visao_opcoes_router
 app.include_router(visao_opcoes_router)
+from laboratorio_iqoption_api import router as laboratorio_iqoption_router
+app.include_router(laboratorio_iqoption_router)
 
 
 # O frontend atualmente é servido pelo próprio FastAPI, portanto as requisições
