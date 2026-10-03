@@ -48,12 +48,11 @@ async def _load_assets(item: dict) -> dict:
     if cache["data"] is not None and now - cache["at"] < ASSET_CACHE_TTL:
         return cache["data"]
 
-    await _ensure_connection(item)
+    # NÃO usamos get_all_open_time() aqui. A própria iqoptionapi documenta
+    # que essa chamada é pesada para a conexão e, em algumas versões/forks,
+    # pode ficar bloqueada por vários segundos. Para o seletor do Analista Bin
+    # precisamos primeiro de uma lista rápida e completa de nomes/IDs.
     try:
-        # O cliente AsyncIQOption usado pelo login/candles não implementa
-        # get_all_open_time(). Para não mexer no login já funcional, usamos
-        # a mesma SSID autenticada em um cliente estável somente para o
-        # catálogo de ativos. Nenhuma nova senha/login é necessário.
         asset_client = item.get("asset_client")
         if asset_client is None:
             from iqoptionapi.stable_api import IQ_Option
@@ -62,57 +61,58 @@ async def _load_assets(item: dict) -> dict:
             ssid = getattr(ws, "_ssid", None)
             if not ssid:
                 raise RuntimeError("SSID da sessão IQ Option não está disponível.")
+
             asset_client = IQ_Option(
                 getattr(item["client"], "_email", ""),
                 getattr(item["client"], "_password", ""),
                 set_ssid=ssid,
                 auto_logout=False,
             )
-            ok = await asyncio.wait_for(asyncio.to_thread(asset_client.connect), 15)
+            ok = await asyncio.wait_for(asyncio.to_thread(asset_client.connect), 12)
             if ok is not None and isinstance(ok, tuple) and ok and ok[0] is False:
                 reason = ok[1] if len(ok) > 1 else "conexão recusada"
                 raise RuntimeError(str(reason))
             item["asset_client"] = asset_client
 
-        raw = await asyncio.wait_for(
-            asyncio.to_thread(asset_client.get_all_open_time, 0.2),
-            20,
+        opcode = await asyncio.wait_for(
+            asyncio.to_thread(asset_client.get_all_ACTIVES_OPCODE),
+            5,
         )
     except asyncio.TimeoutError as exc:
-        raise HTTPException(status_code=504, detail="A IQ Option demorou para atualizar a lista de ativos.") from exc
+        raise HTTPException(status_code=504, detail="A IQ Option demorou para disponibilizar o catálogo de ativos.") from exc
     except Exception as exc:
         raise HTTPException(
             status_code=502,
-            detail=f"Falha ao consultar os ativos da IQ Option: {type(exc).__name__}: {str(exc)[:180]}",
+            detail=f"Falha ao consultar o catálogo da IQ Option: {type(exc).__name__}: {str(exc)[:180]}",
         ) from exc
 
-    groups = {}
-    for kind, values in (raw or {}).items():
-        if not isinstance(values, dict):
-            continue
-        assets = []
-        for symbol, info in values.items():
-            if not isinstance(info, dict):
-                continue
-            symbol = str(symbol).strip()
-            if symbol:
-                assets.append({"symbol": symbol, "open": bool(info.get("open", False))})
-        assets.sort(key=lambda x: (not x["open"], x["symbol"]))
-        if assets:
-            groups[str(kind)] = assets
+    if not isinstance(opcode, dict) or not opcode:
+        raise HTTPException(status_code=502, detail="A IQ Option não retornou ativos para esta sessão.")
 
-    if not groups:
-        raise HTTPException(status_code=502, detail="A IQ Option não retornou nenhum ativo disponível nesta sessão.")
+    # A API expõe os IDs/nome dos ativos em um catálogo único. A situação
+    # aberto/fechado é deliberadamente deixada para a etapa de candles:
+    # isso evita uma chamada get_all_open_time() pesada só para montar o menu.
+    assets = []
+    for symbol, active_id in opcode.items():
+        symbol = str(symbol).strip()
+        if symbol:
+            assets.append({
+                "symbol": symbol,
+                "open": True,
+                "activeId": active_id,
+            })
 
+    assets.sort(key=lambda x: x["symbol"])
     data = {
-        "groups": groups,
+        "groups": {
+            "all": assets,
+        },
         "updatedAt": int(now),
-        "total": sum(len(v) for v in groups.values()),
+        "total": len(assets),
     }
     cache["at"] = now
     cache["data"] = data
     return data
-
 
 @router.get("/assets")
 async def assets(x_iq_session: str | None = Header(default=None)):
