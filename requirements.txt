@@ -21,3 +21,4 @@ pandas>=2.0,<3
 git+https://github.com/victalejo/iqoptionapi.git@master#egg=iqoptionapi
 aiohttp>=3.9,<4
 websockets>=12,<16
+ta>=0.11,<1
