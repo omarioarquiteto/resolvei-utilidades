@@ -75,7 +75,7 @@ async def _load_assets(item: dict) -> dict:
             item["asset_client"] = asset_client
 
         raw = await asyncio.wait_for(
-            asyncio.to_thread(asset_client.get_all_open_time),
+            asyncio.to_thread(asset_client.get_all_open_time, 0.2),
             20,
         )
     except asyncio.TimeoutError as exc:
