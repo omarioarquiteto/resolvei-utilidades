@@ -39,6 +39,12 @@ def _cleanup() -> None:
                     asyncio.create_task(client.close())
                 except Exception:
                     pass
+            asset_client = item.get("asset_client")
+            if asset_client is not None:
+                try:
+                    asyncio.create_task(asyncio.to_thread(asset_client.close))
+                except Exception:
+                    pass
 
 def _get_session(session_id: str | None) -> dict[str, Any]:
     sid = (session_id or "").strip()
@@ -128,4 +134,10 @@ async def logout(x_iq_session: str | None = Header(default=None)) -> dict[str, A
             await item["client"].close()
         except Exception:
             pass
+        asset_client = item.get("asset_client")
+        if asset_client is not None:
+            try:
+                await asyncio.to_thread(asset_client.close)
+            except Exception:
+                pass
     return {"ok": True}
