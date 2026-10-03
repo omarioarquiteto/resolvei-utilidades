@@ -1,0 +1,1 @@
+(()=>{window.renderAnalistaBin=()=>{const h=document.getElementById('analistaBinToolHost');if(h)h.innerHTML='<div>analista bin</div>';};})();
