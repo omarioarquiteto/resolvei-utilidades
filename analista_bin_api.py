@@ -15,7 +15,7 @@ INTERVALS = {"1m": 60, "5m": 300}
 CANDLE_COUNT = 260
 MIN_CLOSED_CANDLES = 220
 CANDLE_REQUEST_TIMEOUT = 12
-ASSET_CACHE_TTL = 30
+ASSET_CACHE_TTL = 60
 
 
 class Req(BaseModel):
@@ -50,14 +50,41 @@ async def _load_assets(item: dict) -> dict:
 
     await _ensure_connection(item)
     try:
+        # O cliente AsyncIQOption usado pelo login/candles não implementa
+        # get_all_open_time(). Para não mexer no login já funcional, usamos
+        # a mesma SSID autenticada em um cliente estável somente para o
+        # catálogo de ativos. Nenhuma nova senha/login é necessário.
+        asset_client = item.get("asset_client")
+        if asset_client is None:
+            from iqoptionapi.stable_api import IQ_Option
+
+            ws = getattr(item["client"], "_ws", None)
+            ssid = getattr(ws, "_ssid", None)
+            if not ssid:
+                raise RuntimeError("SSID da sessão IQ Option não está disponível.")
+            asset_client = IQ_Option(
+                getattr(item["client"], "_email", ""),
+                getattr(item["client"], "_password", ""),
+                set_ssid=ssid,
+                auto_logout=False,
+            )
+            ok = await asyncio.wait_for(asyncio.to_thread(asset_client.connect), 15)
+            if ok is not None and isinstance(ok, tuple) and ok and ok[0] is False:
+                reason = ok[1] if len(ok) > 1 else "conexão recusada"
+                raise RuntimeError(str(reason))
+            item["asset_client"] = asset_client
+
         raw = await asyncio.wait_for(
-            asyncio.to_thread(item["client"].get_all_open_time),
-            15,
+            asyncio.to_thread(asset_client.get_all_open_time),
+            20,
         )
     except asyncio.TimeoutError as exc:
         raise HTTPException(status_code=504, detail="A IQ Option demorou para atualizar a lista de ativos.") from exc
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"Falha ao consultar os ativos da IQ Option: {str(exc)[:180]}") from exc
+        raise HTTPException(
+            status_code=502,
+            detail=f"Falha ao consultar os ativos da IQ Option: {type(exc).__name__}: {str(exc)[:180]}",
+        ) from exc
 
     groups = {}
     for kind, values in (raw or {}).items():
