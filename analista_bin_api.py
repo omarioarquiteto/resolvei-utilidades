@@ -2,29 +2,30 @@ from __future__ import annotations
 import asyncio,time
 from fastapi import APIRouter,Header,HTTPException
 from pydantic import BaseModel
-import guru_sinais_iqoption_api as iq_auth
 from analista_bin_engine import analyze,STRATEGIES
+from analista_bin_auth import _get_session
+
 router=APIRouter(prefix="/api/analista-bin",tags=["ANALISTA BIN"])
 INTERVALS={"1m":60,"5m":300}
+
 class Req(BaseModel):
  symbol:str
  timeframe:str="1m"
  strategy:str="trend"
-def _session(h): return iq_auth._get_session(h)
-@router.post("/login")
-async def login(req: iq_auth.IQLoginRequest): return await iq_auth.iq_login(req)
-@router.get("/session")
-async def session(x_iq_session:str|None=Header(default=None)): return await iq_auth.iq_session(x_iq_session)
+
 @router.get("/assets")
-async def assets(x_iq_session:str|None=Header(default=None)): return await iq_auth.iq_assets(x_iq_session)
-@router.post("/logout")
-async def logout(x_iq_session:str|None=Header(default=None)): return await iq_auth.iq_logout(x_iq_session)
+async def assets(x_iq_session:str|None=Header(default=None)):
+ _get_session(x_iq_session)
+ return {"normal":[{"symbol":s} for s in ["EURUSD","GBPUSD","USDJPY","USDCHF","AUDUSD","EURJPY","GBPJPY"]],"otc":[{"symbol":s} for s in ["EURUSD-OTC","GBPUSD-OTC","USDJPY-OTC"]]}
+
 @router.get("/config")
 async def config(x_iq_session:str|None=Header(default=None)):
- _session(x_iq_session); return {"strategies":{k:v["name"] for k,v in STRATEGIES.items()},"weights":{k:v["weights"] for k,v in STRATEGIES.items()}}
+ _get_session(x_iq_session)
+ return {"strategies":{k:v["name"] for k,v in STRATEGIES.items()},"weights":{k:v["weights"] for k,v in STRATEGIES.items()}}
+
 @router.post("/analyze")
 async def run(req:Req,x_iq_session:str|None=Header(default=None)):
- item=_session(x_iq_session)
+ item=_get_session(x_iq_session)
  if req.timeframe not in INTERVALS: raise HTTPException(400,"Timeframe deve ser 1m ou 5m.")
  if req.strategy not in STRATEGIES: raise HTTPException(400,"Estratégia inválida.")
  symbol=req.symbol.upper().strip()
