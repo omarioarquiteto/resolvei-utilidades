@@ -50,6 +50,7 @@
       '<div class="field"><label>Prazo (meses)</label><input id="finTerm" type="number" min="1" step="1" value="360"></div>'+
       '<div class="field full"><label>Valor financiado</label><input id="finPV" type="number" min="0" step="0.01" value="400000"></div>'+
       '<div id="propertyFields" class="field full"><div class="financing-form">'+
+      '<div class="field"><label>Banco de referência</label><select id="finBankRefProperty"></select></div>'+
       '<div class="field"><label>Modalidade / indexador</label><select id="finLine"><option value="tr">Mercado — TR</option><option value="prefixado">Mercado — prefixado</option><option value="poupanca">Juros da poupança</option><option value="tr_regulado">Regulado — TR</option><option value="prefixado_regulado">Regulado — prefixado</option></select></div>'+
       '<div class="field"><label>Sistema de amortização</label><select id="finSystem"><option value="SAC">SAC</option><option value="PRICE">PRICE</option></select></div>'+
       '<div class="field"><label>Tipo de imóvel</label><select id="finPropertyType"><option>Residencial</option><option>Comercial</option></select></div>'+
@@ -82,6 +83,7 @@
     var banks=(state.dados&&state.dados.banks)||[];
     sel.innerHTML=banks.map(function(b){return '<option value="'+escF(b.id)+'">'+escF(b.name)+'</option>';}).join("")||"<option value=''>Selecione</option>";
     if((state.dados&&state.dados.market&&state.dados.market.rates||[]).some(function(x){return x.id==="caixa";}))sel.value="caixa";
+    var prop=get("finBankRefProperty"); if(prop){prop.innerHTML=banks.map(function(b){return '<option value="'+escF(b.id)+'">'+escF(b.name)+'</option>';}).join("")||"<option value=''>Selecione</option>"; if((state.dados&&state.dados.market&&state.dados.market.rates||[]).some(function(x){return x.id==="caixa";}))prop.value="caixa";}
   }
 
   function renderRules(){
@@ -99,7 +101,7 @@
     var cet=value("finCET"),manual=value("finManualRate");
     if(cet>0)return {rate:monthlyFromAnnual(cet),source:"CET informado pelo usuário (taxa mensal equivalente aproximada)"};
     if(manual>0)return {rate:manual,source:"taxa mensal informada pelo usuário"};
-    var ref=state.tipo==="veiculo"?selected("finBankRef"):"caixa";
+    var ref=state.tipo==="veiculo"?selected("finBankRef"):(selected("finBankRefProperty")||"caixa");
     var rates=(state.dados&&state.dados.market&&state.dados.market.rates)||[];
     var r=null;
     rates.some(function(x){if(x.id===ref){r=x;return true;}return false;});
