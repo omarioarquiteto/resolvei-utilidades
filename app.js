@@ -27,29 +27,96 @@ const tools = [
   {id:'juros-simples',cat:'dinheiro',icon:'💵',title:'Juros simples',desc:'Veja juros, montante e crescimento linear.',tags:'juros simples financeiro'},
   {id:'juros-compostos',cat:'dinheiro',icon:'📈',title:'Juros compostos',desc:'Simule crescimento com juros sobre juros.',tags:'juros compostos investimento'},
   {id:'dividir-conta',cat:'dinheiro',icon:'🍽️',title:'Dividir conta',desc:'Divida a conta entre pessoas e inclua gorjeta.',tags:'dividir conta restaurante pessoas'},
-  {id:'financiamento',cat:'dinheiro',icon:'🏦',title:'Financiamento e empréstimos',desc:'Estime parcelas, juros e custo total de financiamentos e empréstimos.',tags:'financiamento empréstimo crédito parcela juros carro apartamento'}
+  {id:'gorjeta',cat:'dinheiro',icon:'🤝',title:'Gorjeta',desc:'Calcule gorjeta e valor total da conta.',tags:'gorjeta serviço 10 15'},
+  {id:'financiamento',cat:'dinheiro',icon:'🏦',title:'Parcela de financiamento',desc:'Estime parcela, total pago e juros.',tags:'financiamento financiamento carro apartamento parcela'},
+  {id:'emprestimo',cat:'dinheiro',icon:'💳',title:'Custo de empréstimo',desc:'Estime quanto um empréstimo custa ao longo do tempo.',tags:'emprestimo crédito parcela juros'},
   {id:'meta-poupanca',cat:'dinheiro',icon:'🎯',title:'Meta de economia',desc:'Descubra quanto guardar por mês para chegar a uma meta.',tags:'guardar economizar poupar meta dinheiro'},
+  {id:'poder-compra',cat:'dinheiro',icon:'🛒',title:'Poder de compra',desc:'Compare o valor nominal com uma inflação estimada.',tags:'inflação poder de compra dinheiro'},
+  {id:'gerenciamento-risco',cat:'dinheiro',icon:'🛡️',title:'Gerenciamento de risco e evolução de capital',desc:'Modele entradas progressivas por seção, exposição a perdas, evolução do patrimônio e acompanhe resultados.',tags:'gerenciamento risco gestão de banca capital patrimonio evolução capital entrada payout perdas chances seção progressão risco financeiro'},
+  {id:'laboratorio-estatistico',cat:'dinheiro',icon:'🧠',title:'Laboratório estatístico de opções',desc:'Valide taxa de acerto, payout, valor esperado, amostra, sizing conservador, drawdown e circuito de proteção.',tags:'opções binárias estatística probabilidade payout valor esperado EV kelly risco banca drawdown backtest laboratório'},
   {id:'gerador-de-senhas',cat:'outros',icon:'🔐',title:'Gerador de senhas',desc:'Crie senhas fortes, frases-senha e PINs usando geração criptograficamente segura no navegador.',tags:'senha senhas password gerador segurança pin frase-senha criptografia segurança online'},
+  {id:'guru-dos-sinais-iqoption',cat:'dinheiro',icon:'🧙‍♂️',title:'GURÚ DOS SINAIS IQOPTION',desc:'Analista técnico automático conectado aos candles da IQ Option, incluindo mercado OTC.',tags:'guru sinais iqoption iq option OTC opções binárias call put análise técnica candles forex'},
+  {id:'visao-opcoes',cat:'dinheiro',icon:'🔭',title:'VISÃO OPÇÕES',desc:'Terminal de análise de pares com dados da IQ Option, radar de mercado e fatos relevantes da Biquote.',tags:'visão opções iqoption pares radar análise técnica candles OTC biquote fatos relevantes calendário econômico call put'},
+  {id:'analista-bin',cat:'dinheiro',icon:'📡',title:'ANALISTA BIN',desc:'Motor técnico ponderado para confluência de 30 indicadores em pares da IQ Option.',tags:'analista bin iqoption opções binárias call put tendência rompimento reversão indicadores score confluência'},
   {id:'combustivel-viagem',cat:'carro',icon:'⛽',title:'Combustível da viagem',desc:'Estime litros necessários e custo da viagem.',tags:'gasolina etanol combustível viagem litros km'},
+  {id:'custo-km',cat:'carro',icon:'🛣️',title:'Custo por km',desc:'Descubra quanto seu carro custa a cada quilômetro.',tags:'custo km carro combustível consumo'},
+  {id:'gasolina-etanol',cat:'carro',icon:'⚖️',title:'Gasolina × etanol',desc:'Compare preços pela eficiência energética do combustível.',tags:'gasolina etanol álcool abastecer'},
+  {id:'consumo-carro',cat:'carro',icon:'🚘',title:'Consumo do carro',desc:'Calcule km/L e compare abastecimentos.',tags:'consumo km litro carro'},
+  {id:'tempo-viagem',cat:'carro',icon:'🕒',title:'Tempo de viagem',desc:'Calcule duração aproximada pela distância e velocidade.',tags:'tempo viagem velocidade distância'},
+  {id:'custo-viagem',cat:'carro',icon:'🧳',title:'Custo total da viagem',desc:'Combine combustível, pedágio e outros custos.',tags:'viagem pedágio combustível viagem carro'},
   {id:'tinta',cat:'casa',icon:'🎨',title:'Quantidade de tinta',desc:'Estime litros necessários para pintar paredes.',tags:'tinta pintura parede reforma'},
   {id:'piso',cat:'casa',icon:'▦',title:'Quantidade de piso',desc:'Calcule peças e caixas com margem de perda.',tags:'piso revestimento porcelanato ceramica'},
+  {id:'rejunte',cat:'casa',icon:'▤',title:'Quantidade de rejunte',desc:'Estime consumo de rejunte para revestimentos.',tags:'rejunte revestimento junta piso'},
+  {id:'argamassa',cat:'casa',icon:'🧱',title:'Argamassa',desc:'Estime quantidade de argamassa para assentamento.',tags:'argamassa piso revestimento obra'},
   {id:'concreto',cat:'casa',icon:'🧱',title:'Volume de concreto',desc:'Calcule volume e estimativa de materiais.',tags:'concreto laje fundação viga piso'},
+  {id:'blocos',cat:'casa',icon:'🏗️',title:'Blocos ou tijolos',desc:'Estime quantidade de unidades para uma parede.',tags:'bloco tijolo parede alvenaria'},
+  {id:'telhas',cat:'casa',icon:'🏡',title:'Quantidade de telhas',desc:'Estime telhas por área e inclinação.',tags:'telha cobertura telhado'},
+  {id:'escada',cat:'casa',icon:'🪜',title:'Escada: espelho e piso',desc:'Estime uma relação confortável entre espelho e piso.',tags:'escada degrau espelho piso'},
   {id:'iluminacao',cat:'casa',icon:'💡',title:'Iluminação do ambiente',desc:'Estime fluxo luminoso total de um ambiente.',tags:'iluminação lumens lampada ambiente'},
   {id:'ar-condicionado',cat:'casa',icon:'❄️',title:'BTUs de ar-condicionado',desc:'Estimativa inicial da capacidade para um ambiente.',tags:'btu ar condicionado ar-condicionado calor'},
+  {id:'caixa-dagua',cat:'casa',icon:'🚰',title:'Caixa d’água',desc:'Estime capacidade com base em pessoas e reserva.',tags:'caixa d agua água litros casa'},
+  {id:'piscina',cat:'casa',icon:'🏊',title:'Volume da piscina',desc:'Calcule litros e volume de uma piscina retangular.',tags:'piscina agua volume litros'},
+  {id:'cobertura',cat:'casa',icon:'📐',title:'Inclinação de cobertura',desc:'Calcule altura pela porcentagem de inclinação.',tags:'telhado inclinação cobertura altura'},
   {id:'placas-solares',cat:'energia',icon:'☀️',title:'Dimensionamento de placas solares',desc:'Estime módulos, potência, inversor, materiais, custo e payback.',tags:'solar fotovoltaica painel placa inversor energia conta luz kwh economia payback financiamento'},
-  {id:'conversor-arquivos',cat:'outros',icon:'🔄',title:'Conversor de arquivos',desc:'Converta, comprima, redimensione e compacte arquivos em um só lugar.',tags:'converter arquivo imagem foto pdf docx xlsx csv video audio mp3 mp4 jpg png webp heic zip'},
-  {id:'conversor-unidades',cat:'medidas',icon:'📐',title:'Conversor de unidades',desc:'Converta medidas comuns de comprimento, peso, volume, área, velocidade, dados, potência e temperatura.',tags:'converter unidades comprimento peso volume area temperatura velocidade dados potencia medidas'},
+  {id:'posicao-solar',cat:'energia',icon:'🧭',title:'Posicionamento dos módulos — integrado ao solar',desc:'Use a etapa visual dentro do dimensionamento para marcar telhados, obstáculos, escala e posição dos módulos.',tags:'posição solar insolação telhado norte azimute orientação sombra placas fotovoltaicas imagem drone satelite módulo painel'},
+  {id:'conversor-arquivos',cat:'medidas',icon:'🔄',title:'Conversor de arquivos',desc:'Converta vídeos, imagens e PDFs entre formatos comuns.',tags:'converter arquivo mp4 avi mov webm jpg png webp pdf imagem video'},
+  {id:'jpg-png-webp',cat:'medidas',icon:'🖼️',title:'JPG ↔ PNG ↔ WEBP',desc:'Converta imagens entre formatos populares.',tags:'jpg jpeg png webp converter imagem formato'},
+  {id:'heic-jpg',cat:'medidas',icon:'📱',title:'HEIC → JPG',desc:'Converta fotos do iPhone para JPG.',tags:'heic iphone celular foto jpg converter'},
+  {id:'imagem-pdf',cat:'medidas',icon:'📄',title:'Imagem → PDF',desc:'Transforme uma ou várias imagens em PDF.',tags:'imagem pdf jpg png celular documento'},
+  {id:'pdf-imagens-zip',cat:'medidas',icon:'🗂️',title:'PDF → imagens ZIP',desc:'Exporte todas as páginas de um PDF para imagens em um ZIP.',tags:'pdf jpg png zip paginas converter'},
+  {id:'mp4-mp3',cat:'medidas',icon:'🎵',title:'MP4 → MP3',desc:'Extraia o áudio de um vídeo.',tags:'mp4 mp3 audio video musica converter'},
+  {id:'mp4-gif',cat:'medidas',icon:'🎞️',title:'MP4 → GIF',desc:'Transforme um trecho de vídeo em GIF animado.',tags:'mp4 gif video animado converter'},
+  {id:'csv-xlsx',cat:'medidas',icon:'📊',title:'CSV ↔ XLSX',desc:'Converta planilhas CSV e Excel.',tags:'csv xlsx excel planilha converter'},
+  {id:'zip-arquivos',cat:'medidas',icon:'🗜️',title:'Comprimir arquivos em ZIP',desc:'Junte vários arquivos em um único ZIP.',tags:'zip compactar comprimir arquivos pasta'},
+  {id:'mov-mp4',cat:'medidas',icon:'📱',title:'MOV → MP4',desc:'Converta vídeos do iPhone para MP4.',tags:'mov mp4 iphone celular video converter'},
+  {id:'jpg-heic',cat:'medidas',icon:'📱',title:'JPG → HEIC',desc:'Converta imagens para HEIC quando o servidor suportar esse formato.',tags:'jpg heic iphone celular imagem converter'},
+  {id:'imagem-comprimir',cat:'medidas',icon:'🗜️',title:'Comprimir imagem',desc:'Reduza o tamanho de JPG, PNG e WEBP.',tags:'imagem comprimir reduzir tamanho jpg png webp'},
+  {id:'docx-pdf',cat:'medidas',icon:'📝',title:'DOCX → PDF',desc:'Gere um PDF simples a partir do texto de um documento Word.',tags:'docx word pdf documento converter'},
+  {id:'pdf-docx',cat:'medidas',icon:'📝',title:'PDF → DOCX',desc:'Extraia o texto de um PDF para um documento Word editável.',tags:'pdf docx word documento converter'},
+  {id:'pdf-txt',cat:'medidas',icon:'📄',title:'PDF → TXT',desc:'Extraia o texto de um PDF para texto puro.',tags:'pdf txt texto documento'},
+  {id:'txt-pdf',cat:'medidas',icon:'📄',title:'TXT → PDF',desc:'Transforme texto simples em PDF.',tags:'txt pdf texto documento'},
+  {id:'pdf-xlsx',cat:'medidas',icon:'📊',title:'PDF → XLSX',desc:'Organize texto de páginas de PDF em uma planilha Excel.',tags:'pdf xlsx excel planilha documento'},
+  {id:'xlsx-csv',cat:'medidas',icon:'📊',title:'XLSX → CSV',desc:'Exporte uma planilha Excel para CSV.',tags:'xlsx csv excel planilha'},
+  {id:'audio-mp3-wav',cat:'medidas',icon:'🎵',title:'Áudio MP3 ↔ WAV',desc:'Converta formatos comuns de áudio.',tags:'mp3 wav audio converter'},
+  {id:'audio-ogg',cat:'medidas',icon:'🎵',title:'Áudio → OGG',desc:'Converta áudio para OGG.',tags:'mp3 wav ogg audio converter'},
+  {id:'video-webm',cat:'medidas',icon:'🎬',title:'Vídeo → WEBM',desc:'Converta vídeos para WEBM.',tags:'mp4 mov webm video converter'},
+  {id:'video-avi',cat:'medidas',icon:'🎬',title:'Vídeo → AVI',desc:'Converta vídeos para AVI.',tags:'mp4 mov avi video converter'},
+  {id:'video-audio',cat:'medidas',icon:'🎧',title:'Vídeo → áudio',desc:'Extraia o áudio de vídeos.',tags:'video mp3 audio extrair'},
+  {id:'svg-png',cat:'medidas',icon:'🖼️',title:'SVG → PNG',desc:'Converta gráficos vetoriais SVG para PNG.',tags:'svg png imagem vetor'},
+  {id:'png-ico',cat:'medidas',icon:'🔷',title:'PNG → ICO',desc:'Crie ícones ICO para sites e atalhos.',tags:'png ico favicon icon'},
+  {id:'imagem-redimensionar',cat:'medidas',icon:'↔️',title:'Redimensionar imagem',desc:'Defina largura e altura de uma imagem.',tags:'redimensionar imagem pixels foto'},
+  {id:'pdf-comprimir',cat:'medidas',icon:'🗜️',title:'Comprimir PDF',desc:'Reduza o tamanho de um PDF quando possível.',tags:'pdf comprimir reduzir tamanho'},
+  {id:'arquivos-zip',cat:'medidas',icon:'🗜️',title:'ZIP de vários arquivos',desc:'Compacte vários arquivos em um único ZIP.',tags:'zip arquivos compactar'},
+  {id:'area-retangulo',cat:'medidas',icon:'▭',title:'Área do retângulo',desc:'Calcule área a partir de largura e comprimento.',tags:'area retangulo terreno ambiente'},
+  {id:'area-triangulo',cat:'medidas',icon:'△',title:'Área do triângulo',desc:'Calcule área de triângulos.',tags:'area triangulo'},
+  {id:'area-circulo',cat:'medidas',icon:'○',title:'Área do círculo',desc:'Calcule área a partir do raio ou diâmetro.',tags:'area circulo círculo'},
+  {id:'volume-caixa',cat:'medidas',icon:'▣',title:'Volume de uma caixa',desc:'Calcule litros e metros cúbicos.',tags:'volume caixa cubica litro'},
+  {id:'temperatura',cat:'medidas',icon:'🌡️',title:'Temperatura °C ↔ °F',desc:'Converta Celsius e Fahrenheit.',tags:'celsius fahrenheit temperatura'},
+  {id:'comprimento',cat:'medidas',icon:'📏',title:'Conversor de comprimento',desc:'Converta mm, cm, m, km, polegadas, pés e milhas.',tags:'comprimento metro centimetro polegada pés'},
+  {id:'peso',cat:'medidas',icon:'⚖️',title:'Conversor de peso',desc:'Converta mg, g, kg, toneladas, lb e oz.',tags:'peso massa kg libra onça'},
+  {id:'volume',cat:'medidas',icon:'🧪',title:'Conversor de volume',desc:'Converta ml, L, m³, galão e mais.',tags:'volume ml litro litro galão'},
+  {id:'area',cat:'medidas',icon:'◫',title:'Conversor de área',desc:'Converta m², km², hectare, acre e ft².',tags:'area hectare acre metro quadrado'},
+  {id:'velocidade',cat:'medidas',icon:'🏎️',title:'Conversor de velocidade',desc:'Converta km/h, mph e m/s.',tags:'velocidade kmh mph metro segundo'},
+  {id:'dados',cat:'medidas',icon:'💾',title:'Conversor de dados',desc:'Converta KB, MB, GB e TB.',tags:'dados armazenamento kb mb gb tb'},
+  {id:'energia',cat:'medidas',icon:'⚡',title:'Conversor de potência',desc:'Converta W, kW e cv.',tags:'potencia watt kw cavalo'},
   {id:'idade',cat:'tempo',icon:'🎂',title:'Idade exata',desc:'Calcule anos, meses e dias a partir da data de nascimento.',tags:'idade aniversario nascimento'},
-  {id:'datas-e-horarios',cat:'tempo',icon:'📅',title:'Datas e horários',desc:'Calcule intervalos, datas futuras, dia da semana e duração entre horários.',tags:'datas prazo calendario dias horario horas intervalo'}
+  {id:'dias-entre-datas',cat:'tempo',icon:'📅',title:'Dias entre datas',desc:'Veja quantos dias existem entre duas datas.',tags:'dias datas calendario prazo'},
+  {id:'data-futura',cat:'tempo',icon:'➕',title:'Data daqui a X dias',desc:'Descubra a data após um período.',tags:'data futura dias prazo'},
+  {id:'dia-semana',cat:'tempo',icon:'🗓️',title:'Dia da semana',desc:'Descubra em que dia da semana caiu uma data.',tags:'dia semana calendario'},
+  {id:'horas',cat:'tempo',icon:'⌚',title:'Diferença entre horários',desc:'Calcule horas e minutos entre dois horários.',tags:'horas tempo horario intervalo'},
   {id:'somar-horas',cat:'trabalho',icon:'➕',title:'Somar horas',desc:'Some vários períodos de trabalho ou estudo.',tags:'somar horas jornada trabalho'},
   {id:'rescisao-clt',cat:'trabalho',icon:'📄',title:'Cálculo de rescisão CLT',desc:'Estime verbas rescisórias conforme o tipo de desligamento.',tags:'rescisão clt demissão aviso prévio férias 13 salario fgts'},
   {id:'clt-vs-pj',cat:'trabalho',icon:'⚖️',title:'Quanto cobrar como PJ?',desc:'Compare a remuneração PJ com uma proposta CLT e veja o equivalente anual.',tags:'pj pessoa juridica clt salario contratação freelancer imposto benefícios 13 férias fgts'},
   {id:'receita',cat:'cozinha',icon:'🥣',title:'Ajustar receita',desc:'Escalone ingredientes para mais ou menos pessoas.',tags:'receita porções ingredientes'},
+  {id:'temperatura-cozinha',cat:'cozinha',icon:'🔥',title:'Temperatura de forno',desc:'Converta °C, °F e marcações comuns de forno.',tags:'forno receita cozinha temperatura'},
   {id:'custo-receita',cat:'cozinha',icon:'🧾',title:'Custo da receita',desc:'Some ingredientes e descubra custo por porção.',tags:'custo receita comida ingredientes'},
   {id:'por-quanto-vender',cat:'cozinha',icon:'🏷️',title:'Por quanto devo vender?',desc:'Descubra um preço de venda para doces, salgados e comidas.',tags:'preço venda doces salgados comida bolo brigadeiro marmita preço lucro margem'},
   {id:'churrasco',cat:'festas',icon:'🥩',title:'Quantidade para churrasco',desc:'Estime carne, acompanhamentos e bebidas.',tags:'churrasco carne convidados festa'},
   {id:'festa',cat:'festas',icon:'🥳',title:'Planejador de festa',desc:'Estime comida, bebida, bolo e descartáveis.',tags:'festa aniversario convidados salgados'},
+  {id:'bolo',cat:'festas',icon:'🍰',title:'Quantidade de bolo',desc:'Estime o peso do bolo pela quantidade de convidados.',tags:'bolo aniversário convidados festa'},
+  {id:'gelo',cat:'festas',icon:'🧊',title:'Quantidade de gelo',desc:'Estime gelo para eventos e bebidas.',tags:'gelo festa bebida'},
   {id:'lista-compras',cat:'outros',icon:'🛒',title:'Lista de compras',desc:'Organize listas de compras, compartilhe em tempo real e ensine suas próprias classificações; IA opcional para sugerir setores.',tags:'lista compras mercado supermercado'},
+  {id:'dividir-pessoas',cat:'outros',icon:'👥',title:'Dividir qualquer valor',desc:'Distribua um valor igualmente entre pessoas.',tags:'dividir pessoas dinheiro grupo'},
 ];
 
 /* DEDUPE_TOOLS */
@@ -65,7 +132,7 @@ const tools = [
   }
 }
 
-const popular = ['porcentagem','combustivel-viagem','piso','tinta','financiamento','juros-compostos','conversor-arquivos','lista-compras'];
+const popular = ['porcentagem','combustivel-viagem','piso','tinta','placas-solares','posicao-solar','juros-compostos','idade'];
 
 const input = (id,label,opts={}) => {
   const type = opts.type || 'number';
@@ -683,61 +750,36 @@ async function searchSolarAddress(){const st=document.getElementById('solarResou
 async function updateSolarResource(){const st=document.getElementById('solarResourceStatus');if(st)st.textContent='☀️ Consultando dados solares...';try{const res=await fetch('/api/solar/resource',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(solarAddressPayload())}),d=await res.json();if(!res.ok)throw new Error(d.detail||'Não foi possível obter os dados solares.');solarLayoutState.lat=Number(d.lat||0);solarLayoutState.lon=Number(d.lon||0);solarLayoutState.optimalAzimuth=normalizeBearing(Number(d.optimalAzimuth||0));solarLayoutState.optimalTilt=Number(d.optimalTilt||15);const annual=Number(d.roof?.annualKwhPerKwp||d.annualKwhPerKwp||0),pr=Math.max(.1,Math.min(1,val('solarPR')/100||.8));if(annual>0)document.getElementById('solarPSH').value=Math.max(1,Math.min(8,(annual/(365*pr))).toFixed(2));if(st)st.innerHTML='✅ '+esc(d.displayName||'Localização')+' · '+esc(d.source||'modelo local')+' · referência '+num(d.optimalAzimuth)+'° / '+num(d.optimalTilt)+'°';solarPathDraw(document.getElementById('solarPathCanvas'),solarLayoutState.lat);solarLayoutRender();}catch(e){if(st)st.innerHTML='⚠️ '+esc(e.message)+' O cálculo continuará com as horas de sol informadas.';}}
 async function updateSolarPrices(){const st=document.getElementById('solarResourceStatus');try{const q=new URLSearchParams({city:document.getElementById('solarCity')?.value||'Cuiabá',state:document.getElementById('solarState')?.value||'MT'}),res=await fetch('/api/solar/prices?'+q.toString()),d=await res.json();if(!res.ok)throw new Error(d.detail||'Falha na consulta de preços.');if(!d.configured){if(st)st.textContent='⚠️ Consulta online desativada. Os preços editáveis continuam disponíveis.';return;}const map={panel:'pricePanel',inverter:'priceInverter',mounting:'priceMounting',dcProtection:'priceDcProtection',acProtection:'priceAcProtection'};let changed=0;for(const item of d.items||[]){const id=map[item.key];if(id&&item.best?.price){document.getElementById(id).value=Number(item.best.price).toFixed(2);changed++;}}if(st)st.textContent='✅ '+changed+' preços atualizados.';}catch(e){if(st)st.textContent='⚠️ '+esc(e.message);}}
 function bindSolarCalculatorInteractions(){solarLayoutState={mode:'roof',tempPoints:[],roofs:[],obstacles:[],calibration:{points:[],metersPerPixel:null,meters:0},placements:[],lat:0,lon:0,optimalAzimuth:0,optimalTilt:15};document.getElementById('solarMapImage')?.addEventListener('change',solarImageRead);document.getElementById('solarOverlay')?.addEventListener('click',e=>{const p=solarCanvasPoint(e);if(!p)return;if(solarLayoutState.mode==='calibrate'){if(solarLayoutState.tempPoints.length<2)solarLayoutState.tempPoints.push(p);if(solarLayoutState.tempPoints.length===2)solarFinishCalibration();return;}if(solarLayoutState.mode==='obstacle'){solarAddObstacle(p);return;}solarLayoutState.tempPoints.push(p);solarLayoutRender();solarSolarStatus('Ponto '+solarLayoutState.tempPoints.length+' marcado. Clique em “Concluir marcação”.');});document.getElementById('solarRoofModeBtn')?.addEventListener('click',()=>solarSetSolarMode('roof'));document.getElementById('solarObstacleModeBtn')?.addEventListener('click',()=>solarSetSolarMode('obstacle'));document.getElementById('solarCalibrateBtn')?.addEventListener('click',()=>{solarLayoutState.tempPoints=[];solarSetSolarMode('calibrate');solarSolarStatus('Clique em dois pontos cuja distância real você conhece.');});document.getElementById('solarFinishMarkBtn')?.addEventListener('click',()=>solarLayoutState.mode==='calibrate'?solarFinishCalibration():solarFinishRoof());document.getElementById('solarUndoBtn')?.addEventListener('click',solarUndo);document.getElementById('solarClearMarksBtn')?.addEventListener('click',solarClearMarks);document.getElementById('solarAutoLayoutBtn')?.addEventListener('click',solarLayoutAuto);document.getElementById('solarLayoutClearBtn')?.addEventListener('click',solarClearLayout);document.getElementById('solarCepBtn')?.addEventListener('click',fetchCepForSolar);document.getElementById('solarAddressBtn')?.addEventListener('click',searchSolarAddress);document.getElementById('solarResourceBtn')?.addEventListener('click',updateSolarResource);document.getElementById('solarPricesBtn')?.addEventListener('click',updateSolarPrices);['solarPanelLength','solarPanelWidth','solarPanelGap','solarEdgeClearance','solarShadowAltitude','solarMarkRoofAzimuth','solarMarkRoofTilt','solarObstacleHeight'].forEach(id=>document.getElementById(id)?.addEventListener('input',solarLayoutRender));window.addEventListener('resize',()=>setTimeout(solarLayoutRender,60));solarSetSolarMode('roof');solarPathDraw(document.getElementById('solarPathCanvas'),solarLayoutState.lat);}
-const UNIT_GROUPS = {
-  comprimento:{label:"Comprimento",units:[["mm","Milímetro",0.001],["cm","Centímetro",0.01],["m","Metro",1],["km","Quilômetro",1000],["in","Polegada",0.0254],["ft","Pé",0.3048],["yd","Jarda",0.9144],["mi","Milha",1609.344]]},
-  peso:{label:"Peso / massa",units:[["mg","Miligrama",0.001],["g","Grama",1],["kg","Quilograma",1000],["t","Tonelada",1000000],["oz","Onça",28.349523125],["lb","Libra",453.59237]]},
-  volume:{label:"Volume",units:[["ml","Mililitro",0.001],["l","Litro",1],["m3","Metro cúbico",1000],["gal","Galão US",3.785411784],["cup","Xícara US",0.2365882365]]},
-  area:{label:"Área",units:[["m2","Metro quadrado",1],["km2","Quilômetro quadrado",1000000],["ha","Hectare",10000],["acre","Acre",4046.8564224],["ft2","Pé quadrado",0.09290304]]},
-  velocidade:{label:"Velocidade",units:[["kmh","km/h",1],["mph","mph",1.609344],["ms","m/s",3.6]]},
-  dados:{label:"Dados digitais",units:[["KB","KB",1],["MB","MB",1024],["GB","GB",1048576],["TB","TB",1073741824]]},
-  potencia:{label:"Potência",units:[["w","W",1],["kw","kW",1000],["cv","cv",735.49875]]},
-  temperatura:{label:"Temperatura",units:[["c","°C",0],["f","°F",0]]}
-};
-function universalUnitsUI(){
-  const cats=Object.entries(UNIT_GROUPS).map(([id,g])=>`<option value="${id}">${g.label}</option>`).join("");
-  return `<div class="tool-layout"><section class="card panel"><h2>Converta uma unidade</h2><div class="form-grid"><div class="field full"><label for="unitCategory">Categoria</label><select id="unitCategory">${cats}</select></div><div class="field full"><label for="unitValue">Valor</label><div class="input-wrap"><input id="unitValue" type="number" step="any" value="1"></div></div><div class="field"><label for="unitFrom">De</label><select id="unitFrom"></select></div><div class="field"><label for="unitTo">Para</label><select id="unitTo"></select></div></div><div class="actions"><button class="btn primary" id="calcBtn">Converter</button><button class="btn ghost" id="resetBtn" type="button">Limpar</button></div><div class="notice">Selecione a categoria e as unidades. O resultado aparece instantaneamente após converter.</div></section><section id="result"><div class="result-box"><div class="result-label">Resultado</div><div class="result-main">—</div><p>Escolha as unidades e clique em converter.</p></div></section></div>`;
-}
-function bindUnitConverter(){
-  const cat=document.getElementById("unitCategory"),from=document.getElementById("unitFrom"),to=document.getElementById("unitTo");
-  if(!cat||!from||!to)return;
-  const fill=()=>{const g=UNIT_GROUPS[cat.value],opts=g.units.map(u=>`<option value="${u[0]}">${u[1]}</option>`).join("");from.innerHTML=opts;to.innerHTML=opts;if(g.units[1])to.value=g.units[1][0];};
-  cat.addEventListener("change",fill); fill();
-}
-
-function datasHorariosUI(){
-  return `<div class="tool-layout"><section class="card panel"><h2>O que você quer calcular?</h2><div class="field"><label for="dateMode">Operação</label><select id="dateMode"><option value="intervalo">Dias entre duas datas</option><option value="futura">Data após X dias</option><option value="semana">Dia da semana</option><option value="horas">Diferença entre horários</option></select></div><div id="dateFields" class="form-grid" style="margin-top:14px"></div><div class="actions"><button class="btn primary" id="calcBtn">Calcular</button><button class="btn ghost" id="resetBtn" type="button">Limpar</button></div></section><section id="result"><div class="result-box"><div class="result-label">Resultado</div><div class="result-main">—</div><p>Escolha a operação e clique em calcular.</p></div></section></div>`;
-}
-function dateISO(offset=0){const d=new Date();d.setDate(d.getDate()+offset);return d.toISOString().slice(0,10);}
-function renderDateFields(mode){
-  const box=document.getElementById("dateFields");if(!box)return;
-  if(mode==="intervalo")box.innerHTML=`<div class="field"><label for="dtStart">Data inicial</label><input id="dtStart" type="date" value="${dateISO(0)}"></div><div class="field"><label for="dtEnd">Data final</label><input id="dtEnd" type="date" value="${dateISO(30)}"></div>`;
-  else if(mode==="futura")box.innerHTML=`<div class="field"><label for="dtDate">Data de referência</label><input id="dtDate" type="date" value="${dateISO(0)}"></div><div class="field"><label for="dtDays">Adicionar dias</label><input id="dtDays" type="number" step="1" value="30"></div>`;
-  else if(mode==="semana")box.innerHTML=`<div class="field full"><label for="dtDate">Data</label><input id="dtDate" type="date" value="${dateISO(0)}"></div>`;
-  else box.innerHTML=`<div class="field"><label for="dtStartTime">Horário inicial</label><input id="dtStartTime" type="time" value="08:00"></div><div class="field"><label for="dtEndTime">Horário final</label><input id="dtEndTime" type="time" value="17:30"></div>`;
-}
-function bindDatasHorarios(){const mode=document.getElementById("dateMode");if(!mode)return;renderDateFields(mode.value);mode.addEventListener("change",()=>{renderDateFields(mode.value);const r=document.getElementById("result");if(r)r.innerHTML=`<div class="result-box"><div class="result-label">Resultado</div><div class="result-main">—</div><p>Preencha os dados e clique em calcular.</p></div>`;});}
-
 function converterArquivosUI(){return `<div class="tool-layout"><section class="card panel"><h2>Conversor de arquivos</h2><div class="notice"><strong>Converta no Resolvei.</strong><br>Vídeos usam FFmpeg; imagens e PDFs são processados pelo servidor.</div><div class="field full"><label for="convertFile">Arquivo</label><input id="convertFile" type="file" accept=".mp4,.avi,.mov,.mkv,.webm,.jpg,.jpeg,.png,.webp,.bmp,.pdf"></div><div class="form-grid"><div class="field"><label for="convertFormat">Formato de saída</label><select id="convertFormat"><option value="">Selecione o arquivo primeiro</option></select></div><div class="field"><label>Limite</label><div class="notice" style="margin:0">Até 200 MB.</div></div></div><div class="actions"><button class="btn primary" id="convertBtn" disabled>Converter arquivo</button><button class="btn ghost" id="convertResetBtn" type="button">Limpar</button></div><div id="convertProgress" class="notice" style="display:none">⏳ Convertendo...</div><div id="convertStatus" class="notice">Nenhum arquivo selecionado.</div></section><section id="convertResult"><div class="result-box"><div class="result-label">Resultado</div><div class="result-main">—</div><p>O arquivo convertido aparecerá aqui.</p></div></section></div>`;}
 function toolUI(id){
-  switch(id){
-    case "conversor-unidades": {
-      const cat=document.getElementById("unitCategory")?.value,g=UNIT_GROUPS[cat],x=val("unitValue"),from=document.getElementById("unitFrom")?.value,to=document.getElementById("unitTo")?.value;
-      let r=0;
-      if(cat==="temperatura") r=from==="c"&&to==="f"?x*9/5+32:from==="f"&&to==="c"?(x-32)*5/9:x;
-      else {const fm=g.units.find(u=>u[0]===from)?.[2]||1,tm=g.units.find(u=>u[0]===to)?.[2]||1;r=x*fm/tm;}
-      const toLabel=g.units.find(u=>u[0]===to)?.[1]||to;
-      main=num(r);label=toLabel;row("Categoria",g.label);row("Valor",num(x));break;
-    }
-    case "datas-e-horarios": {
-      const mode=document.getElementById("dateMode")?.value;
-      if(mode==="intervalo"){const a=new Date(document.getElementById("dtStart").value+"T00:00:00"),b=new Date(document.getElementById("dtEnd").value+"T00:00:00"),days=Math.round((b-a)/86400000);main=`${Math.abs(days)} dias`;label=days>=0?"Intervalo entre datas":"Intervalo (datas invertidas)";}
-      else if(mode==="futura"){const d=new Date(document.getElementById("dtDate").value+"T00:00:00");d.setDate(d.getDate()+val("dtDays"));main=d.toLocaleDateString("pt-BR",{weekday:"long",day:"2-digit",month:"2-digit",year:"numeric"});label="Nova data";}
-      else if(mode==="semana"){const d=new Date(document.getElementById("dtDate").value+"T00:00:00");main=d.toLocaleDateString("pt-BR",{weekday:"long"});label=d.toLocaleDateString("pt-BR");}
-      else {const [sh,sm]=document.getElementById("dtStartTime").value.split(":").map(Number),[eh,em]=document.getElementById("dtEndTime").value.split(":").map(Number);let mins=eh*60+em-sh*60-sm;if(mins<0)mins+=1440;main=formatMinutes(mins);label="Tempo decorrido";}
-      break;
-    }
-    case 'conversor-unidades': return universalUnitsUI();
-    case 'datas-e-horarios': return datasHorariosUI();
+  switch(id){    case 'jpg-png-webp': return universalFileConverterUI(id);
+    case 'heic-jpg': return universalFileConverterUI(id);
+    case 'imagem-pdf': return universalFileConverterUI(id);
+    case 'pdf-imagens-zip': return universalFileConverterUI(id);
+    case 'mp4-mp3': return universalFileConverterUI(id);
+    case 'mp4-gif': return universalFileConverterUI(id);
+    case 'csv-xlsx': return universalFileConverterUI(id);
+    case 'zip-arquivos': return universalFileConverterUI(id);
+    case 'mov-mp4': return universalFileConverterUI(id);
+    case 'jpg-heic': return universalFileConverterUI(id);
+    case 'imagem-comprimir': return universalFileConverterUI(id);
+    case 'docx-pdf': return universalFileConverterUI(id);
+    case 'pdf-docx': return universalFileConverterUI(id);
+    case 'pdf-txt': return universalFileConverterUI(id);
+    case 'txt-pdf': return universalFileConverterUI(id);
+    case 'pdf-xlsx': return universalFileConverterUI(id);
+    case 'xlsx-csv': return universalFileConverterUI(id);
+    case 'audio-mp3-wav': return universalFileConverterUI(id);
+    case 'audio-ogg': return universalFileConverterUI(id);
+    case 'video-webm': return universalFileConverterUI(id);
+    case 'video-avi': return universalFileConverterUI(id);
+    case 'video-audio': return universalFileConverterUI(id);
+    case 'svg-png': return universalFileConverterUI(id);
+    case 'png-ico': return universalFileConverterUI(id);
+    case 'imagem-redimensionar': return universalFileConverterUI(id);
+    case 'pdf-comprimir': return universalFileConverterUI(id);
+    case 'arquivos-zip': return universalFileConverterUI(id);
+    case 'jpg-png-webp': case 'heic-jpg': case 'imagem-pdf': case 'pdf-imagens-zip': case 'mp4-mp3': case 'mp4-gif': case 'csv-xlsx': case 'zip-arquivos': case 'mov-mp4': case 'jpg-heic': case 'imagem-comprimir': return universalFileConverterUI(id);
     case 'conversor-arquivos': return converterArquivosUI();
     case 'porcentagem': return panel(input('p1','Porcentagem',{value:'15'})+input('p2','Valor',{value:'200',prefix:'R$'}),); 
     case 'regra-de-3': return panel(input('a','A','',{value:'2'})+input('b','B','',{value:'10'})+input('c','C','',{value:'5'}));
@@ -748,26 +790,63 @@ function toolUI(id){
     case 'dividir-conta': return panel(input('bill','Valor da conta',{prefix:'R$',value:'200'})+input('people','Número de pessoas',{value:'4',step:'1',min:1})+input('service','Serviço/gorjeta',{suffix:'%',value:'10'}));
     case 'gorjeta': return panel(input('bill','Valor da conta',{prefix:'R$',value:'150'})+input('tip','Gorjeta',{suffix:'%',value:'10'}));
     case 'financiamento': return panel(input('pv','Valor financiado',{prefix:'R$',value:'50000'})+input('rate','Juros ao mês',{suffix:'%',value:'1'})+input('n','Número de parcelas',{value:'48',step:'1',min:1}));
+    case 'emprestimo': return panel(input('pv','Valor do empréstimo',{prefix:'R$',value:'10000'})+input('rate','Juros ao mês',{suffix:'%',value:'2'})+input('n','Parcelas',{value:'24',step:'1',min:1}));
     case 'meta-poupanca': return panel(input('target','Meta',{prefix:'R$',value:'10000'})+input('current','Já tenho',{prefix:'R$',value:'1000'})+input('months','Prazo em meses',{value:'24',step:'1',min:1})+input('rate','Rendimento mensal estimado',{suffix:'%',value:'0.6'}));
     case 'poder-compra': return panel(input('value','Valor de hoje',{prefix:'R$',value:'1000'})+input('inflation','Inflação acumulada',{suffix:'%',value:'30'}));
     case 'combustivel-viagem': return panel(input('distance','Distância da viagem',{suffix:'km',value:'800'})+input('consumption','Consumo do veículo',{suffix:'km/L',value:'10'})+input('fuel','Preço do combustível',{prefix:'R$',value:'6.20'})+input('tolls','Pedágios',{prefix:'R$',value:'0'}));
+    case 'custo-km': return panel(input('fuel','Preço do combustível',{prefix:'R$',value:'6.20'})+input('consumption','Consumo',{suffix:'km/L',value:'10'})+input('maintenance','Outros custos por km',{prefix:'R$',value:'0.10'}));
+    case 'gasolina-etanol': return panel(input('gas','Preço da gasolina',{prefix:'R$',value:'6.20'})+input('eth','Preço do etanol',{prefix:'R$',value:'4.20'})+input('gas_eff','Consumo na gasolina',{suffix:'km/L',value:'12'})+input('eth_eff','Consumo no etanol',{suffix:'km/L',value:'8'}));
+    case 'consumo-carro': return panel(input('distance','Distância percorrida',{suffix:'km',value:'420'})+input('liters','Litros abastecidos',{suffix:'L',value:'38'})+input('fuel','Preço por litro',{prefix:'R$',value:'6.20'}));
+    case 'tempo-viagem': return panel(input('distance','Distância',{suffix:'km',value:'800'})+input('speed','Velocidade média',{suffix:'km/h',value:'100'}));
+    case 'custo-viagem': return panel(input('distance','Distância total',{suffix:'km',value:'800'})+input('consumption','Consumo',{suffix:'km/L',value:'10'})+input('fuel','Preço do combustível',{prefix:'R$',value:'6.20'})+input('tolls','Pedágios',{prefix:'R$',value:'120'})+input('other','Outros custos',{prefix:'R$',value:'50'}));
     case 'tinta': return panel(input('length','Comprimento das paredes',{suffix:'m',value:'20'})+input('height','Altura média',{suffix:'m',value:'2.8'})+input('openings','Portas e janelas',{suffix:'m²',value:'8'})+input('coats','Número de demãos',{value:'2',step:'1'})+input('yield','Rendimento da tinta',{suffix:'m²/L por demão',value:'10'}));
     case 'piso': return panel(input('roomL','Comprimento do ambiente',{suffix:'m',value:'4.20'})+input('roomW','Largura do ambiente',{suffix:'m',value:'3.80'})+input('tileL','Comprimento da peça',{suffix:'cm',value:'60'})+input('tileW','Largura da peça',{suffix:'cm',value:'60'})+input('waste','Perda',{suffix:'%',value:'10'}));
+    case 'rejunte': return panel(input('area','Área de revestimento',{suffix:'m²',value:'20'})+input('tileL','Comprimento da peça',{suffix:'cm',value:'60'})+input('tileW','Largura da peça',{suffix:'cm',value:'60'})+input('joint','Largura da junta',{suffix:'mm',value:'2'})+input('depth','Profundidade da junta',{suffix:'mm',value:'8'}));
+    case 'argamassa': return panel(input('area','Área a revestir',{suffix:'m²',value:'20'})+input('consumption','Consumo',{suffix:'kg/m²',value:'5'}));
     case 'concreto': return panel(input('length','Comprimento',{suffix:'m',value:'5'})+input('width','Largura',{suffix:'m',value:'3'})+input('height','Espessura/altura',{suffix:'m',value:'0.10'}));
+    case 'blocos': return panel(input('wallL','Comprimento da parede',{suffix:'m',value:'10'})+input('wallH','Altura da parede',{suffix:'m',value:'2.8'})+input('blockL','Comprimento do bloco',{suffix:'cm',value:'39'})+input('blockH','Altura do bloco',{suffix:'cm',value:'19'})+input('waste','Perda',{suffix:'%',value:'10'}));
+    case 'telhas': return panel(input('area','Área da cobertura',{suffix:'m²',value:'100'})+input('coverage','Rendimento',{suffix:'telhas/m²',value:'12'})+input('waste','Perda',{suffix:'%',value:'10'}));
+    case 'escada': return panel(input('floor','Altura piso a piso',{suffix:'m',value:'2.80',help:'Digite somente o desnível entre o piso acabado inferior e o piso acabado superior.'}));
     case 'iluminacao': return panel(input('area','Área do ambiente',{suffix:'m²',value:'20'})+input('lux','Nível de iluminância',{suffix:'lux',value:'150'})+input('util','Fator de utilização',{suffix:'%',value:'70'})+input('maint','Fator de manutenção',{suffix:'%',value:'80'}));
     case 'ar-condicionado': return panel(input('area','Área do ambiente',{suffix:'m²',value:'20'})+input('people','Pessoas',{value:'2',step:'1'})+input('electronics','Eletrônicos relevantes',{value:'1',step:'1'})+input('sun','Exposição solar',{help:'0 = baixa; 1 = média; 2 = alta',value:'1',step:'1',min:0}));
+    case 'caixa-dagua': return panel(input('people','Número de pessoas',{value:'4',step:'1',min:1})+input('perperson','Reserva por pessoa',{suffix:'L',value:'200'})+input('days','Dias de reserva',{value:'1',step:'1',min:1}));
+    case 'piscina': return panel(input('length','Comprimento',{suffix:'m',value:'5'})+input('width','Largura',{suffix:'m',value:'3'})+input('depth','Profundidade média',{suffix:'m',value:'1.3'}));
+    case 'cobertura': return panel(input('span','Vão horizontal considerado',{suffix:'m',value:'5'})+input('slope','Inclinação',{suffix:'%',value:'30'}));
     case 'placas-solares': return solarCalculatorUI();
+    case 'posicao-solar': return solarCalculatorUI();
+    case 'gerenciamento-risco': return riskEvolutionUI();
+    case 'laboratorio-estatistico': return statisticalRiskUI();
     case 'gerador-de-senhas': return window.resolveiPasswordGeneratorUI ? window.resolveiPasswordGeneratorUI() : '<div class="empty">Carregando gerador de senhas…</div>';
+    case 'area-retangulo': return panel(input('length','Comprimento',{suffix:'m',value:'5'})+input('width','Largura',{suffix:'m',value:'4'}));
+    case 'area-triangulo': return panel(input('base','Base',{suffix:'m',value:'5'})+input('height','Altura',{suffix:'m',value:'3'}));
+    case 'area-circulo': return panel(input('radius','Raio',{suffix:'m',value:'2'}));
+    case 'volume-caixa': return panel(input('length','Comprimento',{suffix:'m',value:'2'})+input('width','Largura',{suffix:'m',value:'1'})+input('height','Altura',{suffix:'m',value:'0.5'}));
+    case 'temperatura': return panel(input('temp','Temperatura',{suffix:'°',value:'30'})+select('direction','Converter de',[['c2f','°C para °F'],['f2c','°F para °C']],'c2f'));
+    case 'comprimento': return panel(input('value','Valor',{value:'1'})+select('from','De',[['mm','milímetro'],['cm','centímetro'],['m','metro'],['km','quilômetro'],['in','polegada'],['ft','pé'],['yd','jarda'],['mi','milha']],'m')+select('to','Para',[['mm','milímetro'],['cm','centímetro'],['m','metro'],['km','quilômetro'],['in','polegada'],['ft','pé'],['yd','jarda'],['mi','milha']],'cm'));
+    case 'peso': return panel(input('value','Valor',{value:'1'})+select('from','De',[['mg','mg'],['g','g'],['kg','kg'],['t','tonelada'],['oz','oz'],['lb','lb']],'kg')+select('to','Para',[['mg','mg'],['g','g'],['kg','kg'],['t','tonelada'],['oz','oz'],['lb','lb']],'g'));
+    case 'volume': return panel(input('value','Valor',{value:'1'})+select('from','De',[['ml','ml'],['l','L'],['m3','m³'],['gal','galão US'],['cup','xícara US']],'l')+select('to','Para',[['ml','ml'],['l','L'],['m3','m³'],['gal','galão US'],['cup','xícara US']],'ml'));
+    case 'area': return panel(input('value','Valor',{value:'1'})+select('from','De',[['m2','m²'],['km2','km²'],['ha','hectare'],['acre','acre'],['ft2','ft²']],'m2')+select('to','Para',[['m2','m²'],['km2','km²'],['ha','hectare'],['acre','acre'],['ft2','ft²']],'ha'));
+    case 'velocidade': return panel(input('value','Valor',{value:'100'})+select('from','De',[['kmh','km/h'],['mph','mph'],['ms','m/s']],'kmh')+select('to','Para',[['kmh','km/h'],['mph','mph'],['ms','m/s']],'ms'));
+    case 'dados': return panel(input('value','Valor',{value:'1'})+select('from','De',[['KB','KB'],['MB','MB'],['GB','GB'],['TB','TB']],'GB')+select('to','Para',[['KB','KB'],['MB','MB'],['GB','GB'],['TB','TB']],'MB'));
+    case 'energia': return panel(input('value','Valor',{value:'1'})+select('from','De',[['w','W'],['kw','kW'],['cv','cv']],'kw')+select('to','Para',[['w','W'],['kw','kW'],['cv','cv']],'cv'));
     case 'idade': return panel(input('birth','Data de nascimento',{type:'date',value:'1990-01-01',help:'Resultado aproximado em anos, meses e dias.'}));
+    case 'dias-entre-datas': return panel(input('start','Data inicial',{type:'date',value:new Date().toISOString().slice(0,10)})+input('end','Data final',{type:'date',value:new Date(Date.now()+30*86400000).toISOString().slice(0,10)}));
+    case 'data-futura': return panel(input('date','Data de referência',{type:'date',value:new Date().toISOString().slice(0,10)})+input('days','Adicionar dias',{value:'30',step:'1'}));
+    case 'dia-semana': return panel(input('date','Data',{type:'date',value:new Date().toISOString().slice(0,10)}));
+    case 'horas': return panel(input('start','Horário inicial',{type:'time',value:'08:00'})+input('end','Horário final',{type:'time',value:'17:30'}));
     case 'somar-horas': return panel(input('h1','Período 1 (horas)',{value:'8',step:'0.25'})+input('h2','Período 2 (horas)',{value:'1.5',step:'0.25'})+input('h3','Período 3 (horas)',{value:'0',step:'0.25'}));
     case 'rescisao-clt': return rescisaoUI();
     case 'clt-vs-pj': return cltVsPJUI();
     case 'receita': return panel(input('from','Porções originais',{value:'4',step:'1'})+input('to','Porções desejadas',{value:'10',step:'1'})+input('ingredient','Quantidade do ingrediente',{value:'500'})+select('unit','Unidade',[['g','g'],['ml','ml'],['un','unidades'],['xicaras','xícaras'],['colheres','colheres']],'g'));
+    case 'temperatura-cozinha': return panel(input('temp','Temperatura',{value:'180'})+select('direction','Converter de',[['c2f','°C para °F'],['f2c','°F para °C']],'c2f'));
     case 'custo-receita': return receitaCustoUI();
     case 'por-quanto-vender': return porQuantoVenderUI();
     case 'churrasco': return churrascoUI();
     case 'festa': return festaUI();
+    case 'bolo': return panel(input('guests','Convidados',{value:'30',step:'1'})+select('event','Tipo',[['normal','Festa comum'],['principal','Bolo como sobremesa principal']],'normal'));
+    case 'gelo': return panel(input('people','Pessoas',{value:'30',step:'1'})+input('hours','Duração',{suffix:'h',value:'4'}));
     case 'lista-compras': return listaComprasUI();
+    case 'dividir-pessoas': return panel(input('amount','Valor total',{prefix:'R$',value:'100'})+input('people','Pessoas',{value:'3',step:'1',min:1}));
     default: return `<div class="empty">Ferramenta não encontrada.</div>`;
   }
 }
@@ -849,7 +928,7 @@ function saveState(){ localStorage.setItem('resolvei_favs',JSON.stringify(getFav
 function getFavs(){try{return JSON.parse(localStorage.getItem('resolvei_favs')||'[]')}catch{return[]}}
 function isFav(id){return getFavs().includes(id)}
 function toggleFav(id){const f=getFavs();const i=f.indexOf(id);if(i>=0)f.splice(i,1);else f.push(id);localStorage.setItem('resolvei_favs',JSON.stringify(f));updateFavCount();render();}
-function updateFavCount(){const el=document.getElementById('favCount');if(el)el.textContent=getFavs().filter(id=>tools.some(t=>t.id===id)).length}
+function updateFavCount(){const el=document.getElementById('favCount');if(el)el.textContent=getFavs().length}
 
 function card(t){return `<article class="card tool-card"><button class="fav ${isFav(t.id)?'active':''}" data-fav="${t.id}" aria-label="Favoritar">${isFav(t.id)?'★':'☆'}</button><a href="#/ferramenta/${t.id}"><div class="tool-icon">${t.icon}</div><h3>${t.title}</h3><p>${t.desc}</p></a></article>`}
 function categoryCard([id,c]){const count=tools.filter(t=>t.cat===id).length;return `<a class="card category-card" href="#/categoria/${id}"><div class="tool-icon">${c.icon}</div><h3>${c.name}</h3><p>${c.desc}</p><span class="chip">${count} ferramentas</span></a>`}
@@ -865,50 +944,16 @@ function toolsPage(list=tools,title='Todas as ferramentas',sub='Escolha uma ferr
 }
 function categoriesPage(){return `<div class="section-head"><div><h1 style="margin:0;letter-spacing:-.04em">Categorias</h1><p>Explore o Resolvei por assunto.</p></div></div><div class="category-grid">${Object.entries(CATS).map(categoryCard).join('')}</div>`}
 function toolPage(id){
-  const specialized={ "visao-opcoes":"<div id=\"visaoOpcoesToolHost\"></div>", "analista-bin":"<div id=\"analistaBinToolHost\"></div>" };
-  const redirects={
-    "guru-dos-sinais-iqoption":null,
-    "laboratorio-estatistico":null,
-    "gerenciamento-risco":"#/ferramenta/financiamento",
-    "emprestimo":"#/ferramenta/financiamento",
-    "posicao-solar":"#/ferramenta/placas-solares",
-    "custo-km":"#/ferramenta/combustivel-viagem",
-    "gasolina-etanol":"#/ferramenta/combustivel-viagem",
-    "consumo-carro":"#/ferramenta/combustivel-viagem",
-    "tempo-viagem":"#/ferramenta/combustivel-viagem",
-    "custo-viagem":"#/ferramenta/combustivel-viagem",
-    "bolo":"#/ferramenta/festa",
-    "gelo":"#/ferramenta/festa",
-    "temperatura-cozinha":"#/ferramenta/receita",
-    "dividir-pessoas":"#/ferramenta/dividir-conta",
-    "area-retangulo":"#/ferramenta/conversor-unidades",
-    "area-triangulo":"#/ferramenta/conversor-unidades",
-    "area-circulo":"#/ferramenta/conversor-unidades",
-    "volume-caixa":"#/ferramenta/conversor-unidades",
-    "temperatura":"#/ferramenta/conversor-unidades",
-    "comprimento":"#/ferramenta/conversor-unidades",
-    "peso":"#/ferramenta/conversor-unidades",
-    "volume":"#/ferramenta/conversor-unidades",
-    "area":"#/ferramenta/conversor-unidades",
-    "velocidade":"#/ferramenta/conversor-unidades",
-    "dados":"#/ferramenta/conversor-unidades",
-    "energia":"#/ferramenta/conversor-unidades",
-    "dias-entre-datas":"#/ferramenta/datas-e-horarios",
-    "data-futura":"#/ferramenta/datas-e-horarios",
-    "dia-semana":"#/ferramenta/datas-e-horarios",
-    "horas":"#/ferramenta/datas-e-horarios"
-  };
-  if(specialized[id]) return specialized[id];
-  if(Object.prototype.hasOwnProperty.call(redirects,id)){
-    if(redirects[id]) return `<div class="tool-page"><div class="card panel"><span class="eyebrow">FERRAMENTA CONSOLIDADA</span><h1>Essa função agora está em uma ferramenta única.</h1><p>Para evitar duplicação no Resolvei, esta função foi incorporada a uma ferramenta mais completa.</p><div class="actions"><a class="btn primary" href="${redirects[id]}">Abrir ferramenta</a><a class="btn" href="#/ferramentas">Ver ferramentas</a></div></div></div>`;
-    return `<div class="tool-page"><div class="card panel"><span class="eyebrow">DESCONTINUADA</span><h1>Esta ferramenta foi retirada do Resolvei.</h1><p>O catálogo principal foi enxugado para priorizar ferramentas realmente úteis no dia a dia.</p><div class="actions"><a class="btn primary" href="#/ferramentas">Voltar às ferramentas</a></div></div></div>`;
-  }
   const t=tools.find(x=>x.id===id);if(!t)return `<div class="empty"><strong>Ferramenta não encontrada</strong><a class="btn" href="#/ferramentas">Voltar às ferramentas</a></div>`;
+  if(id==='guru-dos-sinais-iqoption') return '<div id="guruIqToolHost"></div>';
+  if(id==='visao-opcoes') return '<div id="visaoOpcoesToolHost"></div>';
+  if(id==='analista-bin') return '<div id="analistaBinToolHost"></div>';
+  if(id==='lista-compras') return `<div class="tool-page"><div class="breadcrumb"><a href="#/">Início</a> / <a href="#/categoria/outros">Outras utilidades</a> / ${esc(t.title)}</div><div class="tool-top"><div class="tool-icon">${t.icon}</div><div><h1>${esc(t.title)}</h1><p>${esc(t.desc)}</p></div></div>${toolUI(id)}</div>`;
   return `<div class="tool-page"><div class="breadcrumb"><a href="#/">Início</a> / <a href="#/categoria/${t.cat}">${CATS[t.cat].name}</a> / ${esc(t.title)}</div><div class="tool-top"><div class="tool-icon">${t.icon}</div><div><h1>${esc(t.title)}</h1><p>${esc(t.desc)}</p></div><button class="fav ${isFav(id)?'active':''}" data-fav="${id}" aria-label="Favoritar">${isFav(id)?'★':'☆'}</button></div>${toolUI(id)}<div class="notice"><strong>Sobre esta ferramenta:</strong> o Resolvei apresenta estimativas matemáticas para facilitar decisões cotidianas. Para obras, finanças, instalações ou situações que exijam responsabilidade técnica, use profissionais habilitados.</div><div class="section-head"><div><h2>Ferramentas relacionadas</h2></div></div><div class="grid">${tools.filter(x=>x.cat===t.cat&&x.id!==id).slice(0,4).map(card).join('')}</div></div>`;
 }
 function aboutPage(){return `<div class="tool-page"><div class="section-head"><div><h1>Sobre o Resolvei</h1><p>Um portal de microferramentas para tornar tarefas cotidianas mais rápidas.</p></div></div><section class="card panel"><h2>O conceito</h2><p>O Resolvei foi pensado como um "canivete digital": você entra, encontra uma ferramenta simples e sai com uma resposta clara. A prioridade é velocidade, legibilidade e utilidade.</p><h2>Como os resultados funcionam</h2><p>As ferramentas usam fórmulas e conversões explícitas no navegador. Os resultados são apresentados como estimativas quando fatores reais podem alterar o valor.</p><h2>Privacidade por padrão</h2><p>Favoritos e tema são armazenados localmente no navegador. A Lista de Compras colaborativa é armazenada no Firestore e vinculada às contas participantes para permitir compartilhamento e sincronização em tempo real.</p></section></div>`}
 function privacyPage(){return `<div class="tool-page"><div class="section-head"><div><h1>Privacidade</h1><p>Política inicial do site.</p></div></div><section class="card panel"><p>O Resolvei foi estruturado para funcionar sem cadastro. Dados locais, como favoritos e tema, ficam no armazenamento do navegador. As listas de compras compartilhadas são armazenadas no Firestore para permitir colaboração entre contas autenticadas. Caso sejam adicionados analytics, publicidade ou recursos externos no futuro, esta página deverá ser atualizada para descrever esses serviços e suas opções de privacidade.</p></section></div>`}
-function favoritesPage(){const fav=getFavs().filter(id=>tools.some(t=>t.id===id)); return `<div class="section-head"><div><h1>Favoritos</h1><p>Suas ferramentas salvas neste navegador.</p></div></div>${list.length?`<div class="grid">${list.map(card).join('')}</div>`:`<div class="card empty"><strong>Nenhum favorito ainda.</strong>Clique na estrela de uma ferramenta para adicioná-la aqui.</div>`}`}
+function favoritesPage(){const fav=getFavs(), list=tools.filter(t=>fav.includes(t.id)); return `<div class="section-head"><div><h1>Favoritos</h1><p>Suas ferramentas salvas neste navegador.</p></div></div>${list.length?`<div class="grid">${list.map(card).join('')}</div>`:`<div class="card empty"><strong>Nenhum favorito ainda.</strong>Clique na estrela de uma ferramenta para adicioná-la aqui.</div>`}`}
 function render(){
   const hash=location.hash||'';
   let route=location.pathname.replace(/^\/+|\/+$/g,'');
@@ -981,8 +1026,7 @@ function bind(){
   const ls=document.getElementById('listSearch'); if(ls){const q=new URLSearchParams((location.search||'').replace(/^\?/,'') || location.hash.split('?')[1] || '').get('q')||'';ls.value=q; const grid=document.getElementById('toolGrid'); if(q)grid.innerHTML=smartSearch(q).replace(/^<div class="notice">/, '<div class="notice">'); ls.addEventListener('input',()=>{const r=smartSearch(ls.value);grid.innerHTML=r;document.querySelectorAll('[data-fav]').forEach(b=>b.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();toggleFav(b.dataset.fav)}));});}
   const calc=document.getElementById('calcBtn'); const rid=location.pathname.match(/ferramenta\/([^/]+)/)?.[1] || location.hash.match(/ferramenta\/([^?]+)/)?.[1]; if(calc&&rid)calc.addEventListener('click',()=>calculate(rid));
   if(rid==='conversor-arquivos')bindFileConverter();
-  if(rid==='conversor-unidades')bindUnitConverter();
-  if(rid==='datas-e-horarios')bindDatasHorarios();
+  if(['jpg-png-webp','heic-jpg','imagem-pdf','pdf-imagens-zip','mp4-mp3','mp4-gif','csv-xlsx','zip-arquivos','mov-mp4','jpg-heic','imagem-comprimir'].includes(rid))bindUniversalFileConverter(rid);
   if(rid==='por-quanto-vender'){
     const btn=document.getElementById('sellCalcBtn'), reset=document.getElementById('sellResetBtn');
     if(btn)btn.addEventListener('click',()=>{
@@ -1046,7 +1090,9 @@ function bind(){
   }
   if(rid==='custo-receita'){const box=document.getElementById('recipeItems');if(box&&!box.children.length){addRecipeItemRow({name:'',qty:1,unit:'g',price:0});addRecipeItemRow({name:'',qty:1,unit:'g',price:0});addRecipeItemRow({name:'',qty:1,unit:'g',price:0});} const ar=document.getElementById('addRecipeItem');if(ar)ar.addEventListener('click',()=>addRecipeItemRow()); const ai=document.getElementById('analyzeRecipeBtn');if(ai)ai.addEventListener('click',analyzeRecipeAI);}
   if(rid==='churrasco'){/* sugestões são renderizadas junto da ferramenta */}
-  if(rid==='placas-solares'){bindSolarCalculatorInteractions();}
+  if(['placas-solares','posicao-solar'].includes(rid)){bindSolarCalculatorInteractions();}
+  if(rid==='gerenciamento-risco'){bindRiskEvolutionTool();}
+  if(rid==='laboratorio-estatistico'){bindStatisticalRiskTool();}
   if(rid==='gerador-de-senhas'){window.resolveiBindPasswordGenerator?.();}
   if(rid==='festa'){const type=document.getElementById('partyType');if(type)type.addEventListener('change',()=>{const a=document.getElementById('age'); if(a)a.closest('.field').style.display=type.value.startsWith('aniversario-')?'':'none';}); if(type&&!type.value.startsWith('aniversario-')){const a=document.getElementById('age');if(a)a.closest('.field').style.display='none';} const ai=document.getElementById('aiPartyBtn');if(ai)ai.addEventListener('click',refinePartyAI); }
   const reset=document.getElementById('resetBtn'); if(reset)reset.addEventListener('click',()=>{location.reload();});
