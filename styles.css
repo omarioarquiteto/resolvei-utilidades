@@ -852,3 +852,28 @@ button, input, select { font: inherit; }
     padding:15px;
   }
 }
+
+/* Resolvei 2026 — Conversor de arquivos unificado */
+.file-converter-layout{display:grid;grid-template-columns:1.05fr .95fr;gap:18px;align-items:start}
+.file-converter-card{padding:22px}
+.file-converter-header{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;margin-bottom:16px}
+.file-converter-header h2{margin:2px 0 4px;font-size:22px}
+.file-converter-header p{margin:0;color:var(--muted);font-size:13px}
+.file-limit{font-size:11px;color:var(--muted);white-space:nowrap;padding:7px 10px;border:1px solid var(--line);border-radius:999px;background:var(--surface-2)}
+.file-dropzone{min-height:190px;border:1.5px dashed color-mix(in srgb,var(--accent) 50%,var(--line));border-radius:18px;background:var(--accent-soft);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;cursor:pointer;text-align:center;padding:24px;transition:border-color .16s ease,transform .16s ease,background .16s ease}
+.file-dropzone:hover,.file-dropzone.is-dragging{border-color:var(--accent);transform:translateY(-1px)}
+.file-dropzone input{display:none}
+.file-drop-icon{font-size:28px;font-weight:800}
+.file-dropzone strong{font-size:16px}
+.file-dropzone small{color:var(--muted)}
+.file-list{display:grid;gap:8px;margin-top:14px}
+.file-item{display:grid;grid-template-columns:auto 1fr auto;gap:10px;align-items:center;padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:var(--surface)}
+.file-item-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px}
+.file-item small{color:var(--muted);font-size:11px}
+.file-item-icon{font-size:17px}
+.file-empty{border:1px dashed var(--line);padding:14px;border-radius:12px;color:var(--muted);font-size:13px;text-align:center}
+.file-tool-options{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:16px}
+.file-resize-field{display:none}
+.file-actions{margin-top:16px}
+@media (max-width:920px){.file-converter-layout{grid-template-columns:1fr}.file-tool-options{grid-template-columns:1fr 1fr}}
+@media (max-width:700px){.file-converter-header{flex-direction:column}.file-tool-options{grid-template-columns:1fr}.file-dropzone{min-height:155px}}
