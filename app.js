@@ -720,11 +720,25 @@ function bindDatasHorarios(){const mode=document.getElementById("dateMode");if(!
 function converterArquivosUI(){return `<div class="tool-layout"><section class="card panel"><h2>Conversor de arquivos</h2><div class="notice"><strong>Converta no Resolvei.</strong><br>Vídeos usam FFmpeg; imagens e PDFs são processados pelo servidor.</div><div class="field full"><label for="convertFile">Arquivo</label><input id="convertFile" type="file" accept=".mp4,.avi,.mov,.mkv,.webm,.jpg,.jpeg,.png,.webp,.bmp,.pdf"></div><div class="form-grid"><div class="field"><label for="convertFormat">Formato de saída</label><select id="convertFormat"><option value="">Selecione o arquivo primeiro</option></select></div><div class="field"><label>Limite</label><div class="notice" style="margin:0">Até 200 MB.</div></div></div><div class="actions"><button class="btn primary" id="convertBtn" disabled>Converter arquivo</button><button class="btn ghost" id="convertResetBtn" type="button">Limpar</button></div><div id="convertProgress" class="notice" style="display:none">⏳ Convertendo...</div><div id="convertStatus" class="notice">Nenhum arquivo selecionado.</div></section><section id="convertResult"><div class="result-box"><div class="result-label">Resultado</div><div class="result-main">—</div><p>O arquivo convertido aparecerá aqui.</p></div></section></div>`;}
 function toolUI(id){
   switch(id){
+    case "conversor-unidades": {
+      const cat=document.getElementById("unitCategory")?.value,g=UNIT_GROUPS[cat],x=val("unitValue"),from=document.getElementById("unitFrom")?.value,to=document.getElementById("unitTo")?.value;
+      let r=0;
+      if(cat==="temperatura") r=from==="c"&&to==="f"?x*9/5+32:from==="f"&&to==="c"?(x-32)*5/9:x;
+      else {const fm=g.units.find(u=>u[0]===from)?.[2]||1,tm=g.units.find(u=>u[0]===to)?.[2]||1;r=x*fm/tm;}
+      const toLabel=g.units.find(u=>u[0]===to)?.[1]||to;
+      main=num(r);label=toLabel;row("Categoria",g.label);row("Valor",num(x));break;
+    }
+    case "datas-e-horarios": {
+      const mode=document.getElementById("dateMode")?.value;
+      if(mode==="intervalo"){const a=new Date(document.getElementById("dtStart").value+"T00:00:00"),b=new Date(document.getElementById("dtEnd").value+"T00:00:00"),days=Math.round((b-a)/86400000);main=`${Math.abs(days)} dias`;label=days>=0?"Intervalo entre datas":"Intervalo (datas invertidas)";}
+      else if(mode==="futura"){const d=new Date(document.getElementById("dtDate").value+"T00:00:00");d.setDate(d.getDate()+val("dtDays"));main=d.toLocaleDateString("pt-BR",{weekday:"long",day:"2-digit",month:"2-digit",year:"numeric"});label="Nova data";}
+      else if(mode==="semana"){const d=new Date(document.getElementById("dtDate").value+"T00:00:00");main=d.toLocaleDateString("pt-BR",{weekday:"long"});label=d.toLocaleDateString("pt-BR");}
+      else {const [sh,sm]=document.getElementById("dtStartTime").value.split(":").map(Number),[eh,em]=document.getElementById("dtEndTime").value.split(":").map(Number);let mins=eh*60+em-sh*60-sm;if(mins<0)mins+=1440;main=formatMinutes(mins);label="Tempo decorrido";}
+      break;
+    }
     case 'conversor-unidades': return universalUnitsUI();
     case 'datas-e-horarios': return datasHorariosUI();
     case 'conversor-arquivos': return converterArquivosUI();
-    case "conversor-unidades": {const cat=document.getElementById("unitCategory")?.value,g=UNIT_GROUPS[cat],x=val("unitValue"),from=document.getElementById("unitFrom")?.value,to=document.getElementById("unitTo")?.value;let r=0;if(cat==="temperatura"){r=from==="c"&&to==="f"?x*9/5+32:from==="f"&&to==="c"?(x-32)*5/9:x;}else{const fm=g.units.find(u=>u[0]===from)?.[2]||1,tm=g.units.find(u=>u[0]===to)?.[2]||1;r=x*fm/tm;}const toLabel=g.units.find(u=>u[0]===to)?.[1]||to;main=num(r);label=toLabel;row("Categoria",g.label);row("Conversão",`${num(x)} ${g.units.find(u=>u[0]===from)?.[1]||from} → ${toLabel}`);break;}
-    case "datas-e-horarios": {const mode=document.getElementById("dateMode")?.value;if(mode==="intervalo"){const a=new Date(document.getElementById("dtStart").value+"T00:00:00"),b=new Date(document.getElementById("dtEnd").value+"T00:00:00"),days=Math.round((b-a)/86400000);main=`${Math.abs(days)} dias`;label=days>=0?"Intervalo entre datas":"Intervalo (datas invertidas)";}else if(mode==="futura"){const d=new Date(document.getElementById("dtDate").value+"T00:00:00");d.setDate(d.getDate()+val("dtDays"));main=d.toLocaleDateString("pt-BR",{weekday:"long",day:"2-digit",month:"2-digit",year:"numeric"});label="Nova data";}else if(mode==="semana"){const d=new Date(document.getElementById("dtDate").value+"T00:00:00");main=d.toLocaleDateString("pt-BR",{weekday:"long"});label=d.toLocaleDateString("pt-BR");}else{const [sh,sm]=document.getElementById("dtStartTime").value.split(":").map(Number),[eh,em]=document.getElementById("dtEndTime").value.split(":").map(Number);let mins=eh*60+em-sh*60-sm;if(mins<0)mins+=1440;main=formatMinutes(mins);label="Tempo decorrido";}break;}
     case 'porcentagem': return panel(input('p1','Porcentagem',{value:'15'})+input('p2','Valor',{value:'200',prefix:'R$'}),); 
     case 'regra-de-3': return panel(input('a','A','',{value:'2'})+input('b','B','',{value:'10'})+input('c','C','',{value:'5'}));
     case 'desconto': return panel(input('price','Preço original', {prefix:'R$',value:'199.90'})+input('discount','Desconto',{suffix:'%',value:'10'}));
