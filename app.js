@@ -60,6 +60,8 @@ const tools = [
   {id:'placas-solares',cat:'energia',icon:'☀️',title:'Dimensionamento de placas solares',desc:'Estime módulos, potência, inversor, materiais, custo e payback.',tags:'solar fotovoltaica painel placa inversor energia conta luz kwh economia payback financiamento'},
   {id:'posicao-solar',cat:'energia',icon:'🧭',title:'Posicionamento dos módulos — integrado ao solar',desc:'Use a etapa visual dentro do dimensionamento para marcar telhados, obstáculos, escala e posição dos módulos.',tags:'posição solar insolação telhado norte azimute orientação sombra placas fotovoltaicas imagem drone satelite módulo painel'},
   {id:'conversor-arquivos',cat:'medidas',icon:'🔄',title:'Conversor de arquivos',desc:'Converta vídeos, imagens e PDFs entre formatos comuns.',tags:'converter arquivo mp4 avi mov webm jpg png webp pdf imagem video'},
+  {id:'conversor-unidades',cat:'medidas',icon:'📐',title:'Conversor de unidades',desc:'Converta comprimento, peso, volume, área, velocidade, dados, potência e temperatura.',tags:'unidades medidas converter comprimento peso volume área temperatura velocidade dados potência'},
+  {id:'datas-e-horarios',cat:'tempo',icon:'📅',title:'Datas e horários',desc:'Calcule intervalos, datas futuras, dia da semana e duração entre horários.',tags:'datas calendario prazo dias horario horas intervalo'},
   {id:'jpg-png-webp',cat:'medidas',icon:'🖼️',title:'JPG ↔ PNG ↔ WEBP',desc:'Converta imagens entre formatos populares.',tags:'jpg jpeg png webp converter imagem formato'},
   {id:'heic-jpg',cat:'medidas',icon:'📱',title:'HEIC → JPG',desc:'Converta fotos do iPhone para JPG.',tags:'heic iphone celular foto jpg converter'},
   {id:'imagem-pdf',cat:'medidas',icon:'📄',title:'Imagem → PDF',desc:'Transforme uma ou várias imagens em PDF.',tags:'imagem pdf jpg png celular documento'},
@@ -132,7 +134,14 @@ const tools = [
   }
 }
 
-const popular = ['porcentagem','combustivel-viagem','piso','tinta','placas-solares','posicao-solar','juros-compostos','idade'];
+const ACTIVE_TOOL_IDS = new Set([
+  'porcentagem','regra-de-3','desconto','acrescimo','juros-simples','juros-compostos','dividir-conta','financiamento','meta-poupanca',
+  'gerador-de-senhas','combustivel-viagem','tinta','piso','concreto','iluminacao','ar-condicionado','placas-solares',
+  'conversor-arquivos','conversor-unidades','idade','datas-e-horarios','somar-horas','rescisao-clt','clt-vs-pj',
+  'receita','custo-receita','por-quanto-vender','churrasco','festa','lista-compras'
+]);
+for(let i=tools.length-1;i>=0;i--){if(!ACTIVE_TOOL_IDS.has(tools[i].id))tools.splice(i,1);}
+const popular = ['porcentagem','combustivel-viagem','piso','tinta','financiamento','juros-compostos','conversor-arquivos','lista-compras'];
 
 const input = (id,label,opts={}) => {
   const type = opts.type || 'number';
@@ -856,6 +865,20 @@ function calculate(id){
   let main='—',label='Resultado',rows=[],note='',extraHtml='';
   const row=(l,v)=>rows.push(`<div class="result-row"><span>${l}</span><strong>${v}</strong></div>`);
   switch(id){
+    case 'conversor-unidades': {
+      const cat=document.getElementById('unitCategory')?.value,g=UNIT_GROUPS[cat],x=val('unitValue'),from=document.getElementById('unitFrom')?.value,to=document.getElementById('unitTo')?.value;
+      let r=0;if(cat==='temperatura')r=from==='c'&&to==='f'?x*9/5+32:from==='f'&&to==='c'?(x-32)*5/9:x;else{const fm=g.units.find(u=>u[0]===from)?.[2]||1,tm=g.units.find(u=>u[0]===to)?.[2]||1;r=x*fm/tm;}
+      main=num(r);label=g.units.find(u=>u[0]===to)?.[1]||to;row('Categoria',g.label);break;
+    }
+    case 'datas-e-horarios': {
+      const mode=document.getElementById('dateMode')?.value;
+      if(mode==='intervalo'){const a=new Date(document.getElementById('dtStart').value+'T00:00:00'),b=new Date(document.getElementById('dtEnd').value+'T00:00:00'),days=Math.round((b-a)/86400000);main=String(Math.abs(days))+' dias';label=days>=0?'Intervalo entre datas':'Intervalo (datas invertidas)';}
+      else if(mode==='futura'){const d=new Date(document.getElementById('dtDate').value+'T00:00:00');d.setDate(d.getDate()+val('dtDays'));main=d.toLocaleDateString('pt-BR',{weekday:'long',day:'2-digit',month:'2-digit',year:'numeric'});label='Nova data';}
+      else if(mode==='semana'){const d=new Date(document.getElementById('dtDate').value+'T00:00:00');main=d.toLocaleDateString('pt-BR',{weekday:'long'});label=d.toLocaleDateString('pt-BR');}
+      else{const [sh,sm]=document.getElementById('dtStartTime').value.split(':').map(Number),[eh,em]=document.getElementById('dtEndTime').value.split(':').map(Number);let mins=eh*60+em-sh*60-sm;if(mins<0)mins+=1440;main=formatMinutes(mins);label='Tempo decorrido';}
+      break;
+    }
+
     case 'porcentagem': {const p=val('p1'),v=val('p2'),r=v*p/100;main=num(r);label=`${pct(p)} de ${num(v)}`;row('Valor original',num(v));row('Porcentagem',pct(p));break;}
     case 'regra-de-3': {const a=val('a'),b=val('b'),c=val('c'),r=a?b*c/a:0;main=num(r);label='Resultado proporcional';row('A',num(a));row('B',num(b));row('C',num(c));note='Fórmula usada: A/B = C/X.';break;}
     case 'desconto': {const p=val('price'),d=val('discount'),r=p*(1-d/100);main=money(r);label='Preço final';row('Desconto',money(p*d/100));row('Economia',pct(d));break;}
@@ -928,7 +951,7 @@ function saveState(){ localStorage.setItem('resolvei_favs',JSON.stringify(getFav
 function getFavs(){try{return JSON.parse(localStorage.getItem('resolvei_favs')||'[]')}catch{return[]}}
 function isFav(id){return getFavs().includes(id)}
 function toggleFav(id){const f=getFavs();const i=f.indexOf(id);if(i>=0)f.splice(i,1);else f.push(id);localStorage.setItem('resolvei_favs',JSON.stringify(f));updateFavCount();render();}
-function updateFavCount(){const el=document.getElementById('favCount');if(el)el.textContent=getFavs().length}
+function updateFavCount(){const el=document.getElementById('favCount');if(el)el.textContent=getFavs().filter(id=>tools.some(t=>t.id===id)).length}
 
 function card(t){return `<article class="card tool-card"><button class="fav ${isFav(t.id)?'active':''}" data-fav="${t.id}" aria-label="Favoritar">${isFav(t.id)?'★':'☆'}</button><a href="#/ferramenta/${t.id}"><div class="tool-icon">${t.icon}</div><h3>${t.title}</h3><p>${t.desc}</p></a></article>`}
 function categoryCard([id,c]){const count=tools.filter(t=>t.cat===id).length;return `<a class="card category-card" href="#/categoria/${id}"><div class="tool-icon">${c.icon}</div><h3>${c.name}</h3><p>${c.desc}</p><span class="chip">${count} ferramentas</span></a>`}
@@ -944,16 +967,39 @@ function toolsPage(list=tools,title='Todas as ferramentas',sub='Escolha uma ferr
 }
 function categoriesPage(){return `<div class="section-head"><div><h1 style="margin:0;letter-spacing:-.04em">Categorias</h1><p>Explore o Resolvei por assunto.</p></div></div><div class="category-grid">${Object.entries(CATS).map(categoryCard).join('')}</div>`}
 function toolPage(id){
-  const t=tools.find(x=>x.id===id);if(!t)return `<div class="empty"><strong>Ferramenta não encontrada</strong><a class="btn" href="#/ferramentas">Voltar às ferramentas</a></div>`;
-  if(id==='guru-dos-sinais-iqoption') return '<div id="guruIqToolHost"></div>';
-  if(id==='visao-opcoes') return '<div id="visaoOpcoesToolHost"></div>';
-  if(id==='analista-bin') return '<div id="analistaBinToolHost"></div>';
-  if(id==='lista-compras') return `<div class="tool-page"><div class="breadcrumb"><a href="#/">Início</a> / <a href="#/categoria/outros">Outras utilidades</a> / ${esc(t.title)}</div><div class="tool-top"><div class="tool-icon">${t.icon}</div><div><h1>${esc(t.title)}</h1><p>${esc(t.desc)}</p></div></div>${toolUI(id)}</div>`;
-  return `<div class="tool-page"><div class="breadcrumb"><a href="#/">Início</a> / <a href="#/categoria/${t.cat}">${CATS[t.cat].name}</a> / ${esc(t.title)}</div><div class="tool-top"><div class="tool-icon">${t.icon}</div><div><h1>${esc(t.title)}</h1><p>${esc(t.desc)}</p></div><button class="fav ${isFav(id)?'active':''}" data-fav="${id}" aria-label="Favoritar">${isFav(id)?'★':'☆'}</button></div>${toolUI(id)}<div class="notice"><strong>Sobre esta ferramenta:</strong> o Resolvei apresenta estimativas matemáticas para facilitar decisões cotidianas. Para obras, finanças, instalações ou situações que exijam responsabilidade técnica, use profissionais habilitados.</div><div class="section-head"><div><h2>Ferramentas relacionadas</h2></div></div><div class="grid">${tools.filter(x=>x.cat===t.cat&&x.id!==id).slice(0,4).map(card).join('')}</div></div>`;
+  if(id==='guru-dos-sinais-iqoption'||id==='laboratorio-estatistico')return '<div class="tool-page"><div class="card panel"><span class="eyebrow">DESCONTINUADA</span><h1>Esta ferramenta foi retirada do Resolvei.</h1><p>O catálogo foi enxugado para priorizar utilidades de uso cotidiano.</p><div class="actions"><a class="btn primary" href="#/ferramentas">Voltar às ferramentas</a></div></div></div>';
+  if(id==='visao-opcoes')return '<div id="visaoOpcoesToolHost"></div>';
+  if(id==='analista-bin')return '<div id="analistaBinToolHost"></div>';
+  const redirects={
+    'emprestimo':'#/ferramenta/financiamento','gorjeta':'#/ferramenta/dividir-conta','posicao-solar':'#/ferramenta/placas-solares',
+    'custo-km':'#/ferramenta/combustivel-viagem','gasolina-etanol':'#/ferramenta/combustivel-viagem','consumo-carro':'#/ferramenta/combustivel-viagem',
+    'tempo-viagem':'#/ferramenta/combustivel-viagem','custo-viagem':'#/ferramenta/combustivel-viagem','bolo':'#/ferramenta/festa','gelo':'#/ferramenta/festa',
+    'dividir-pessoas':'#/ferramenta/dividir-conta','dias-entre-datas':'#/ferramenta/datas-e-horarios','data-futura':'#/ferramenta/datas-e-horarios',
+    'dia-semana':'#/ferramenta/datas-e-horarios','horas':'#/ferramenta/datas-e-horarios','temperatura':'#/ferramenta/conversor-unidades',
+    'comprimento':'#/ferramenta/conversor-unidades','peso':'#/ferramenta/conversor-unidades','volume':'#/ferramenta/conversor-unidades',
+    'area':'#/ferramenta/conversor-unidades','velocidade':'#/ferramenta/conversor-unidades','dados':'#/ferramenta/conversor-unidades','energia':'#/ferramenta/conversor-unidades',
+    'area-retangulo':'#/ferramenta/conversor-unidades','area-triangulo':'#/ferramenta/conversor-unidades','area-circulo':'#/ferramenta/conversor-unidades','volume-caixa':'#/ferramenta/conversor-unidades',
+    'jpg-png-webp':'#/ferramenta/conversor-arquivos','heic-jpg':'#/ferramenta/conversor-arquivos','imagem-pdf':'#/ferramenta/conversor-arquivos','pdf-imagens-zip':'#/ferramenta/conversor-arquivos',
+    'mp4-mp3':'#/ferramenta/conversor-arquivos','mp4-gif':'#/ferramenta/conversor-arquivos','csv-xlsx':'#/ferramenta/conversor-arquivos','zip-arquivos':'#/ferramenta/conversor-arquivos',
+    'mov-mp4':'#/ferramenta/conversor-arquivos','jpg-heic':'#/ferramenta/conversor-arquivos','imagem-comprimir':'#/ferramenta/conversor-arquivos','docx-pdf':'#/ferramenta/conversor-arquivos',
+    'pdf-docx':'#/ferramenta/conversor-arquivos','pdf-txt':'#/ferramenta/conversor-arquivos','txt-pdf':'#/ferramenta/conversor-arquivos','pdf-xlsx':'#/ferramenta/conversor-arquivos',
+    'xlsx-csv':'#/ferramenta/conversor-arquivos','audio-mp3-wav':'#/ferramenta/conversor-arquivos','audio-ogg':'#/ferramenta/conversor-arquivos','video-webm':'#/ferramenta/conversor-arquivos',
+    'video-avi':'#/ferramenta/conversor-arquivos','video-audio':'#/ferramenta/conversor-arquivos','svg-png':'#/ferramenta/conversor-arquivos','png-ico':'#/ferramenta/conversor-arquivos',
+    'imagem-redimensionar':'#/ferramenta/conversor-arquivos','pdf-comprimir':'#/ferramenta/conversor-arquivos','arquivos-zip':'#/ferramenta/conversor-arquivos',
+    'gerenciamento-risco':null,'poder-compra':null,'rejunte':null,'argamassa':null,'blocos':null,'telhas':null,'escada':null,'caixa-dagua':null,'piscina':null,'cobertura':null,'temperatura-cozinha':null
+  };
+  if(Object.prototype.hasOwnProperty.call(redirects,id)){
+    const target=redirects[id];
+    if(target)return '<div class="tool-page"><div class="card panel"><span class="eyebrow">FERRAMENTA CONSOLIDADA</span><h1>Essa função agora está em uma ferramenta única.</h1><p>Para evitar duplicação, ela foi incorporada a uma ferramenta mais completa.</p><div class="actions"><a class="btn primary" href="'+target+'">Abrir ferramenta</a><a class="btn" href="#/ferramentas">Ver ferramentas</a></div></div></div>';
+    return '<div class="tool-page"><div class="card panel"><span class="eyebrow">DESCONTINUADA</span><h1>Esta ferramenta foi retirada do Resolvei.</h1><p>O catálogo foi enxugado para priorizar utilidades realmente recorrentes.</p><div class="actions"><a class="btn primary" href="#/ferramentas">Voltar às ferramentas</a></div></div></div>';
+  }
+  const t=tools.find(x=>x.id===id);if(!t)return '<div class="empty"><strong>Ferramenta não encontrada</strong><a class="btn" href="#/ferramentas">Voltar às ferramentas</a></div>';
+  if(id==='lista-compras')return '<div class="tool-page"><div class="breadcrumb"><a href="#/">Início</a> / <a href="#/categoria/outros">Outras utilidades</a> / '+esc(t.title)+'</div><div class="tool-top"><div class="tool-icon">'+t.icon+'</div><div><h1>'+esc(t.title)+'</h1><p>'+esc(t.desc)+'</p></div></div>'+toolUI(id)+'</div>';
+  return '<div class="tool-page"><div class="breadcrumb"><a href="#/">Início</a> / <a href="#/categoria/'+t.cat+'">'+CATS[t.cat].name+'</a> / '+esc(t.title)+'</div><div class="tool-top"><div class="tool-icon">'+t.icon+'</div><div><h1>'+esc(t.title)+'</h1><p>'+esc(t.desc)+'</p></div><button class="fav '+(isFav(id)?'active':'')+'" data-fav="'+id+'" aria-label="Favoritar">'+(isFav(id)?'★':'☆')+'</button></div>'+toolUI(id)+'<div class="notice"><strong>Sobre esta ferramenta:</strong> o Resolvei apresenta estimativas matemáticas para facilitar decisões cotidianas.</div><div class="section-head"><div><h2>Ferramentas relacionadas</h2></div></div><div class="grid">'+tools.filter(x=>x.cat===t.cat&&x.id!==id).slice(0,4).map(card).join('')+'</div></div>';
 }
 function aboutPage(){return `<div class="tool-page"><div class="section-head"><div><h1>Sobre o Resolvei</h1><p>Um portal de microferramentas para tornar tarefas cotidianas mais rápidas.</p></div></div><section class="card panel"><h2>O conceito</h2><p>O Resolvei foi pensado como um "canivete digital": você entra, encontra uma ferramenta simples e sai com uma resposta clara. A prioridade é velocidade, legibilidade e utilidade.</p><h2>Como os resultados funcionam</h2><p>As ferramentas usam fórmulas e conversões explícitas no navegador. Os resultados são apresentados como estimativas quando fatores reais podem alterar o valor.</p><h2>Privacidade por padrão</h2><p>Favoritos e tema são armazenados localmente no navegador. A Lista de Compras colaborativa é armazenada no Firestore e vinculada às contas participantes para permitir compartilhamento e sincronização em tempo real.</p></section></div>`}
 function privacyPage(){return `<div class="tool-page"><div class="section-head"><div><h1>Privacidade</h1><p>Política inicial do site.</p></div></div><section class="card panel"><p>O Resolvei foi estruturado para funcionar sem cadastro. Dados locais, como favoritos e tema, ficam no armazenamento do navegador. As listas de compras compartilhadas são armazenadas no Firestore para permitir colaboração entre contas autenticadas. Caso sejam adicionados analytics, publicidade ou recursos externos no futuro, esta página deverá ser atualizada para descrever esses serviços e suas opções de privacidade.</p></section></div>`}
-function favoritesPage(){const fav=getFavs(), list=tools.filter(t=>fav.includes(t.id)); return `<div class="section-head"><div><h1>Favoritos</h1><p>Suas ferramentas salvas neste navegador.</p></div></div>${list.length?`<div class="grid">${list.map(card).join('')}</div>`:`<div class="card empty"><strong>Nenhum favorito ainda.</strong>Clique na estrela de uma ferramenta para adicioná-la aqui.</div>`}`}
+function favoritesPage(){const fav=getFavs().filter(id=>tools.some(t=>t.id===id)),list=tools.filter(t=>fav.includes(t.id)); return `<div class="section-head"><div><h1>Favoritos</h1><p>Suas ferramentas salvas neste navegador.</p></div></div>${list.length?`<div class="grid">${list.map(card).join('')}</div>`:`<div class="card empty"><strong>Nenhum favorito ainda.</strong>Clique na estrela de uma ferramenta para adicioná-la aqui.</div>`}`}
 function render(){
   const hash=location.hash||'';
   let route=location.pathname.replace(/^\/+|\/+$/g,'');
@@ -1026,6 +1072,8 @@ function bind(){
   const ls=document.getElementById('listSearch'); if(ls){const q=new URLSearchParams((location.search||'').replace(/^\?/,'') || location.hash.split('?')[1] || '').get('q')||'';ls.value=q; const grid=document.getElementById('toolGrid'); if(q)grid.innerHTML=smartSearch(q).replace(/^<div class="notice">/, '<div class="notice">'); ls.addEventListener('input',()=>{const r=smartSearch(ls.value);grid.innerHTML=r;document.querySelectorAll('[data-fav]').forEach(b=>b.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();toggleFav(b.dataset.fav)}));});}
   const calc=document.getElementById('calcBtn'); const rid=location.pathname.match(/ferramenta\/([^/]+)/)?.[1] || location.hash.match(/ferramenta\/([^?]+)/)?.[1]; if(calc&&rid)calc.addEventListener('click',()=>calculate(rid));
   if(rid==='conversor-arquivos')bindFileConverter();
+  if(rid==='conversor-unidades')bindUnitConverter();
+  if(rid==='datas-e-horarios')bindDatasHorarios();
   if(['jpg-png-webp','heic-jpg','imagem-pdf','pdf-imagens-zip','mp4-mp3','mp4-gif','csv-xlsx','zip-arquivos','mov-mp4','jpg-heic','imagem-comprimir'].includes(rid))bindUniversalFileConverter(rid);
   if(rid==='por-quanto-vender'){
     const btn=document.getElementById('sellCalcBtn'), reset=document.getElementById('sellResetBtn');
@@ -1091,8 +1139,6 @@ function bind(){
   if(rid==='custo-receita'){const box=document.getElementById('recipeItems');if(box&&!box.children.length){addRecipeItemRow({name:'',qty:1,unit:'g',price:0});addRecipeItemRow({name:'',qty:1,unit:'g',price:0});addRecipeItemRow({name:'',qty:1,unit:'g',price:0});} const ar=document.getElementById('addRecipeItem');if(ar)ar.addEventListener('click',()=>addRecipeItemRow()); const ai=document.getElementById('analyzeRecipeBtn');if(ai)ai.addEventListener('click',analyzeRecipeAI);}
   if(rid==='churrasco'){/* sugestões são renderizadas junto da ferramenta */}
   if(['placas-solares','posicao-solar'].includes(rid)){bindSolarCalculatorInteractions();}
-  if(rid==='gerenciamento-risco'){bindRiskEvolutionTool();}
-  if(rid==='laboratorio-estatistico'){bindStatisticalRiskTool();}
   if(rid==='gerador-de-senhas'){window.resolveiBindPasswordGenerator?.();}
   if(rid==='festa'){const type=document.getElementById('partyType');if(type)type.addEventListener('change',()=>{const a=document.getElementById('age'); if(a)a.closest('.field').style.display=type.value.startsWith('aniversario-')?'':'none';}); if(type&&!type.value.startsWith('aniversario-')){const a=document.getElementById('age');if(a)a.closest('.field').style.display='none';} const ai=document.getElementById('aiPartyBtn');if(ai)ai.addEventListener('click',refinePartyAI); }
   const reset=document.getElementById('resetBtn'); if(reset)reset.addEventListener('click',()=>{location.reload();});
