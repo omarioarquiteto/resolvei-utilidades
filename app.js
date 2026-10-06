@@ -1048,7 +1048,7 @@ function toolPage(id){
     'xlsx-csv':'#/ferramenta/conversor-arquivos','audio-mp3-wav':'#/ferramenta/conversor-arquivos','audio-ogg':'#/ferramenta/conversor-arquivos','video-webm':'#/ferramenta/conversor-arquivos',
     'video-avi':'#/ferramenta/conversor-arquivos','video-audio':'#/ferramenta/conversor-arquivos','svg-png':'#/ferramenta/conversor-arquivos','png-ico':'#/ferramenta/conversor-arquivos',
     'imagem-redimensionar':'#/ferramenta/conversor-arquivos','pdf-comprimir':'#/ferramenta/conversor-arquivos','arquivos-zip':'#/ferramenta/conversor-arquivos',
-    'gerenciamento-risco':null,'poder-compra':null,'rejunte':null,'argamassa':null,'blocos':null,'telhas':null,'escada':null,'caixa-dagua':null,'piscina':null,'cobertura':null,'temperatura-cozinha':null
+    'poder-compra':null,'rejunte':null,'argamassa':null,'blocos':null,'telhas':null,'escada':null,'caixa-dagua':null,'piscina':null,'cobertura':null,'temperatura-cozinha':null
   };
   if(Object.prototype.hasOwnProperty.call(redirects,id)){
     const target=redirects[id];
@@ -1201,6 +1201,7 @@ function bind(){
   if(rid==='custo-receita'){const box=document.getElementById('recipeItems');if(box&&!box.children.length){addRecipeItemRow({name:'',qty:1,unit:'g',price:0});addRecipeItemRow({name:'',qty:1,unit:'g',price:0});addRecipeItemRow({name:'',qty:1,unit:'g',price:0});} const ar=document.getElementById('addRecipeItem');if(ar)ar.addEventListener('click',()=>addRecipeItemRow()); const ai=document.getElementById('analyzeRecipeBtn');if(ai)ai.addEventListener('click',analyzeRecipeAI);}
   if(rid==='churrasco'){/* sugestões são renderizadas junto da ferramenta */}
   if(['placas-solares','posicao-solar'].includes(rid)){bindSolarCalculatorInteractions();}
+  if(rid==='gerenciamento-risco'){bindRiskEvolutionTool();}
   if(rid==='gerador-de-senhas'){window.resolveiBindPasswordGenerator?.();}
   if(rid==='festa'){const type=document.getElementById('partyType');if(type)type.addEventListener('change',()=>{const a=document.getElementById('age'); if(a)a.closest('.field').style.display=type.value.startsWith('aniversario-')?'':'none';}); if(type&&!type.value.startsWith('aniversario-')){const a=document.getElementById('age');if(a)a.closest('.field').style.display='none';} const ai=document.getElementById('aiPartyBtn');if(ai)ai.addEventListener('click',refinePartyAI); }
   const reset=document.getElementById('resetBtn'); if(reset)reset.addEventListener('click',()=>{location.reload();});
