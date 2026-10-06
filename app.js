@@ -8,7 +8,8 @@ const CATS = {
   cozinha: { name:'Cozinha', icon:'🍳', desc:'Receitas, porções, temperaturas e conversões.' },
   festas: { name:'Festas & Eventos', icon:'🎉', desc:'Planeje quantidades para receber pessoas.' },
   trabalho: { name:'Trabalho & Rotina', icon:'💼', desc:'Horas, produtividade e pequenas contas.' },
-  outros: { name:'Outras utilidades', icon:'🧰', desc:'Ferramentas rápidas para problemas cotidianos.' }
+  outros: { name:'Outras utilidades', icon:'🧰', desc:'Ferramentas rápidas para problemas cotidianos.' },
+  investimentos: { name:'Investimentos', icon:'📊', desc:'Análise de mercado, risco e ferramentas de apoio às operações.' }
 };
 
 const fmt = new Intl.NumberFormat('pt-BR',{maximumFractionDigits:2});
@@ -32,12 +33,12 @@ const tools = [
   {id:'emprestimo',cat:'dinheiro',icon:'💳',title:'Custo de empréstimo',desc:'Estime quanto um empréstimo custa ao longo do tempo.',tags:'emprestimo crédito parcela juros'},
   {id:'meta-poupanca',cat:'dinheiro',icon:'🎯',title:'Meta de economia',desc:'Descubra quanto guardar por mês para chegar a uma meta.',tags:'guardar economizar poupar meta dinheiro'},
   {id:'poder-compra',cat:'dinheiro',icon:'🛒',title:'Poder de compra',desc:'Compare o valor nominal com uma inflação estimada.',tags:'inflação poder de compra dinheiro'},
-  {id:'gerenciamento-risco',cat:'dinheiro',icon:'🛡️',title:'Gerenciamento de risco e evolução de capital',desc:'Modele entradas progressivas por seção, exposição a perdas, evolução do patrimônio e acompanhe resultados.',tags:'gerenciamento risco gestão de banca capital patrimonio evolução capital entrada payout perdas chances seção progressão risco financeiro'},
+  {id:'gerenciamento-risco',cat:'investimentos',icon:'🛡️',title:'Gerenciamento de risco e evolução de capital',desc:'Modele entradas progressivas por seção, exposição a perdas, evolução do patrimônio e acompanhe resultados.',tags:'gerenciamento risco gestão de banca capital patrimonio evolução capital entrada payout perdas chances seção progressão risco financeiro'},
   {id:'laboratorio-estatistico',cat:'dinheiro',icon:'🧠',title:'Laboratório estatístico de opções',desc:'Valide taxa de acerto, payout, valor esperado, amostra, sizing conservador, drawdown e circuito de proteção.',tags:'opções binárias estatística probabilidade payout valor esperado EV kelly risco banca drawdown backtest laboratório'},
   {id:'gerador-de-senhas',cat:'outros',icon:'🔐',title:'Gerador de senhas',desc:'Crie senhas fortes, frases-senha e PINs usando geração criptograficamente segura no navegador.',tags:'senha senhas password gerador segurança pin frase-senha criptografia segurança online'},
   {id:'guru-dos-sinais-iqoption',cat:'dinheiro',icon:'🧙‍♂️',title:'GURÚ DOS SINAIS IQOPTION',desc:'Analista técnico automático conectado aos candles da IQ Option, incluindo mercado OTC.',tags:'guru sinais iqoption iq option OTC opções binárias call put análise técnica candles forex'},
-  {id:'visao-opcoes',cat:'dinheiro',icon:'🔭',title:'VISÃO OPÇÕES',desc:'Terminal de análise de pares com dados da IQ Option, radar de mercado e fatos relevantes da Biquote.',tags:'visão opções iqoption pares radar análise técnica candles OTC biquote fatos relevantes calendário econômico call put'},
-  {id:'analista-bin',cat:'dinheiro',icon:'📡',title:'ANALISTA BIN',desc:'Motor técnico ponderado para confluência de 30 indicadores em pares da IQ Option.',tags:'analista bin iqoption opções binárias call put tendência rompimento reversão indicadores score confluência'},
+  {id:'visao-opcoes',cat:'investimentos',icon:'🔭',title:'VISÃO OPÇÕES',desc:'Terminal de análise de pares com dados da IQ Option, radar de mercado e fatos relevantes da Biquote.',tags:'visão opções iqoption pares radar análise técnica candles OTC biquote fatos relevantes calendário econômico call put'},
+  {id:'analista-bin',cat:'investimentos',icon:'📡',title:'ANALISTA BIN',desc:'Motor técnico ponderado para confluência de 30 indicadores em pares da IQ Option.',tags:'analista bin iqoption opções binárias call put tendência rompimento reversão indicadores score confluência'},
   {id:'combustivel-viagem',cat:'carro',icon:'⛽',title:'Combustível da viagem',desc:'Estime litros necessários e custo da viagem.',tags:'gasolina etanol combustível viagem litros km'},
   {id:'custo-km',cat:'carro',icon:'🛣️',title:'Custo por km',desc:'Descubra quanto seu carro custa a cada quilômetro.',tags:'custo km carro combustível consumo'},
   {id:'gasolina-etanol',cat:'carro',icon:'⚖️',title:'Gasolina × etanol',desc:'Compare preços pela eficiência energética do combustível.',tags:'gasolina etanol álcool abastecer'},
@@ -138,7 +139,8 @@ const ACTIVE_TOOL_IDS = new Set([
   'porcentagem','regra-de-3','desconto','acrescimo','juros-simples','juros-compostos','dividir-conta','financiamento','meta-poupanca',
   'gerador-de-senhas','combustivel-viagem','tinta','piso','concreto','iluminacao','ar-condicionado','placas-solares',
   'conversor-arquivos','conversor-unidades','idade','datas-e-horarios','somar-horas','rescisao-clt','clt-vs-pj',
-  'receita','custo-receita','por-quanto-vender','churrasco','festa','lista-compras'
+  'receita','custo-receita','por-quanto-vender','churrasco','festa','lista-compras',
+  'gerenciamento-risco','visao-opcoes','analista-bin'
 ]);
 for(let i=tools.length-1;i>=0;i--){if(!ACTIVE_TOOL_IDS.has(tools[i].id))tools.splice(i,1);}
 const popular = ['porcentagem','combustivel-viagem','piso','tinta','financiamento','juros-compostos','conversor-arquivos','lista-compras'];
