@@ -1,0 +1,55 @@
+/* Resolvei — Comparador de Financiamentos */
+.financing-tool{--fin-border:#e7eaf0;--fin-muted:#687386;--fin-bg:#f7f8fb;display:flex;flex-direction:column;gap:18px}
+.financing-hero{display:flex;justify-content:space-between;gap:20px;align-items:flex-start}
+.financing-hero h2{margin:0 0 6px;font-size:26px;letter-spacing:-.03em}
+.financing-hero p{margin:0;color:var(--fin-muted);max-width:760px}
+.financing-tabs{display:flex;gap:8px;background:var(--fin-bg);padding:5px;border-radius:14px}
+.financing-tabs button{border:0;background:transparent;padding:10px 16px;border-radius:10px;font:inherit;font-weight:700;cursor:pointer;color:#526071}
+.financing-tabs button.active{background:#fff;box-shadow:0 2px 8px rgba(16,24,40,.08);color:#111827}
+.financing-grid{display:grid;grid-template-columns:minmax(330px,430px) minmax(0,1fr);gap:18px}
+.financing-card{border:1px solid var(--fin-border);border-radius:18px;background:#fff;padding:18px}
+.financing-card h3{margin:0 0 14px;font-size:17px}
+.financing-form{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.financing-form .full{grid-column:1/-1}
+.financing-form label{display:block;font-size:12px;font-weight:700;color:#4a5668;margin:0 0 6px}
+.financing-form input,.financing-form select{width:100%;box-sizing:border-box;border:1px solid #d9dee7;background:#fff;color:#111827;border-radius:10px;padding:11px 12px;font:inherit}
+.financing-form input:focus,.financing-form select:focus{outline:2px solid rgba(17,24,39,.10);border-color:#9aa4b2}
+.financing-help{font-size:11px;color:var(--fin-muted);margin-top:5px;line-height:1.4}
+.financing-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+.financing-btn{border:0;border-radius:11px;padding:11px 15px;font:inherit;font-weight:800;cursor:pointer}
+.financing-btn.primary{background:#111827;color:#fff}
+.financing-btn.secondary{background:#eef1f5;color:#111827}
+.financing-btn:disabled{opacity:.55;cursor:not-allowed}
+.financing-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.financing-kpi{border:1px solid var(--fin-border);border-radius:14px;padding:13px;background:#fff}
+.financing-kpi span{display:block;font-size:11px;color:var(--fin-muted);margin-bottom:4px}
+.financing-kpi strong{font-size:18px;letter-spacing:-.02em}
+.financing-note{font-size:12px;line-height:1.5;border:1px solid #e3e7ee;background:#f8fafc;padding:12px 14px;border-radius:12px;color:#526071}
+.financing-note strong{color:#111827}
+.financing-results{display:flex;flex-direction:column;gap:12px}
+.financing-table-wrap{overflow:auto;border:1px solid var(--fin-border);border-radius:14px;background:#fff}
+.financing-table{width:100%;border-collapse:collapse;min-width:760px}
+.financing-table th,.financing-table td{padding:11px 12px;border-bottom:1px solid #edf0f4;text-align:right;font-size:12px;white-space:nowrap}
+.financing-table th:first-child,.financing-table td:first-child{text-align:left}
+.financing-table th{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:#657083;background:#fafbfc}
+.financing-table tbody tr:last-child td{border-bottom:0}
+.financing-table tbody tr.best{background:#f5f8ff}
+.financing-badge{display:inline-flex;align-items:center;gap:5px;padding:4px 7px;border-radius:999px;background:#eef2f7;font-size:10px;font-weight:800;color:#495569}
+.financing-badge.good{background:#eaf7ef;color:#18713b}
+.financing-bank-name{font-weight:800}
+.financing-sub{display:block;margin-top:2px;color:#8490a1;font-size:10px}
+.financing-rule-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+.financing-rule{border:1px solid var(--fin-border);border-radius:14px;padding:13px;background:#fff}
+.financing-rule strong{display:block;margin-bottom:5px}
+.financing-rule p{margin:0;font-size:11px;color:#657083;line-height:1.45}
+.financing-rule a{display:inline-block;margin-top:8px;font-size:11px;color:#334155;text-decoration:underline}
+.financing-schedule{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.financing-schedule-box{border:1px solid var(--fin-border);border-radius:14px;padding:14px;background:#fff}
+.financing-schedule-box h4{margin:0 0 8px;font-size:13px}
+.financing-mini-table{width:100%;border-collapse:collapse}
+.financing-mini-table td{padding:7px 0;border-bottom:1px solid #eef1f4;font-size:11px}
+.financing-mini-table td:last-child{text-align:right;font-weight:700}
+.financing-mini-table tr:last-child td{border-bottom:0}
+.financing-status{font-size:12px;color:#5f6d7f;min-height:18px}
+@media(max-width:900px){.financing-grid{grid-template-columns:1fr}.financing-kpis{grid-template-columns:1fr 1fr}.financing-rule-grid{grid-template-columns:1fr}}
+@media(max-width:600px){.financing-hero{flex-direction:column}.financing-form{grid-template-columns:1fr}.financing-form .full{grid-column:auto}.financing-tabs{width:100%}.financing-tabs button{flex:1}.financing-kpis{grid-template-columns:1fr 1fr}.financing-schedule{grid-template-columns:1fr}}
