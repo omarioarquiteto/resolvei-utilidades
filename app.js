@@ -1032,6 +1032,7 @@ function toolPage(id){
   if(id==='guru-dos-sinais-iqoption'||id==='laboratorio-estatistico')return '<div class="tool-page"><div class="card panel"><span class="eyebrow">DESCONTINUADA</span><h1>Esta ferramenta foi retirada do Resolvei.</h1><p>O catálogo foi enxugado para priorizar utilidades de uso cotidiano.</p><div class="actions"><a class="btn primary" href="#/ferramentas">Voltar às ferramentas</a></div></div></div>';
   if(id==='visao-opcoes')return '<div id="visaoOpcoesToolHost"></div>';
   if(id==='analista-bin')return '<div id="analistaBinToolHost"></div>';
+  if(id==='financiamento')return '<div class="tool-page"><div class="breadcrumb"><a href="#/">Início</a> / <a href="#/categoria/dinheiro">Dinheiro</a> / Financiamento</div><div id="financiamentoToolHost"></div></div>';
   const redirects={
     'emprestimo':'#/ferramenta/financiamento','gorjeta':'#/ferramenta/dividir-conta','posicao-solar':'#/ferramenta/placas-solares',
     'custo-km':'#/ferramenta/combustivel-viagem','gasolina-etanol':'#/ferramenta/combustivel-viagem','consumo-carro':'#/ferramenta/combustivel-viagem',
@@ -1132,6 +1133,11 @@ function bind(){
   const gs=document.getElementById('globalSearch'); if(gs){gs.addEventListener('keydown',e=>{if(e.key==='Enter'){const q=gs.value.trim(); if(q){location.hash='#/ferramentas?q='+encodeURIComponent(q)}}});}
   document.querySelectorAll('[data-search]').forEach(b=>b.addEventListener('click',()=>{location.hash='#/ferramentas?q='+encodeURIComponent(b.dataset.search)}));
   const ls=document.getElementById('listSearch'); if(ls){const q=new URLSearchParams((location.search||'').replace(/^\?/,'') || location.hash.split('?')[1] || '').get('q')||'';ls.value=q; const grid=document.getElementById('toolGrid'); if(q)grid.innerHTML=smartSearch(q).replace(/^<div class="notice">/, '<div class="notice">'); ls.addEventListener('input',()=>{const r=smartSearch(ls.value);grid.innerHTML=r;document.querySelectorAll('[data-fav]').forEach(b=>b.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();toggleFav(b.dataset.fav)}));});}
+  if(rid==='financiamento'){
+    const startFin=()=>window.resolveiFinanciamentoInit&&window.resolveiFinanciamentoInit();
+    if(window.resolveiFinanciamentoInit)startFin();
+    else {const s=document.createElement('script');s.src='/ferramenta/financiamento/financiamento.js?v=20261006';s.onload=startFin;document.head.appendChild(s);}
+  }
   const calc=document.getElementById('calcBtn'); const rid=location.pathname.match(/ferramenta\/([^/]+)/)?.[1] || location.hash.match(/ferramenta\/([^?]+)/)?.[1]; if(calc&&rid)calc.addEventListener('click',()=>calculate(rid));
   if(rid==='conversor-arquivos')bindFileConverter();
   if(rid==='conversor-unidades')bindUnitConverter();
