@@ -1409,7 +1409,8 @@ async def convert_plus(files: list[UploadFile] = File(...), output_format: str =
             else:
                 raise ValueError("Conversor não reconhecido.")
 
-            mime={"jpg":"image/jpeg","jpeg":"image/jpeg","png":"image/png","webp":"image/webp","heic":"image/heic","pdf":"application/pdf","zip":"application/zip","xlsx":"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet","csv":"text/csv","mp3":"audio/mpeg","wav":"audio/wav","ogg":"audio/ogg","gif":"image/gif","mp4":"video/mp4","webm":"video/webm","avi":"video/x-msvideo","docx":"application/vnd.openxmlformats-officedocument.wordprocessingml.document","txt":"text/plain","dxf":"application/dxf","dwg":"application/acad"}.get(output_format,"application/octet-stream")
+            mime_key=Path(out.name).suffix.lower().lstrip(".") or output_format
+            mime={"jpg":"image/jpeg","jpeg":"image/jpeg","png":"image/png","webp":"image/webp","heic":"image/heic","pdf":"application/pdf","zip":"application/zip","xlsx":"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet","csv":"text/csv","mp3":"audio/mpeg","wav":"audio/wav","ogg":"audio/ogg","gif":"image/gif","mp4":"video/mp4","webm":"video/webm","avi":"video/x-msvideo","docx":"application/vnd.openxmlformats-officedocument.wordprocessingml.document","txt":"text/plain","dxf":"application/dxf","dwg":"application/acad"}.get(mime_key,"application/octet-stream")
             return Response(content=out.read_bytes(),media_type=mime,headers={"Content-Disposition":f'attachment; filename="{out.name}"'})
         except HTTPException:
             raise
