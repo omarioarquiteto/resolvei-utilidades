@@ -412,9 +412,15 @@ def _parse_ai_json(raw: str) -> dict[str, Any]:
     return data
 
 
+def _token(value: Any) -> str:
+    import unicodedata
+    text = unicodedata.normalize("NFKD", str(value or "")).upper()
+    return "".join(ch for ch in text if not unicodedata.combining(ch))
+
+
 def _sanitize_analysis(data: dict[str, Any], expiry: int) -> dict[str, Any]:
-    decision = str(data.get("decision", "SEM OPERACAO")).upper().replace("Ç", "C")
-    status = str(data.get("status", "AGUARDAR")).upper().replace("Ó", "O")
+    decision = _token(data.get("decision", "SEM OPERACAO"))
+    status = _token(data.get("status", "AGUARDAR"))
 
     if decision not in {"CALL", "PUT", "SEM OPERACAO"}:
         decision = "SEM OPERACAO"
