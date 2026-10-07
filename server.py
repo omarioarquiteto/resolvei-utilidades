@@ -1053,6 +1053,23 @@ async def convert_plus(files: list[UploadFile] = File(...), output_format: str =
                 if not output_format:
                     raise ValueError("Escolha um formato de saída.")
 
+                # Várias imagens -> PDF único
+                if len(paths) > 1:
+                    raster_image_exts = image_exts - {"svg"}
+                    if output_format != "pdf" or not all(p.suffix.lower().lstrip(".") in raster_image_exts for p in paths):
+                        raise ValueError("Para vários arquivos, selecione apenas imagens JPG, PNG, WEBP, BMP, TIFF, GIF ou HEIC e use PDF como saída.")
+                    from pillow_heif import register_heif_opener
+                    register_heif_opener()
+                    from PIL import Image, ImageOps
+                    images = [ImageOps.exif_transpose(Image.open(p)).convert("RGB") for p in paths]
+                    out = Path(td) / "resolvei-imagens.pdf"
+                    images[0].save(out, "PDF", save_all=True, append_images=images[1:], resolution=150.0)
+                    return Response(
+                        content=out.read_bytes(),
+                        media_type="application/pdf",
+                        headers={"Content-Disposition": 'attachment; filename="resolvei-imagens.pdf"'}
+                    )
+
                 # Imagem -> imagem / PDF
                 if ext in image_exts:
                     try:
@@ -1140,22 +1157,6 @@ async def convert_plus(files: list[UploadFile] = File(...), output_format: str =
                             "jpg":"image/jpeg","png":"image/png","webp":"image/webp","pdf":"application/pdf"
                         }.get(output_format, "application/octet-stream"),
                         headers={"Content-Disposition": f'attachment; filename="{out.name}"'}
-                    )
-
-                # Vários arquivos de imagem -> PDF único
-                if len(paths) > 1:
-                    if output_format != "pdf" or not all(p.suffix.lower().lstrip(".") in image_exts for p in paths):
-                        raise ValueError("Para vários arquivos, selecione imagens e use PDF como formato de saída.")
-                    from pillow_heif import register_heif_opener
-                    register_heif_opener()
-                    from PIL import Image, ImageOps
-                    images = [ImageOps.exif_transpose(Image.open(p)).convert("RGB") for p in paths]
-                    out = Path(td) / "resolvei-imagens.pdf"
-                    images[0].save(out, "PDF", save_all=True, append_images=images[1:], resolution=150.0)
-                    return Response(
-                        content=out.read_bytes(),
-                        media_type="application/pdf",
-                        headers={"Content-Disposition": 'attachment; filename="resolvei-imagens.pdf"'}
                     )
 
                 # PDF -> imagens / documentos
