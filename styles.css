@@ -854,6 +854,26 @@ button, input, select { font: inherit; }
 }
 
 /* Resolvei 2026 — Conversor de arquivos unificado */
+/* Conversor universal — fluxo em 3 etapas */
+.converter-step{margin-top:18px;padding-top:18px;border-top:1px solid var(--line)}
+.converter-step-head{display:flex;align-items:center;gap:11px;margin-bottom:12px}
+.converter-step-head>div{display:flex;flex-direction:column;gap:2px}
+.converter-step-head strong{font-size:14px}
+.converter-step-head small{color:var(--muted);font-size:12px}
+.converter-step-index{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;background:var(--accent);color:var(--surface);font-weight:800;font-size:13px;flex:0 0 28px}
+.converter-kind-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.converter-kind-card{min-height:132px;padding:14px;border:1px solid var(--line);border-radius:16px;background:var(--surface-2);color:var(--text);cursor:pointer;display:flex;flex-direction:column;align-items:flex-start;text-align:left;gap:6px;transition:border-color .16s ease,transform .16s ease,background .16s ease,box-shadow .16s ease}
+.converter-kind-card:hover{border-color:var(--accent);transform:translateY(-1px)}
+.converter-kind-card.active{border-color:var(--accent);background:var(--accent-soft);box-shadow:0 0 0 2px color-mix(in srgb,var(--accent) 15%,transparent)}
+.converter-kind-card>span{font-size:26px}
+.converter-kind-card strong{font-size:14px}
+.converter-kind-card small{color:var(--muted);font-size:11px;line-height:1.4}
+.converter-output-grid{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(180px,1fr);gap:12px}
+.converter-extra-options{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}
+.file-converter-card .field select,.file-converter-card .field input{min-height:44px}
+@media(max-width:860px){.converter-kind-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:700px){.converter-kind-grid{grid-template-columns:1fr}.converter-output-grid,.converter-extra-options{grid-template-columns:1fr}.converter-kind-card{min-height:auto}.converter-step-head{align-items:flex-start}}
+
 .file-converter-layout{display:grid;grid-template-columns:1.05fr .95fr;gap:18px;align-items:start}
 .file-converter-card{padding:22px}
 .file-converter-header{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;margin-bottom:16px}
