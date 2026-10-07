@@ -569,22 +569,20 @@ async def _assets(client: Any) -> list[dict[str, Any]]:
     ]
 
 
-async def _call_gemini(
+def _ai_market_payload(
     symbol: str,
     timeframe: str,
     expiry: int,
     frames: dict[str, list[dict[str, float]]],
     facts: dict[str, Any],
-) -> tuple[str, str]:
-    from server import GEMINI_API_KEY, GEMINI_MODEL, _provider_call
-
-    if not GEMINI_API_KEY:
-        raise HTTPException(
-            status_code=503,
-            detail="O Gemini do Resolvei não está configurado no servidor (GEMINI_API_KEY).",
-        )
-
-    market = {
+) -> dict[str, Any]:
+    # Mantém o contexto suficiente para a leitura, mas reduz tokens para
+    # funcionar melhor nos planos gratuitos da Groq/OpenRouter.
+    candle_limits = {
+        tf: 60 if tf == timeframe else 35
+        for tf in frames
+    }
+    return {
         "asset": symbol,
         "is_otc": symbol.endswith("-OTC"),
         "requested_timeframe": timeframe,
@@ -592,10 +590,7 @@ async def _call_gemini(
         "timeframes": {
             tf: {
                 "summary": _summarize(rows, tf),
-                "candles": _compact_candles(
-                    rows,
-                    110 if tf == timeframe else 80,
-                ),
+                "candles": _compact_candles(rows, candle_limits.get(tf, 35)),
             }
             for tf, rows in frames.items()
         },
@@ -615,16 +610,116 @@ async def _call_gemini(
         ],
     }
 
-    message = (
+
+def _ai_message(
+    symbol: str,
+    timeframe: str,
+    expiry: int,
+    frames: dict[str, list[dict[str, float]]],
+    facts: dict[str, Any],
+) -> str:
+    market = _ai_market_payload(symbol, timeframe, expiry, frames, facts)
+    return (
         CONSULTOR_PROMPT
-        + "\\n\\nDADOS DO MERCADO ATUAL:\\n"
-        + json.dumps(
-            market,
-            ensure_ascii=False,
-            separators=(",", ":"),
-        )
+        + "\n\nDADOS DO MERCADO ATUAL:\n"
+        + json.dumps(market, ensure_ascii=False, separators=(",", ":"))
     )
 
+
+def _extract_chat_content(payload: dict[str, Any], provider: str) -> str:
+    choices = payload.get("choices")
+    if not isinstance(choices, list) or not choices:
+        raise RuntimeError(f"{provider}: resposta sem choices.")
+    message = choices[0].get("message") or {}
+    content = message.get("content")
+    if isinstance(content, str) and content.strip():
+        return content
+    if isinstance(content, list):
+        parts = []
+        for item in content:
+            if isinstance(item, dict) and isinstance(item.get("text"), str):
+                parts.append(item["text"])
+        text = "".join(parts).strip()
+        if text:
+            return text
+    raise RuntimeError(f"{provider}: resposta sem conteúdo utilizável.")
+
+
+def _call_openai_compatible(
+    provider: str,
+    api_url: str,
+    api_key: str,
+    model: str,
+    message: str,
+) -> str:
+    import requests
+
+    if not api_key:
+        raise RuntimeError(f"{provider}: chave não configurada.")
+
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+    if provider == "OpenRouter":
+        headers["HTTP-Referer"] = "https://resolvei-utilidades.onrender.com"
+        headers["X-Title"] = "Resolvei Consultor Sênior"
+
+    payload = {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": "Retorne somente o JSON exigido pelo usuário. Não use markdown."},
+            {"role": "user", "content": message},
+        ],
+        "temperature": 0.1,
+        "max_tokens": 1800,
+        "response_format": {"type": "json_object"},
+    }
+
+    if provider == "Groq" and model.startswith("openai/gpt-oss"):
+        payload["reasoning_effort"] = "medium"
+
+    response = requests.post(
+        api_url,
+        headers=headers,
+        json=payload,
+        timeout=22,
+    )
+
+    try:
+        data = response.json()
+    except Exception:
+        data = {}
+
+    if response.status_code >= 400:
+        detail = ""
+        if isinstance(data, dict):
+            error = data.get("error")
+            if isinstance(error, dict):
+                detail = str(error.get("message") or "")
+            elif error:
+                detail = str(error)
+        raise RuntimeError(
+            f"{provider}: HTTP {response.status_code}"
+            + (f" — {detail[:220]}" if detail else "")
+        )
+
+    return _extract_chat_content(data, provider)
+
+
+async def _call_gemini(
+    symbol: str,
+    timeframe: str,
+    expiry: int,
+    frames: dict[str, list[dict[str, float]]],
+    facts: dict[str, Any],
+) -> tuple[str, str]:
+    from server import GEMINI_API_KEY, GEMINI_MODEL, _provider_call
+
+    if not GEMINI_API_KEY:
+        raise RuntimeError("Gemini: chave não configurada.")
+
+    message = _ai_message(symbol, timeframe, expiry, frames, facts)
     raw = await asyncio.to_thread(
         _provider_call,
         "gemini",
@@ -632,8 +727,63 @@ async def _call_gemini(
         GEMINI_MODEL,
         message,
     )
-
     return raw, GEMINI_MODEL
+
+
+async def _call_ai_with_fallback(
+    symbol: str,
+    timeframe: str,
+    expiry: int,
+    frames: dict[str, list[dict[str, float]]],
+    facts: dict[str, Any],
+) -> tuple[str, str, str]:
+    import os
+
+    message = _ai_message(symbol, timeframe, expiry, frames, facts)
+    attempts: list[str] = []
+
+    groq_key = os.getenv("GROQ_API_KEY", "").strip()
+    groq_model = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b").strip() or "openai/gpt-oss-120b"
+    if groq_key:
+        try:
+            raw = await asyncio.to_thread(
+                _call_openai_compatible,
+                "Groq",
+                "https://api.groq.com/openai/v1/chat/completions",
+                groq_key,
+                groq_model,
+                message,
+            )
+            return raw, "Groq", groq_model
+        except Exception as exc:
+            attempts.append(str(exc)[:260])
+
+    openrouter_key = os.getenv("OPENROUTER_API_KEY", "").strip()
+    openrouter_model = os.getenv("OPENROUTER_MODEL", "openrouter/free").strip() or "openrouter/free"
+    if openrouter_key:
+        try:
+            raw = await asyncio.to_thread(
+                _call_openai_compatible,
+                "OpenRouter",
+                "https://openrouter.ai/api/v1/chat/completions",
+                openrouter_key,
+                openrouter_model,
+                message,
+            )
+            return raw, "OpenRouter", openrouter_model
+        except Exception as exc:
+            attempts.append(str(exc)[:260])
+
+    try:
+        raw, model = await _call_gemini(symbol, timeframe, expiry, frames, facts)
+        return raw, "Gemini", model
+    except Exception as exc:
+        attempts.append(str(exc)[:260])
+
+    detail = "Nenhum provedor de IA conseguiu concluir a análise."
+    if attempts:
+        detail += " | " + " | ".join(attempts[:3])
+    raise HTTPException(status_code=503, detail=detail)
 
 
 @router.post("/consult")
@@ -670,7 +820,7 @@ async def consult(
     }
 
     facts = await _facts(symbol)
-    raw_ai, model = await _call_gemini(
+    raw_ai, provider, model = await _call_ai_with_fallback(
         symbol,
         req.timeframe,
         req.expiry_minutes,
@@ -692,8 +842,10 @@ async def consult(
             "%Y-%m-%dT%H:%M:%SZ",
             time.gmtime(),
         ),
-        "gemini_model": model,
-        "source": "IQ Option candles + Gemini + Biquote (quando disponível)",
+        "gemini_model": model if provider == "Gemini" else "",
+        "ai_provider": provider,
+        "ai_model": model,
+        "source": f"IQ Option candles + {provider} + Biquote (quando disponível)",
         "automation": {
             "enabled": False,
             "orders": False,
