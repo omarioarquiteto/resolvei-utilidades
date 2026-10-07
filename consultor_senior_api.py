@@ -461,3 +461,261 @@ def _sanitize_analysis(data: dict[str, Any], expiry: int) -> dict[str, Any]:
         "facts_warning": text_value("facts_warning", 800),
         "data_quality": text_value("data_quality", 30),
     }
+
+
+async def _fetch_candles(client: Any, symbol: str, timeframe: str) -> list[dict[str, float]]:
+    interval = INTERVALS[timeframe]
+    try:
+        raw = await asyncio.wait_for(
+            client.get_candles(
+                symbol,
+                interval,
+                COUNTS[timeframe],
+                int(time.time()),
+            ),
+            timeout=12,
+        )
+    except asyncio.TimeoutError as exc:
+        raise HTTPException(
+            status_code=504,
+            detail=f"A IQ Option demorou para responder os candles de {symbol} ({timeframe}).",
+        ) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Falha ao obter candles de {symbol} ({timeframe}) na IQ Option: {str(exc)[:180]}",
+        ) from exc
+
+    rows = _normalize_rows(raw)
+    now = time.time()
+    closed = [
+        row for row in rows
+        if row["time"] + interval <= now + 0.5
+    ]
+
+    if len(closed) < MIN_CLOSED[timeframe] and len(rows) > 1:
+        closed = rows[:-1]
+
+    if len(closed) < MIN_CLOSED[timeframe]:
+        raise HTTPException(
+            status_code=502,
+            detail=(
+                f"Candles fechados insuficientes para {symbol} em {timeframe}: "
+                f"{len(closed)} disponíveis, {MIN_CLOSED[timeframe]} necessários."
+            ),
+        )
+
+    return closed
+
+
+async def _facts(symbol: str) -> dict[str, Any]:
+    try:
+        return await asyncio.wait_for(
+            asyncio.to_thread(
+                biquote_service.get_facts,
+                hours=24,
+                importance="all",
+                symbol=symbol,
+            ),
+            timeout=6,
+        )
+    except Exception as exc:
+        return {
+            "available": False,
+            "events": [],
+            "warning": str(exc)[:180],
+        }
+
+
+def _filter_events(symbol: str, facts: dict[str, Any]) -> list[dict[str, Any]]:
+    events = facts.get("events", []) if isinstance(facts, dict) else []
+    base = symbol.replace("-OTC", "").replace("/", "")
+    currencies = {base[:3], base[3:]} if len(base) == 6 else set()
+    selected = []
+
+    for event in events:
+        currency = str(event.get("currency", "")).upper()
+        if not currencies or not currency or currency in currencies:
+            selected.append(event)
+
+    return selected[:20]
+
+
+async def _assets(client: Any) -> list[dict[str, Any]]:
+    try:
+        opcode = await asyncio.wait_for(
+            asyncio.to_thread(client.get_all_ACTIVES_OPCODE),
+            timeout=6,
+        )
+    except Exception:
+        return []
+
+    if not isinstance(opcode, dict):
+        return []
+
+    return [
+        {
+            "symbol": str(symbol).strip(),
+            "activeId": active_id,
+        }
+        for symbol, active_id in sorted(opcode.items(), key=lambda x: str(x[0]))
+        if str(symbol).strip()
+    ]
+
+
+async def _call_gemini(
+    symbol: str,
+    timeframe: str,
+    expiry: int,
+    frames: dict[str, list[dict[str, float]]],
+    facts: dict[str, Any],
+) -> tuple[str, str]:
+    from server import GEMINI_API_KEY, GEMINI_MODEL, _provider_call
+
+    if not GEMINI_API_KEY:
+        raise HTTPException(
+            status_code=503,
+            detail="O Gemini do Resolvei não está configurado no servidor (GEMINI_API_KEY).",
+        )
+
+    market = {
+        "asset": symbol,
+        "is_otc": symbol.endswith("-OTC"),
+        "requested_timeframe": timeframe,
+        "expiry_minutes": expiry,
+        "timeframes": {
+            tf: {
+                "summary": _summarize(rows, tf),
+                "candles": _compact_candles(
+                    rows,
+                    110 if tf == timeframe else 80,
+                ),
+            }
+            for tf, rows in frames.items()
+        },
+        "facts": {
+            "source": "Biquote",
+            "available": bool(facts.get("available", False)),
+            "warning": facts.get("warning"),
+            "events": _filter_events(symbol, facts),
+        },
+        "rules": [
+            "Não invente fatos, volume, preço, candle ou indicador.",
+            "Use os dados fornecidos como base factual.",
+            "Conflito entre timeframes reduz a confiança.",
+            "Sem gatilho confirmado, não force entrada AGORA.",
+            "Se a localização do preço for ruim, prefira AGUARDAR.",
+            "A resposta final deve ser JSON válido sem markdown.",
+        ],
+    }
+
+    message = (
+        CONSULTOR_PROMPT
+        + "\\n\\nDADOS DO MERCADO ATUAL:\\n"
+        + json.dumps(
+            market,
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
+    )
+
+    raw = await asyncio.to_thread(
+        _provider_call,
+        "gemini",
+        GEMINI_API_KEY,
+        GEMINI_MODEL,
+        message,
+    )
+
+    return raw, GEMINI_MODEL
+
+
+@router.post("/consult")
+async def consult(
+    req: ConsultRequest,
+    x_iq_session: str | None = Header(default=None),
+) -> dict[str, Any]:
+    item = get_session(x_iq_session)
+    symbol = _clean_symbol(req.symbol)
+
+    if req.timeframe not in INTERVALS:
+        raise HTTPException(
+            status_code=400,
+            detail="Timeframe inválido. Use 1m, 5m ou 15m.",
+        )
+
+    if req.expiry_minutes not in {1, 5, 15}:
+        raise HTTPException(
+            status_code=400,
+            detail="Expiração inválida. Use 1, 5 ou 15 minutos.",
+        )
+
+    started = time.perf_counter()
+    client = item["client"]
+
+    frame_results = await asyncio.gather(*(
+        _fetch_candles(client, symbol, timeframe)
+        for timeframe in INTERVALS
+    ))
+
+    frames = {
+        timeframe: rows
+        for timeframe, rows in zip(INTERVALS.keys(), frame_results)
+    }
+
+    facts = await _facts(symbol)
+    raw_ai, model = await _call_gemini(
+        symbol,
+        req.timeframe,
+        req.expiry_minutes,
+        frames,
+        facts,
+    )
+
+    analysis = _sanitize_analysis(
+        _parse_ai_json(raw_ai),
+        req.expiry_minutes,
+    )
+
+    analysis.update({
+        "asset": symbol,
+        "timeframe": req.timeframe,
+        "is_otc": symbol.endswith("-OTC"),
+        "current_price": frames[req.timeframe][-1]["close"],
+        "timestamp": time.strftime(
+            "%Y-%m-%dT%H:%M:%SZ",
+            time.gmtime(),
+        ),
+        "gemini_model": model,
+        "source": "IQ Option candles + Gemini + Biquote (quando disponível)",
+        "automation": {
+            "enabled": False,
+            "orders": False,
+            "execution": False,
+        },
+        "diagnostics": {
+            "serverDurationMs": round(
+                (time.perf_counter() - started) * 1000
+            ),
+            "candles": {
+                timeframe: len(rows)
+                for timeframe, rows in frames.items()
+            },
+            "factsAvailable": bool(facts.get("available", False)),
+        },
+    })
+
+    return {"ok": True, "analysis": analysis}
+
+
+@router.get("/assets")
+async def assets(
+    x_iq_session: str | None = Header(default=None),
+) -> dict[str, Any]:
+    item = get_session(x_iq_session)
+    values = await _assets(item["client"])
+    return {
+        "ok": True,
+        "assets": values,
+        "total": len(values),
+    }
