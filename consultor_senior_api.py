@@ -564,25 +564,32 @@ def _filter_events(symbol: str, facts: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 async def _assets(client: Any) -> list[dict[str, Any]]:
+    # O catálogo é estático na iqoptionapi e não depende de uma chamada
+    # adicional ao websocket. Isso evita catálogo vazio quando a IQ Option
+    # está conectada mas get_all_ACTIVES_OPCODE não responde.
     try:
-        opcode = await asyncio.wait_for(
-            asyncio.to_thread(client.get_all_ACTIVES_OPCODE),
-            timeout=6,
-        )
+        import iqoptionapi.constants as iq_constants
+        active_map = dict(iq_constants.ACTIVES)
     except Exception:
         return []
 
-    if not isinstance(opcode, dict):
-        return []
+    values: list[dict[str, Any]] = []
+    for symbol, active_id in active_map.items():
+        name = str(symbol or "").strip().upper()
+        is_otc = name.endswith("-OTC")
+        base = name[:-4] if is_otc else name
 
-    return [
-        {
-            "symbol": str(symbol).strip(),
-            "activeId": active_id,
-        }
-        for symbol, active_id in sorted(opcode.items(), key=lambda x: str(x[0]))
-        if str(symbol).strip()
-    ]
+        if not (len(base) == 6 and base.isalpha()):
+            continue
+
+        values.append({
+            "symbol": name,
+            "activeId": int(active_id),
+            "market": "OTC" if is_otc else "normal",
+        })
+
+    values.sort(key=lambda item: str(item["symbol"]))
+    return values
 
 
 def _ai_market_payload(
