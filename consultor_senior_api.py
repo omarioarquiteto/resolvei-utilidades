@@ -597,27 +597,44 @@ def _ai_market_payload(
     frames: dict[str, list[dict[str, float]]],
     facts: dict[str, Any],
 ) -> dict[str, Any]:
-    # Mantém o contexto suficiente para a leitura, mas reduz tokens para
-    # funcionar melhor nos planos gratuitos da Groq/OpenRouter.
-    candle_limits = {
-        # O motor local calcula os indicadores usando todos os candles.
-        # Para a IA, enviamos apenas uma janela compacta para manter
-        # a requisição confortável nos limites gratuitos.
-        tf: 22 if tf in {"1m", "5m"} else 15
-        for tf in frames
-    }
+    # Payload compacto: a análise local já calcula os indicadores; a IA
+    # recebe apenas os sinais relevantes e poucas velas recentes para
+    # preservar o limite de TPM dos provedores gratuitos.
+    candle_limits = {"1m": 6, "5m": 5, "15m": 4}
+
+    def compact_summary(rows: list[dict[str, float]], timeframe: str) -> dict[str, Any]:
+        full = _summarize(rows, timeframe)
+        return {
+            "timeframe": timeframe,
+            "candles_available": full["candles"],
+            "price": full["current_price"],
+            "trend": full["trend"],
+            "structure": full["structure"],
+            "ema": full["ema"],
+            "support": full["support"],
+            "resistance": full["resistance"],
+            "momentum": full["momentum"],
+            "volatility": full["volatility"],
+            "stochastic": full["stochastic"],
+            "adx": full["adx"],
+            "obv_direction": full["obv_direction"],
+            "last_candle": full["last_candle"],
+            "recent_high": full["recent_high"],
+            "recent_low": full["recent_low"],
+        }
+
     return {
         "asset": symbol,
         "is_otc": symbol.endswith("-OTC"),
         "selection": {
             "timeframe_options": ["1m", "5m", "15m"],
             "expiry_options_minutes": [1, 5, 15],
-            "instruction": "Escolha livremente o melhor timeframe de entrada e a melhor expiração com base na estrutura, gatilho, volatilidade e qualidade do setup."
+            "instruction": "Escolha o timeframe e a expiração que melhor combinam precisão, confirmação, velocidade e volatilidade.",
         },
         "timeframes": {
             tf: {
-                "summary": _summarize(rows, tf),
-                "candles": _compact_candles(rows, candle_limits.get(tf, 35)),
+                "summary": compact_summary(rows, tf),
+                "recent_candles": _compact_candles(rows, candle_limits.get(tf, 4)),
             }
             for tf, rows in frames.items()
         },
@@ -627,21 +644,7 @@ def _ai_market_payload(
             "warning": facts.get("warning"),
             "events": _filter_events(symbol, facts),
         },
-        "rules": [
-            "Não invente fatos, volume, preço, candle ou indicador.",
-            "Use os dados fornecidos como base factual.",
-            "Você DEVE escolher timeframe e expiração na resposta final.",
-            "15m serve principalmente para contexto, 5m para estrutura/regiões e 1m para gatilho.",
-            "Escolha o timeframe que produzir o gatilho mais limpo e consistente; não escolha por preferência fixa.",
-            "Escolha a expiração que melhor corresponda ao tempo esperado de confirmação do movimento, usando somente 1, 5 ou 15 minutos.",
-            "Conflito entre timeframes reduz a confiança.",
-            "Sem gatilho confirmado, use decision=SEM OPERACAO e status=AGUARDAR internamente; a aplicação continuará o monitoramento.",
-            "Só use status=AGORA quando existir ponto de entrada objetivo e ainda executável.",
-            "A resposta final deve ser JSON válido sem markdown.",
-        ],
     }
-
-
 def _ai_message(
     symbol: str,
     frames: dict[str, list[dict[str, float]]],
@@ -703,7 +706,7 @@ def _call_openai_compatible(
         "temperature": 0.1,
         # O Consultor devolve JSON compacto; 1200 tokens são suficientes e
         # reduzem o consumo de TPM nos planos gratuitos.
-        "max_completion_tokens": 1200,
+        "max_completion_tokens": 700,
     }
 
     # Groq suporta JSON mode neste endpoint. No OpenRouter/free alguns
@@ -808,15 +811,20 @@ async def _call_ai_with_fallback(
         except Exception as exc:
             attempts.append(str(exc)[:260])
 
-    try:
-        raw, model = await _call_gemini(symbol, frames, facts)
-        return raw, "Gemini", model
-    except Exception as exc:
-        attempts.append(str(exc)[:260])
+    from server import GEMINI_API_KEY
+
+    if GEMINI_API_KEY:
+        try:
+            raw, model = await _call_gemini(symbol, frames, facts)
+            return raw, "Gemini", model
+        except Exception as exc:
+            attempts.append(str(exc)[:260])
 
     detail = "Nenhum provedor de IA conseguiu concluir a análise."
     if attempts:
         detail += " | " + " | ".join(attempts[:3])
+    else:
+        detail += " | Configure GROQ_API_KEY, OPENROUTER_API_KEY ou GEMINI_API_KEY."
     raise HTTPException(status_code=503, detail=detail)
 
 
