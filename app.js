@@ -1130,6 +1130,7 @@ function bindUniversalFileConverter(id){
 }
 
 function bind(){
+  const rid=location.pathname.match(/ferramenta\/([^/]+)/)?.[1] || location.hash.match(/ferramenta\/([^?]+)/)?.[1];
   resolveiBindAccountSections();
   document.querySelectorAll('[data-fav]').forEach(b=>b.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();toggleFav(b.dataset.fav)}));
   const gs=document.getElementById('globalSearch'); if(gs){gs.addEventListener('keydown',e=>{if(e.key==='Enter'){const q=gs.value.trim(); if(q){location.hash='#/ferramentas?q='+encodeURIComponent(q)}}});}
@@ -1140,7 +1141,7 @@ function bind(){
     if(window.resolveiFinanciamentoInit)startFin();
     else {const s=document.createElement('script');s.src='/ferramenta/financiamento/financiamento.js?v=20261006';s.onload=startFin;document.head.appendChild(s);}
   }
-  const calc=document.getElementById('calcBtn'); const rid=location.pathname.match(/ferramenta\/([^/]+)/)?.[1] || location.hash.match(/ferramenta\/([^?]+)/)?.[1]; if(calc&&rid)calc.addEventListener('click',()=>calculate(rid));
+  const calc=document.getElementById('calcBtn'); if(calc&&rid)calc.addEventListener('click',()=>calculate(rid));
   if(rid==='conversor-arquivos')bindFileConverter();
   if(rid==='conversor-unidades')bindUnitConverter();
   if(rid==='datas-e-horarios')bindDatasHorarios();
