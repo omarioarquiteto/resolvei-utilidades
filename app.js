@@ -843,7 +843,7 @@ function fileOutputOptions(files){
   const ext=fileExtension(files[0].name);
   const kind=fileKindFromExtension(ext);
   if(files.length>1){
-    return kind==="imagem" && files.every(f=>fileKindFromExtension(fileExtension(f.name))==="imagem")
+    return kind==="imagem" && files.every(f=>["jpg","jpeg","png","webp","bmp","tif","tiff","gif","heic","heif"].includes(fileExtension(f.name)))
       ? [["pdf","PDF (juntar imagens)"]]
       : [];
   }
