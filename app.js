@@ -896,22 +896,22 @@ function bindFileConverter(){
     }
 
     const iconFor=file=>fileKindFromExtension(fileExtension(file.name))==="imagem"?"🖼️":selectedKind==="audio"?"🎵":selectedKind==="video"?"🎬":"📄";
-    list.innerHTML=\`
+    list.innerHTML=`
       <div class="file-order-help">Arraste os arquivos para mudar a ordem ou use as setas. Essa será a ordem das páginas no PDF.</div>
-      \${selectedFiles.map((file,index)=>\`
-        <div class="file-item file-item-sortable" draggable="true" data-file-index="\${index}">
+      ${selectedFiles.map((file,index)=>`
+        <div class="file-item file-item-sortable" draggable="true" data-file-index="${index}">
           <span class="file-item-drag" title="Arraste para reordenar" aria-hidden="true">⋮⋮</span>
-          <span class="file-item-position">\${index+1}</span>
-          <span class="file-item-icon">\${iconFor(file)}</span>
-          <span class="file-item-name" title="\${esc(file.name)}">\${esc(file.name)}</span>
-          <small>\${num(file.size/1024/1024)} MB</small>
-          <span class="file-item-controls" role="group" aria-label="Reordenar \${esc(file.name)}">
-            <button type="button" class="file-order-btn" data-file-move="up" data-file-index="\${index}" \${index===0?"disabled":""} aria-label="Mover \${esc(file.name)} para cima">↑</button>
-            <button type="button" class="file-order-btn" data-file-move="down" data-file-index="\${index}" \${index===selectedFiles.length-1?"disabled":""} aria-label="Mover \${esc(file.name)} para baixo">↓</button>
+          <span class="file-item-position">${index+1}</span>
+          <span class="file-item-icon">${iconFor(file)}</span>
+          <span class="file-item-name" title="${esc(file.name)}">${esc(file.name)}</span>
+          <small>${num(file.size/1024/1024)} MB</small>
+          <span class="file-item-controls" role="group" aria-label="Reordenar ${esc(file.name)}">
+            <button type="button" class="file-order-btn" data-file-move="up" data-file-index="${index}" ${index===0?"disabled":""} aria-label="Mover ${esc(file.name)} para cima">↑</button>
+            <button type="button" class="file-order-btn" data-file-move="down" data-file-index="${index}" ${index===selectedFiles.length-1?"disabled":""} aria-label="Mover ${esc(file.name)} para baixo">↓</button>
           </span>
         </div>
-      \`).join("")}
-    \`;
+      `).join("")}
+    `;
 
     let dragIndex=null;
     list.querySelectorAll(".file-item-sortable").forEach(item=>{
@@ -943,7 +943,7 @@ function bindFileConverter(){
         selectedFiles.splice(to,0,moved);
         syncInputFiles();
         renderFiles();
-        st.textContent=\`✅ Ordem atualizada. \${selectedFiles.length} arquivos serão unidos nessa sequência.\`;
+        st.textContent=`✅ Ordem atualizada. ${selectedFiles.length} arquivos serão unidos nessa sequência.`;
       });
     });
 
@@ -956,7 +956,7 @@ function bindFileConverter(){
         [selectedFiles[index],selectedFiles[target]]=[selectedFiles[target],selectedFiles[index]];
         syncInputFiles();
         renderFiles();
-        st.textContent=\`✅ Ordem atualizada. \${selectedFiles.length} arquivos serão unidos nessa sequência.\`;
+        st.textContent=`✅ Ordem atualizada. ${selectedFiles.length} arquivos serão unidos nessa sequência.`;
       });
     });
   };
@@ -975,7 +975,7 @@ function bindFileConverter(){
     }
 
     const opts=fileOutputOptions(selectedFiles);
-    fmt.innerHTML=opts.length?opts.map(x=>\`<option value="\${x[0]}">\${x[1]}</option>\`).join(""):'<option value="">Nenhuma conversão disponível</option>';
+    fmt.innerHTML=opts.length?opts.map(x=>`<option value="${x[0]}">${x[1]}</option>`).join(""):'<option value="">Nenhuma conversão disponível</option>';
     renderFiles();
     outputStep.hidden=!selectedFiles.length;
     btn.disabled=!selectedFiles.length||!opts.length;
@@ -1069,7 +1069,7 @@ function bindFileConverter(){
       const m=cd.match(/filename="?([^"]+)"?/i);
       const name=m?m[1]:"resolvei-convertido."+out;
       const url=URL.createObjectURL(blob);
-      res.innerHTML=\`<div class="result-box"><div class="result-label">Conversão concluída</div><div class="result-main">✓</div><p>\${esc(name)}</p><div class="actions"><a class="btn primary" href="\${url}" download="\${esc(name)}">Baixar novamente</a></div></div>\`;
+      res.innerHTML=`<div class="result-box"><div class="result-label">Conversão concluída</div><div class="result-main">✓</div><p>${esc(name)}</p><div class="actions"><a class="btn primary" href="${url}" download="${esc(name)}">Baixar novamente</a></div></div>`;
       st.textContent="✅ Conversão concluída.";
       const a=document.createElement("a");
       a.href=url;
