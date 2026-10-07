@@ -264,8 +264,9 @@
       });
 
       result.innerHTML = resultCard(data.analysis || {});
-      $("csMeta").textContent =
-        (data.analysis?.gemini_model || "Gemini") + " · análise concluída";
+      const provider = data.analysis?.ai_provider || (data.analysis?.gemini_model ? "Gemini" : "IA");
+      const model = data.analysis?.ai_model || data.analysis?.gemini_model || "";
+      $("csMeta").textContent = provider + (model ? " · " + model : "") + " · análise concluída";
     } catch (ex) {
       error.textContent = "⚠️ " + ex.message;
       result.innerHTML =
