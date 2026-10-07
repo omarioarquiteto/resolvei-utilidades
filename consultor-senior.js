@@ -312,7 +312,7 @@
             '<span>O Consultor continua monitorando ' + esc(asset) + ' e aguardará uma configuração de entrada com confiança suficiente.</span>' +
           '</div>';
 
-        const waitSeconds = Math.max(8, Math.min(30, Number(data.next_check_seconds || 15)));
+        const waitSeconds = Math.max(15, Math.min(45, Number(data.next_check_seconds || 25)));
         $("csProgressDetail").textContent =
           "Próxima leitura em " + waitSeconds + "s · comparando 15m → 5m → 1m";
 
@@ -330,7 +330,10 @@
             '<span>O Consultor continuará tentando enquanto a sessão da IQ Option estiver ativa.</span>' +
           '</div>';
 
-        await sleep(10000);
+        const retrySeconds = /429|rate limit|limite/i.test(ex.message) ? 30 : 15;
+        $("csProgressDetail").textContent =
+          "Nova tentativa em " + retrySeconds + "s · mantendo o monitoramento ativo";
+        await sleep(retrySeconds * 1000);
       }
     }
 
