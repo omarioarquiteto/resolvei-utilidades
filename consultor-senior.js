@@ -106,7 +106,7 @@
           '</div>' +
           '<button id="csConsult" type="button">CONSULTAR</button>' +
         '</section>' +
-        '<div class="cs-ai-choice"><span>TIMEFRAME E EXPIRAÇÃO</span><b>DETERMINADOS PELO CONSULTOR</b><small>O sistema compara 1m, 5m e 15m e escolhe a combinação que apresentar o melhor gatilho.</small></div>
+        '<div class="cs-ai-choice"><span>TIMEFRAME E EXPIRAÇÃO</span><b>DETERMINADOS PELO CONSULTOR</b><small>O sistema compara 1m, 5m e 15m e escolhe a combinação que apresentar o melhor gatilho.</small></div>' +
 
         '<div id="csProgress" class="cs-progress" hidden><span></span><b id="csProgressTitle">Monitorando o mercado…</b><small id="csProgressDetail">Comparando 15m → 5m → 1m · contexto → estrutura → gatilho</small></div>' +
         '<div id="csError" class="cs-msg"></div>' +
