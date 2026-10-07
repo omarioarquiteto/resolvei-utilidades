@@ -1028,235 +1028,393 @@ async def convert_plus(files: list[UploadFile] = File(...), output_format: str =
         try:
 
             if tool_id == "file-unified":
-                op = (operation or "convert").lower().strip()
+                # Fluxo unificado do conversor: todos os caminhos retornam imediatamente
+                # após concluir a conversão para não cair no bloco legado abaixo.
                 src = paths[0]
                 ext = src.suffix.lower().lstrip(".")
+                op = (operation or "convert").strip().lower()
+
+                image_exts = {"jpg","jpeg","png","webp","bmp","tif","tiff","gif","heic","heif"}
+                video_exts = {"mp4","mov","avi","mkv","webm","m4v"}
+                audio_exts = {"mp3","wav","ogg","m4a","aac","flac"}
+                output_format = output_format.lower().lstrip(".")
+
                 if op == "zip":
                     out = Path(td) / "resolvei-arquivos.zip"
                     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
                         for p in paths:
                             z.write(p, p.name)
-                elif op == "compress":
-                    if len(paths) != 1:
-                        raise ValueError("A compressão deve ser feita em um arquivo por vez.")
-                    if ext == "pdf":
-                        import fitz
-                        pdf = fitz.open(src)
-                        out = Path(td) / "resolvei-comprimido.pdf"
-                        pdf.save(out, garbage=4, deflate=True, clean=True)
-                        pdf.close()
-                    elif ext in {"jpg","jpeg","png","webp","bmp","heic","heif"}:
-                        from PIL import Image
+                    return Response(
+                        content=out.read_bytes(),
+                        media_type="application/zip",
+                        headers={"Content-Disposition": 'attachment; filename="resolvei-arquivos.zip"'}
+                    )
+
+                if not output_format:
+                    raise ValueError("Escolha um formato de saída.")
+
+                # Imagem -> imagem / PDF
+                if ext in image_exts:
+                    try:
                         if ext in {"heic","heif"}:
-                            try:
-                                from pillow_heif import register_heif_opener
-                                register_heif_opener()
-                            except Exception:
-                                pass
+                            from pillow_heif import register_heif_opener
+                            register_heif_opener()
+
+                        from PIL import Image, ImageOps
                         img = Image.open(src)
-                        fmt = (output_format or ext).lower()
-                        if fmt == "jpeg":
-                            fmt = "jpg"
-                        out = Path(td) / f"resolvei-comprimido.{fmt}"
-                        if fmt == "jpg":
-                            img.convert("RGB").save(out, "JPEG", quality=quality, optimize=True)
-                        elif fmt == "png":
+                        img = ImageOps.exif_transpose(img)
+
+                        if output_format in {"jpg","jpeg"}:
+                            out = Path(td) / "resolvei-convertido.jpg"
+                            img.convert("RGB").save(out, "JPEG", quality=quality, optimize=True, progressive=True)
+                        elif output_format == "png":
+                            out = Path(td) / "resolvei-convertido.png"
                             img.save(out, "PNG", optimize=True)
-                        elif fmt == "webp":
+                        elif output_format == "webp":
+                            out = Path(td) / "resolvei-convertido.webp"
                             img.save(out, "WEBP", quality=quality, method=6)
-                        elif fmt == "heic":
-                            try:
-                                img.convert("RGB").save(out, "HEIC", quality=quality)
-                            except Exception as exc:
-                                raise RuntimeError("HEIC não está disponível neste servidor.") from exc
-                        else:
-                            img.save(out)
-                elif op == "resize":
-                    if len(paths) != 1 or ext not in {"jpg","jpeg","png","webp","bmp"}:
-                        raise ValueError("Redimensionamento disponível para imagens JPG, PNG e WEBP.")
-                    from PIL import Image
-                    img = Image.open(src)
-                    w = max(1, int(width or img.width))
-                    h = max(1, int(height or img.height))
-                    outfmt = (output_format or ext).lower()
-                    if outfmt == "jpeg":
-                        outfmt = "jpg"
-                    out = Path(td) / f"resolvei-redimensionado.{outfmt}"
-                    resized = img.resize((w, h), Image.Resampling.LANCZOS)
-                    if outfmt == "jpg":
-                        resized = resized.convert("RGB"); resized.save(out, "JPEG", quality=quality, optimize=True)
-                    elif outfmt == "png":
-                        resized.save(out, "PNG", optimize=True)
-                    elif outfmt == "webp":
-                        resized.save(out, "WEBP", quality=quality, method=6)
-                    else:
-                        raise ValueError("Formato de saída inválido para redimensionamento.")
-                else:
-                    if len(paths) > 1:
-                        if output_format != "pdf" or not all(p.suffix.lower().lstrip(".") in {"jpg","jpeg","png","webp","bmp","heic","heif"} for p in paths):
-                            raise ValueError("Para vários arquivos, selecione imagens e gere um PDF, ou escolha Criar ZIP.")
-                        from PIL import Image
-                        images=[]
-                        for p in paths:
-                            im=Image.open(p).convert("RGB"); images.append(im)
-                        out = Path(td) / "resolvei-imagens.pdf"
-                        images[0].save(out, "PDF", save_all=True, append_images=images[1:])
-                    elif ext in {"jpg","jpeg","png","webp","bmp","heic","heif"}:
-                        from PIL import Image
-                        if ext in {"heic","heif"}:
-                            try:
-                                from pillow_heif import register_heif_opener
-                                register_heif_opener()
-                            except Exception:
-                                pass
-                        img=Image.open(src)
-                        fmt=output_format.lower()
-                        out=Path(td)/f"resolvei-convertido.{fmt}"
-                        if fmt in {"jpg","jpeg"}:
-                            out=out.with_suffix(".jpg"); img.convert("RGB").save(out,"JPEG",quality=quality,optimize=True)
-                        elif fmt=="png":
-                            img.save(out,"PNG",optimize=True)
-                        elif fmt=="webp":
-                            img.save(out,"WEBP",quality=quality,method=6)
-                        elif fmt=="heic":
-                            try:
-                                img.convert("RGB").save(out,"HEIC",quality=quality)
-                            except Exception as exc:
-                                raise RuntimeError("HEIC não está disponível neste servidor.") from exc
-                        elif fmt=="pdf":
-                            img.convert("RGB").save(out,"PDF")
-                        else:
-                            raise ValueError("Formato de imagem não suportado.")
-                    elif ext=="svg":
-                        if output_format!="png": raise ValueError("SVG pode ser convertido para PNG.")
-                        import cairosvg
-                        out=Path(td)/"resolvei-convertido.png"
-                        cairosvg.svg2png(url=str(src),write_to=str(out),output_width=width or None,output_height=height or None)
-                    elif ext=="pdf":
-                        import fitz
-                        doc=fitz.open(src)
-                        if len(doc)==0: raise ValueError("PDF vazio.")
-                        if output_format in {"jpg","png"}:
-                            if len(doc)==1:
-                                pix=doc[0].get_pixmap(matrix=fitz.Matrix(2,2),alpha=False)
-                                out=Path(td)/f"resolvei-pagina.{output_format}"; pix.save(str(out))
+                        elif output_format == "bmp":
+                            out = Path(td) / "resolvei-convertido.bmp"
+                            img.convert("RGB").save(out, "BMP")
+                        elif output_format in {"tif","tiff"}:
+                            out = Path(td) / "resolvei-convertido.tiff"
+                            img.save(out, "TIFF", compression="tiff_deflate")
+                        elif output_format == "gif":
+                            out = Path(td) / "resolvei-convertido.gif"
+                            if getattr(img, "n_frames", 1) > 1:
+                                from PIL import ImageSequence
+                                frames = [frame.convert("P", palette=Image.Palette.ADAPTIVE) for frame in ImageSequence.Iterator(img)]
+                                frames[0].save(out, "GIF", save_all=True, append_images=frames[1:], loop=0, duration=img.info.get("duration", 100))
                             else:
-                                out=Path(td)/"resolvei-pdf-imagens.zip"
-                                with zipfile.ZipFile(out,"w",zipfile.ZIP_DEFLATED) as z:
-                                    for i,page in enumerate(doc):
-                                        pix=page.get_pixmap(matrix=fitz.Matrix(2,2),alpha=False)
-                                        img=Path(td)/f"pagina-{i+1}.{output_format}"; pix.save(str(img)); z.write(img,img.name)
-                        elif output_format=="zip":
-                            out=Path(td)/"resolvei-pdf-imagens.zip"
-                            with zipfile.ZipFile(out,"w",zipfile.ZIP_DEFLATED) as z:
-                                for i,page in enumerate(doc):
-                                    pix=page.get_pixmap(matrix=fitz.Matrix(2,2),alpha=False)
-                                    img=Path(td)/f"pagina-{i+1}.jpg"; pix.save(str(img)); z.write(img,img.name)
-                        elif output_format=="docx":
+                                img.convert("RGBA").save(out, "GIF")
+                        elif output_format == "heic":
+                            out = Path(td) / "resolvei-convertido.heic"
+                            img.save(out, "HEIF", quality=quality)
+                        elif output_format == "pdf":
+                            out = Path(td) / "resolvei-convertido.pdf"
+                            img.convert("RGB").save(out, "PDF", resolution=150.0)
+                        else:
+                            raise ValueError("Formato de imagem não suportado para este arquivo.")
+                    except Exception as exc:
+                        raise RuntimeError(f"Não foi possível converter a imagem {src.name}: {exc}") from exc
+
+                    return Response(
+                        content=out.read_bytes(),
+                        media_type={
+                            "jpg":"image/jpeg","png":"image/png","webp":"image/webp","bmp":"image/bmp",
+                            "tif":"image/tiff","tiff":"image/tiff","gif":"image/gif","heic":"image/heic",
+                            "pdf":"application/pdf"
+                        }.get(output_format, "application/octet-stream"),
+                        headers={"Content-Disposition": f'attachment; filename="{out.name}"'}
+                    )
+
+                # SVG -> PNG/JPG/WEBP/PDF
+                if ext == "svg":
+                    import cairosvg
+                    try:
+                        if output_format == "pdf":
+                            out = Path(td) / "resolvei-convertido.pdf"
+                            cairosvg.svg2pdf(url=str(src), write_to=str(out))
+                        elif output_format == "png":
+                            out = Path(td) / "resolvei-convertido.png"
+                            cairosvg.svg2png(url=str(src), write_to=str(out), output_width=width or None, output_height=height or None)
+                        elif output_format in {"jpg","jpeg","webp"}:
+                            png_path = Path(td) / "resolvei-svg-base.png"
+                            cairosvg.svg2png(url=str(src), write_to=str(png_path), output_width=width or None, output_height=height or None)
+                            from PIL import Image
+                            img = Image.open(png_path)
+                            if output_format in {"jpg","jpeg"}:
+                                out = Path(td) / "resolvei-convertido.jpg"
+                                img.convert("RGB").save(out, "JPEG", quality=quality, optimize=True)
+                            else:
+                                out = Path(td) / "resolvei-convertido.webp"
+                                img.save(out, "WEBP", quality=quality, method=6)
+                        else:
+                            raise ValueError("SVG pode ser convertido para PNG, JPG, WEBP ou PDF.")
+                    except Exception as exc:
+                        raise RuntimeError(f"Não foi possível converter o SVG: {exc}") from exc
+
+                    return Response(
+                        content=out.read_bytes(),
+                        media_type={
+                            "jpg":"image/jpeg","png":"image/png","webp":"image/webp","pdf":"application/pdf"
+                        }.get(output_format, "application/octet-stream"),
+                        headers={"Content-Disposition": f'attachment; filename="{out.name}"'}
+                    )
+
+                # Vários arquivos de imagem -> PDF único
+                if len(paths) > 1:
+                    if output_format != "pdf" or not all(p.suffix.lower().lstrip(".") in image_exts for p in paths):
+                        raise ValueError("Para vários arquivos, selecione imagens e use PDF como formato de saída.")
+                    from pillow_heif import register_heif_opener
+                    register_heif_opener()
+                    from PIL import Image, ImageOps
+                    images = [ImageOps.exif_transpose(Image.open(p)).convert("RGB") for p in paths]
+                    out = Path(td) / "resolvei-imagens.pdf"
+                    images[0].save(out, "PDF", save_all=True, append_images=images[1:], resolution=150.0)
+                    return Response(
+                        content=out.read_bytes(),
+                        media_type="application/pdf",
+                        headers={"Content-Disposition": 'attachment; filename="resolvei-imagens.pdf"'}
+                    )
+
+                # PDF -> imagens / documentos
+                if ext == "pdf":
+                    import fitz
+                    doc = fitz.open(src)
+                    try:
+                        if len(doc) == 0:
+                            raise ValueError("PDF vazio.")
+                        if output_format in {"jpg","png"}:
+                            if len(doc) == 1:
+                                pix = doc[0].get_pixmap(matrix=fitz.Matrix(2,2), alpha=False)
+                                out = Path(td) / f"resolvei-pagina.{output_format}"
+                                pix.save(str(out))
+                            else:
+                                out = Path(td) / f"resolvei-pdf-{output_format}.zip"
+                                with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
+                                    for i, page in enumerate(doc):
+                                        pix = page.get_pixmap(matrix=fitz.Matrix(2,2), alpha=False)
+                                        img_path = Path(td) / f"pagina-{i+1}.{output_format}"
+                                        pix.save(str(img_path))
+                                        z.write(img_path, img_path.name)
+                                return Response(
+                                    content=out.read_bytes(),
+                                    media_type="application/zip",
+                                    headers={"Content-Disposition": f'attachment; filename="{out.name}"'}
+                                )
+                        elif output_format == "docx":
                             from docx import Document
-                            docx=Document()
-                            for i,page in enumerate(doc):
-                                if i: docx.add_page_break()
-                                for line in page.get_text("text").splitlines(): docx.add_paragraph(line)
-                            out=Path(td)/"resolvei-convertido.docx"; docx.save(out)
-                        elif output_format=="txt":
-                            out=Path(td)/"resolvei-convertido.txt"; out.write_text("\n\n".join(p.get_text("text") for p in doc),encoding="utf-8")
-                        elif output_format=="xlsx":
+                            docx = Document()
+                            for i, page in enumerate(doc):
+                                if i:
+                                    docx.add_page_break()
+                                for line in page.get_text("text").splitlines():
+                                    docx.add_paragraph(line)
+                            out = Path(td) / "resolvei-convertido.docx"
+                            docx.save(out)
+                        elif output_format == "txt":
+                            out = Path(td) / "resolvei-convertido.txt"
+                            out.write_text("\n\n".join(p.get_text("text") for p in doc), encoding="utf-8")
+                        elif output_format == "xlsx":
                             import openpyxl
-                            wb=openpyxl.Workbook(); ws=wb.active; ws.title="PDF"
-                            for pageno,page in enumerate(doc,1):
-                                for line in page.get_text("text").splitlines(): ws.append([pageno,line])
-                            out=Path(td)/"resolvei-convertido.xlsx"; wb.save(out)
-                        elif output_format in {"dxf","dwg"}:
+                            wb = openpyxl.Workbook()
+                            ws = wb.active
+                            ws.title = "PDF"
+                            for pageno, page in enumerate(doc, 1):
+                                for line in page.get_text("text").splitlines():
+                                    ws.append([pageno, line])
+                            out = Path(td) / "resolvei-convertido.xlsx"
+                            wb.save(out)
+                        elif output_format == "dxf":
                             import ezdxf
-                            cad=ezdxf.new("R2018"); msp=cad.modelspace()
-                            for page_no,page in enumerate(doc):
-                                layer=f"PDF_PAGE_{page_no+1}"
+                            cad = ezdxf.new("R2018")
+                            msp = cad.modelspace()
+                            for page_no, page in enumerate(doc):
+                                layer = f"PDF_PAGE_{page_no+1}"
                                 for item in page.get_drawings():
-                                    op2=item[0]
-                                    if op2=="l":
-                                        p1,p2=item[1],item[2]; msp.add_line((p1.x,-p1.y),(p2.x,-p2.y),dxfattribs={"layer":layer})
-                                    elif op2=="re":
-                                        rr=item[1]; pts=[(rr.x0,-rr.y0),(rr.x1,-rr.y0),(rr.x1,-rr.y1),(rr.x0,-rr.y1)]; msp.add_lwpolyline(pts,close=True,dxfattribs={"layer":layer})
-                                    elif op2=="qu":
-                                        qq=item[1]; pts=[(qq.ul.x,-qq.ul.y),(qq.ur.x,-qq.ur.y),(qq.lr.x,-qq.lr.y),(qq.ll.x,-qq.ll.y)]; msp.add_lwpolyline(pts,close=True,dxfattribs={"layer":layer})
+                                    op2 = item[0]
+                                    if op2 == "l":
+                                        p1,p2=item[1],item[2]
+                                        msp.add_line((p1.x,-p1.y),(p2.x,-p2.y),dxfattribs={"layer":layer})
+                                    elif op2 == "re":
+                                        rr=item[1]
+                                        pts=[(rr.x0,-rr.y0),(rr.x1,-rr.y0),(rr.x1,-rr.y1),(rr.x0,-rr.y1)]
+                                        msp.add_lwpolyline(pts, close=True, dxfattribs={"layer":layer})
+                                    elif op2 == "qu":
+                                        qq=item[1]
+                                        pts=[(qq.ul.x,-qq.ul.y),(qq.ur.x,-qq.ur.y),(qq.lr.x,-qq.lr.y),(qq.ll.x,-qq.ll.y)]
+                                        msp.add_lwpolyline(pts, close=True, dxfattribs={"layer":layer})
                                 for block in page.get_text("dict").get("blocks",[]):
                                     for line in block.get("lines",[]):
                                         for span in line.get("spans",[]):
-                                            txt=span.get("text","").strip()
+                                            txt = span.get("text","").strip()
                                             if txt:
-                                                x,y=span["origin"]; msp.add_text(txt,dxfattribs={"height":max(float(span.get("size",8)),1),"layer":f"TEXT_PAGE_{page_no+1}"}).set_placement((x,-y))
-                            dxf_path=Path(td)/"resolvei-convertido.dxf"; cad.saveas(dxf_path)
-                            out=dxf_path
-                            if output_format=="dwg":
-                                oda=shutil.which("ODAFileConverter") or shutil.which("odafileconverter")
-                                if not oda: raise RuntimeError("DWG exige ODA File Converter no servidor. Use DXF ou instale o conversor ODA.")
-                                target=Path(td)/"dwgout"; target.mkdir()
-                                pproc=subprocess.run([oda,str(td),str(target),"ACAD2018","DWG","0","1",str(dxf_path)],capture_output=True,text=True,timeout=300)
-                                generated=list(target.rglob("*.dwg"))
-                                if pproc.returncode!=0 or not generated: raise RuntimeError("Falha ao gerar DWG.")
-                                out=generated[0]
+                                                x,y = span["origin"]
+                                                msp.add_text(txt,dxfattribs={"height":max(float(span.get("size",8)),1),"layer":f"TEXT_PAGE_{page_no+1}"}).set_placement((x,-y))
+                            out = Path(td) / "resolvei-convertido.dxf"
+                            cad.saveas(out)
                         else:
-                            raise ValueError("Formato de PDF não suportado.")
+                            raise ValueError("Formato de saída não suportado para PDF.")
+                    finally:
                         doc.close()
-                    elif ext=="docx":
-                        if output_format!="pdf": raise ValueError("DOCX pode ser convertido para PDF.")
-                        from docx import Document
+
+                    return Response(
+                        content=out.read_bytes(),
+                        media_type={
+                            "jpg":"image/jpeg","png":"image/png","docx":"application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                            "txt":"text/plain","xlsx":"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet","dxf":"application/dxf"
+                        }.get(output_format, "application/octet-stream"),
+                        headers={"Content-Disposition": f'attachment; filename="{out.name}"'}
+                    )
+
+                # Word / texto
+                if ext == "docx":
+                    from docx import Document
+                    doc = Document(src)
+                    if output_format == "pdf":
                         from reportlab.lib.pagesizes import A4
                         from reportlab.pdfgen import canvas
-                        doc=Document(src); out=Path(td)/"resolvei-convertido.pdf"; pdf=canvas.Canvas(str(out),pagesize=A4); y=A4[1]-50
+                        out = Path(td) / "resolvei-convertido.pdf"
+                        pdf = canvas.Canvas(str(out), pagesize=A4)
+                        y = A4[1]-50
                         for para in doc.paragraphs:
-                            txt=para.text.strip()
-                            if not txt: y-=12; continue
-                            for line in txt.splitlines():
-                                pdf.drawString(40,y,line[:120]); y-=14
-                                if y<45: pdf.showPage(); y=A4[1]-50
+                            for line in (para.text or "").splitlines() or [""]:
+                                pdf.drawString(40,y,line[:120])
+                                y -= 14
+                                if y < 45:
+                                    pdf.showPage(); y = A4[1]-50
                         pdf.save()
-                    elif ext=="txt":
-                        if output_format!="pdf": raise ValueError("TXT pode ser convertido para PDF.")
+                    elif output_format == "txt":
+                        out = Path(td) / "resolvei-convertido.txt"
+                        out.write_text("\n".join(para.text for para in doc.paragraphs), encoding="utf-8")
+                    else:
+                        raise ValueError("DOCX pode ser convertido para PDF ou TXT.")
+                    return Response(
+                        content=out.read_bytes(),
+                        media_type={"pdf":"application/pdf","txt":"text/plain"}[output_format],
+                        headers={"Content-Disposition": f'attachment; filename="{out.name}"'}
+                    )
+
+                if ext == "txt":
+                    if output_format == "pdf":
                         from reportlab.lib.pagesizes import A4
                         from reportlab.pdfgen import canvas
-                        out=Path(td)/"resolvei-convertido.pdf"; pdf=canvas.Canvas(str(out),pagesize=A4); y=A4[1]-50
+                        out = Path(td) / "resolvei-convertido.pdf"
+                        pdf = canvas.Canvas(str(out), pagesize=A4)
+                        y = A4[1]-50
                         for line in src.read_text(encoding="utf-8",errors="replace").splitlines():
-                            pdf.drawString(40,y,line[:120]); y-=14
-                            if y<45: pdf.showPage(); y=A4[1]-50
+                            pdf.drawString(40,y,line[:120])
+                            y -= 14
+                            if y < 45:
+                                pdf.showPage(); y = A4[1]-50
                         pdf.save()
-                    elif ext=="csv":
-                        if output_format!="xlsx": raise ValueError("CSV pode ser convertido para XLSX.")
-                        import csv,openpyxl
-                        wb=openpyxl.Workbook(); ws=wb.active
-                        with src.open("r",encoding="utf-8-sig",newline="") as f:
-                            for row in csv.reader(f): ws.append(row)
-                        out=Path(td)/"resolvei-convertido.xlsx"; wb.save(out)
-                    elif ext=="xlsx":
-                        if output_format!="csv": raise ValueError("XLSX pode ser convertido para CSV.")
-                        import csv,openpyxl
-                        wb=openpyxl.load_workbook(src,read_only=True,data_only=True); ws=wb.active
-                        out=Path(td)/"resolvei-convertido.csv"
-                        with out.open("w",encoding="utf-8-sig",newline="") as f:
-                            w=csv.writer(f)
-                            for row in ws.iter_rows(values_only=True): w.writerow(list(row))
-                    elif ext in {"mp4","mov","avi","mkv","webm"}:
-                        ffmpeg=shutil.which("ffmpeg")
-                        if not ffmpeg: raise RuntimeError("FFmpeg não está instalado no servidor.")
-                        out=Path(td)/f"resolvei-convertido.{output_format}"
-                        if output_format=="mp3": cmd=[ffmpeg,"-y","-i",str(src),"-vn","-codec:a","libmp3lame","-q:a","2",str(out)]
-                        elif output_format=="gif": cmd=[ffmpeg,"-y","-i",str(src),"-vf","fps=12,scale=640:-1:flags=lanczos","-t","10",str(out)]
-                        elif output_format=="webm": cmd=[ffmpeg,"-y","-i",str(src),"-c:v","libvpx-vp9","-c:a","libopus",str(out)]
-                        elif output_format=="avi": cmd=[ffmpeg,"-y","-i",str(src),"-c:v","mpeg4","-c:a","mp3",str(out)]
-                        elif output_format=="mp4": cmd=[ffmpeg,"-y","-i",str(src),"-c:v","libx264","-c:a","aac","-movflags","+faststart",str(out)]
-                        else: raise ValueError("Formato de vídeo não suportado.")
-                        pproc=subprocess.run(cmd,capture_output=True,text=True,timeout=600)
-                        if pproc.returncode!=0: raise RuntimeError("FFmpeg não conseguiu converter o vídeo.")
-                    elif ext in {"mp3","wav","ogg","m4a","aac","flac"}:
-                        ffmpeg=shutil.which("ffmpeg")
-                        if not ffmpeg: raise RuntimeError("FFmpeg não está instalado no servidor.")
-                        out=Path(td)/f"resolvei-convertido.{output_format}"
-                        codec="libmp3lame" if output_format=="mp3" else "pcm_s16le" if output_format=="wav" else "libvorbis"
-                        pproc=subprocess.run([ffmpeg,"-y","-i",str(src),"-vn","-codec:a",codec,str(out)],capture_output=True,text=True,timeout=600)
-                        if pproc.returncode!=0: raise RuntimeError("FFmpeg não conseguiu converter o áudio.")
+                    elif output_format == "docx":
+                        from docx import Document
+                        docx = Document()
+                        for line in src.read_text(encoding="utf-8",errors="replace").splitlines():
+                            docx.add_paragraph(line)
+                        out = Path(td) / "resolvei-convertido.docx"
+                        docx.save(out)
                     else:
-                        raise ValueError("Formato de arquivo não suportado.")
+                        raise ValueError("TXT pode ser convertido para PDF ou DOCX.")
+                    return Response(
+                        content=out.read_bytes(),
+                        media_type={"pdf":"application/pdf","docx":"application/vnd.openxmlformats-officedocument.wordprocessingml.document"}[output_format],
+                        headers={"Content-Disposition": f'attachment; filename="{out.name}"'}
+                    )
+
+                if ext == "csv":
+                    if output_format != "xlsx":
+                        raise ValueError("CSV pode ser convertido para XLSX.")
+                    import csv, openpyxl
+                    wb = openpyxl.Workbook()
+                    ws = wb.active
+                    with src.open("r",encoding="utf-8-sig",newline="") as f:
+                        for row in csv.reader(f):
+                            ws.append(row)
+                    out = Path(td) / "resolvei-convertido.xlsx"
+                    wb.save(out)
+                    return Response(
+                        content=out.read_bytes(),
+                        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        headers={"Content-Disposition": f'attachment; filename="{out.name}"'}
+                    )
+
+                if ext == "xlsx":
+                    if output_format != "csv":
+                        raise ValueError("XLSX pode ser convertido para CSV.")
+                    import csv, openpyxl
+                    wb = openpyxl.load_workbook(src,read_only=True,data_only=True)
+                    ws = wb.active
+                    out = Path(td) / "resolvei-convertido.csv"
+                    with out.open("w",encoding="utf-8-sig",newline="") as f:
+                        w = csv.writer(f)
+                        for row in ws.iter_rows(values_only=True):
+                            w.writerow(list(row))
+                    return Response(
+                        content=out.read_bytes(),
+                        media_type="text/csv",
+                        headers={"Content-Disposition": f'attachment; filename="{out.name}"'}
+                    )
+
+                # Vídeo -> vídeo / áudio
+                if ext in video_exts:
+                    ffmpeg = shutil.which("ffmpeg")
+                    if not ffmpeg:
+                        raise RuntimeError("FFmpeg não está instalado no servidor.")
+                    supported = {"mp4","webm","avi","gif","mp3","wav","m4a","aac","flac","ogg"}
+                    if output_format not in supported:
+                        raise ValueError("Formato de saída de vídeo não suportado.")
+                    out = Path(td) / f"resolvei-convertido.{output_format}"
+                    if output_format == "mp4":
+                        cmd=[ffmpeg,"-y","-i",str(src),"-c:v","libx264","-preset","veryfast","-crf","23","-c:a","aac","-movflags","+faststart",str(out)]
+                    elif output_format == "webm":
+                        cmd=[ffmpeg,"-y","-i",str(src),"-c:v","libvpx-vp9","-c:a","libopus",str(out)]
+                    elif output_format == "avi":
+                        cmd=[ffmpeg,"-y","-i",str(src),"-c:v","mpeg4","-c:a","mp3",str(out)]
+                    elif output_format == "gif":
+                        cmd=[ffmpeg,"-y","-i",str(src),"-vf","fps=12,scale=640:-1:flags=lanczos","-t","10",str(out)]
+                    elif output_format == "mp3":
+                        cmd=[ffmpeg,"-y","-i",str(src),"-vn","-codec:a","libmp3lame","-q:a","2",str(out)]
+                    elif output_format == "wav":
+                        cmd=[ffmpeg,"-y","-i",str(src),"-vn","-c:a","pcm_s16le",str(out)]
+                    elif output_format == "m4a":
+                        cmd=[ffmpeg,"-y","-i",str(src),"-vn","-c:a","aac","-b:a","192k",str(out)]
+                    elif output_format == "aac":
+                        cmd=[ffmpeg,"-y","-i",str(src),"-vn","-c:a","aac","-b:a","192k","-f","adts",str(out)]
+                    elif output_format == "flac":
+                        cmd=[ffmpeg,"-y","-i",str(src),"-vn","-c:a","flac",str(out)]
+                    else:
+                        cmd=[ffmpeg,"-y","-i",str(src),"-vn","-c:a","libvorbis","-q:a","5",str(out)]
+                    pproc=subprocess.run(cmd,capture_output=True,text=True,timeout=900)
+                    if pproc.returncode!=0:
+                        detail=(pproc.stderr or "").strip().splitlines()
+                        raise RuntimeError(f"FFmpeg não conseguiu converter o vídeo: {(detail[-1] if detail else 'erro desconhecido')[:300]}")
+                    return Response(
+                        content=out.read_bytes(),
+                        media_type={
+                            "mp4":"video/mp4","webm":"video/webm","avi":"video/x-msvideo","gif":"image/gif",
+                            "mp3":"audio/mpeg","wav":"audio/wav","m4a":"audio/mp4","aac":"audio/aac","flac":"audio/flac","ogg":"audio/ogg"
+                        }.get(output_format,"application/octet-stream"),
+                        headers={"Content-Disposition": f'attachment; filename="{out.name}"'}
+                    )
+
+                # Áudio -> outros formatos
+                if ext in audio_exts:
+                    ffmpeg = shutil.which("ffmpeg")
+                    if not ffmpeg:
+                        raise RuntimeError("FFmpeg não está instalado no servidor.")
+                    supported = {"mp3","wav","ogg","m4a","aac","flac"}
+                    if output_format not in supported:
+                        raise ValueError("Formato de saída de áudio não suportado.")
+                    out = Path(td) / f"resolvei-convertido.{output_format}"
+                    if output_format == "mp3":
+                        cmd=[ffmpeg,"-y","-i",str(src),"-vn","-c:a","libmp3lame","-q:a","2",str(out)]
+                    elif output_format == "wav":
+                        cmd=[ffmpeg,"-y","-i",str(src),"-vn","-c:a","pcm_s16le",str(out)]
+                    elif output_format == "ogg":
+                        cmd=[ffmpeg,"-y","-i",str(src),"-vn","-c:a","libvorbis","-q:a","5",str(out)]
+                    elif output_format == "m4a":
+                        cmd=[ffmpeg,"-y","-i",str(src),"-vn","-c:a","aac","-b:a","192k",str(out)]
+                    elif output_format == "aac":
+                        cmd=[ffmpeg,"-y","-i",str(src),"-vn","-c:a","aac","-b:a","192k","-f","adts",str(out)]
+                    else:
+                        cmd=[ffmpeg,"-y","-i",str(src),"-vn","-c:a","flac",str(out)]
+                    pproc=subprocess.run(cmd,capture_output=True,text=True,timeout=900)
+                    if pproc.returncode!=0:
+                        detail=(pproc.stderr or "").strip().splitlines()
+                        raise RuntimeError(f"FFmpeg não conseguiu converter o áudio: {(detail[-1] if detail else 'erro desconhecido')[:300]}")
+                    return Response(
+                        content=out.read_bytes(),
+                        media_type={
+                            "mp3":"audio/mpeg","wav":"audio/wav","ogg":"audio/ogg","m4a":"audio/mp4","aac":"audio/aac","flac":"audio/flac"
+                        }[output_format],
+                        headers={"Content-Disposition": f'attachment; filename="{out.name}"'}
+                    )
+
+                raise ValueError(f"Não há uma conversão configurada para .{ext} → .{output_format}.")
+
             elif tool_id == "zip-arquivos":
                 out=Path(td)/"resolvei-arquivos.zip"
                 with zipfile.ZipFile(out,"w",zipfile.ZIP_DEFLATED) as z:
