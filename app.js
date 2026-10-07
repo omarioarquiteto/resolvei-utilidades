@@ -873,23 +873,117 @@ function bindFileConverter(){
   if(!f||!kindGrid||!fileStep||!outputStep)return;
 
   let selectedKind="";
-  const resetOutput=()=>{fmt.innerHTML='<option value="">Selecione o arquivo primeiro</option>';btn.disabled=true;outputStep.hidden=true;};
-  const update=()=>{
-    const files=[...(f.files||[])];
-    const invalid=selectedKind && files.some(x=>fileKindFromExtension(fileExtension(x.name))!==selectedKind);
-    if(invalid){
-      f.value="";
-      list.innerHTML='<div class="file-empty">O tipo do arquivo não corresponde à categoria escolhida. Selecione um arquivo compatível.</div>';
-      resetOutput();
-      st.textContent="⚠️ Escolha um arquivo compatível com a categoria selecionada.";
+  let selectedFiles=[];
+
+  const resetOutput=()=>{
+    fmt.innerHTML='<option value="">Selecione o arquivo primeiro</option>';
+    btn.disabled=true;
+    outputStep.hidden=true;
+  };
+
+  const syncInputFiles=()=>{
+    try{
+      const dt=new DataTransfer();
+      selectedFiles.forEach(file=>dt.items.add(file));
+      f.files=dt.files;
+    }catch{}
+  };
+
+  const renderFiles=()=>{
+    if(!selectedFiles.length){
+      list.innerHTML='<div class="file-empty">Nenhum arquivo selecionado.</div>';
       return;
     }
-    const opts=fileOutputOptions(files);
-    fmt.innerHTML=opts.length?opts.map(x=>`<option value="${x[0]}">${x[1]}</option>`).join(""):'<option value="">Nenhuma conversão disponível</option>';
-    list.innerHTML=files.length?files.map(x=>`<div class="file-item"><span class="file-item-icon">${fileKindFromExtension(fileExtension(x.name))==="imagem"?"🖼️":selectedKind==="audio"?"🎵":selectedKind==="video"?"🎬":"📄"}</span><span class="file-item-name">${esc(x.name)}</span><small>${num(x.size/1024/1024)} MB</small></div>`).join(""):'<div class="file-empty">Nenhum arquivo selecionado.</div>';
-    outputStep.hidden=!files.length;
-    btn.disabled=!files.length||!opts.length;
-    st.textContent=files.length?(files.length>1?"Vários arquivos selecionados.":"Arquivo selecionado: "+files[0].name):"Escolha um arquivo.";
+
+    const iconFor=file=>fileKindFromExtension(fileExtension(file.name))==="imagem"?"🖼️":selectedKind==="audio"?"🎵":selectedKind==="video"?"🎬":"📄";
+    list.innerHTML=\`
+      <div class="file-order-help">Arraste os arquivos para mudar a ordem ou use as setas. Essa será a ordem das páginas no PDF.</div>
+      \${selectedFiles.map((file,index)=>\`
+        <div class="file-item file-item-sortable" draggable="true" data-file-index="\${index}">
+          <span class="file-item-drag" title="Arraste para reordenar" aria-hidden="true">⋮⋮</span>
+          <span class="file-item-position">\${index+1}</span>
+          <span class="file-item-icon">\${iconFor(file)}</span>
+          <span class="file-item-name" title="\${esc(file.name)}">\${esc(file.name)}</span>
+          <small>\${num(file.size/1024/1024)} MB</small>
+          <span class="file-item-controls" role="group" aria-label="Reordenar \${esc(file.name)}">
+            <button type="button" class="file-order-btn" data-file-move="up" data-file-index="\${index}" \${index===0?"disabled":""} aria-label="Mover \${esc(file.name)} para cima">↑</button>
+            <button type="button" class="file-order-btn" data-file-move="down" data-file-index="\${index}" \${index===selectedFiles.length-1?"disabled":""} aria-label="Mover \${esc(file.name)} para baixo">↓</button>
+          </span>
+        </div>
+      \`).join("")}
+    \`;
+
+    let dragIndex=null;
+    list.querySelectorAll(".file-item-sortable").forEach(item=>{
+      item.addEventListener("dragstart",e=>{
+        dragIndex=Number(item.dataset.fileIndex);
+        item.classList.add("is-dragging");
+        e.dataTransfer?.setData("text/plain",String(dragIndex));
+        if(e.dataTransfer)e.dataTransfer.effectAllowed="move";
+      });
+      item.addEventListener("dragend",()=>{
+        dragIndex=null;
+        item.classList.remove("is-dragging");
+        list.querySelectorAll(".file-item-sortable").forEach(x=>x.classList.remove("drop-target"));
+      });
+      item.addEventListener("dragover",e=>{
+        e.preventDefault();
+        if(dragIndex===null)return;
+        list.querySelectorAll(".file-item-sortable").forEach(x=>x.classList.remove("drop-target"));
+        if(Number(item.dataset.fileIndex)!==dragIndex)item.classList.add("drop-target");
+        if(e.dataTransfer)e.dataTransfer.dropEffect="move";
+      });
+      item.addEventListener("dragleave",()=>item.classList.remove("drop-target"));
+      item.addEventListener("drop",e=>{
+        e.preventDefault();
+        const from=dragIndex;
+        const to=Number(item.dataset.fileIndex);
+        if(from===null||from===to)return;
+        const moved=selectedFiles.splice(from,1)[0];
+        selectedFiles.splice(to,0,moved);
+        syncInputFiles();
+        renderFiles();
+        st.textContent=\`✅ Ordem atualizada. \${selectedFiles.length} arquivos serão unidos nessa sequência.\`;
+      });
+    });
+
+    list.querySelectorAll("[data-file-move]").forEach(control=>{
+      control.addEventListener("click",()=>{
+        const index=Number(control.dataset.fileIndex);
+        const direction=control.dataset.fileMove;
+        const target=direction==="up"?index-1:index+1;
+        if(target<0||target>=selectedFiles.length)return;
+        [selectedFiles[index],selectedFiles[target]]=[selectedFiles[target],selectedFiles[index]];
+        syncInputFiles();
+        renderFiles();
+        st.textContent=\`✅ Ordem atualizada. \${selectedFiles.length} arquivos serão unidos nessa sequência.\`;
+      });
+    });
+  };
+
+  const update=()=>{
+    selectedFiles=[...(f.files||[])];
+
+    const invalid=selectedKind && selectedFiles.some(x=>fileKindFromExtension(fileExtension(x.name))!==selectedKind);
+    if(invalid){
+      selectedFiles=[];
+      f.value="";
+      renderFiles();
+      resetOutput();
+      st.textContent="⚠️ Escolha arquivos compatíveis com a categoria selecionada.";
+      return;
+    }
+
+    const opts=fileOutputOptions(selectedFiles);
+    fmt.innerHTML=opts.length?opts.map(x=>\`<option value="\${x[0]}">\${x[1]}</option>\`).join(""):'<option value="">Nenhuma conversão disponível</option>';
+    renderFiles();
+    outputStep.hidden=!selectedFiles.length;
+    btn.disabled=!selectedFiles.length||!opts.length;
+    st.textContent=selectedFiles.length>1
+      ? "Vários arquivos selecionados. Reordene a lista para definir a ordem final do PDF."
+      : selectedFiles.length===1
+        ? "Arquivo selecionado: "+selectedFiles[0].name
+        : "Escolha um arquivo.";
   };
 
   kindGrid.querySelectorAll("[data-file-kind]").forEach(card=>{
@@ -899,38 +993,62 @@ function bindFileConverter(){
       f.accept=FILE_KIND_ACCEPT[selectedKind]||"*/*";
       f.multiple=selectedKind==="imagem";
       f.value="";
-      list.innerHTML='<div class="file-empty">Nenhum arquivo selecionado.</div>';
-      fileStep.hidden=false;outputStep.hidden=true;btn.disabled=true;
-      hint.textContent=selectedKind==="imagem"?"Imagens raster/vetoriais. Para juntar várias imagens em um PDF, selecione mais de uma.":selectedKind==="arquivo"?"PDF, Word, texto ou planilha.":"Selecione um arquivo de "+selectedKind+".";
+      selectedFiles=[];
+      renderFiles();
+      resetOutput();
+      fileStep.hidden=false;
+      hint.textContent=selectedKind==="imagem"
+        ?"Imagens raster/vetoriais. Para juntar várias imagens em um PDF, selecione mais de uma e depois reordene a lista."
+        :selectedKind==="arquivo"
+          ?"PDF, Word, texto ou planilha."
+          :"Selecione um arquivo de "+selectedKind+".";
       st.textContent="2. Escolha o arquivo.";
       fileStep.scrollIntoView({behavior:"smooth",block:"nearest"});
     });
   });
 
   f.addEventListener("change",update);
-  drop?.addEventListener("dragover",e=>{e.preventDefault();drop.classList.add("is-dragging")});
+
+  drop?.addEventListener("dragover",e=>{
+    e.preventDefault();
+    drop.classList.add("is-dragging");
+  });
   drop?.addEventListener("dragleave",()=>drop.classList.remove("is-dragging"));
   drop?.addEventListener("drop",e=>{
-    e.preventDefault();drop.classList.remove("is-dragging");
+    e.preventDefault();
+    drop.classList.remove("is-dragging");
     if(!selectedKind)return;
-    try{const dt=new DataTransfer();[...e.dataTransfer.files].forEach(x=>dt.items.add(x));f.files=dt.files;}catch{}
+    try{
+      selectedFiles=[...e.dataTransfer.files];
+      syncInputFiles();
+    }catch{
+      selectedFiles=[];
+    }
     update();
   });
-  drop?.addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();f.click()}});
+  drop?.addEventListener("keydown",e=>{
+    if(e.key==="Enter"||e.key===" "){
+      e.preventDefault();
+      f.click();
+    }
+  });
 
   fmt.addEventListener("change",()=>{
     const out=fmt.value;
     const imageOut=["jpg","png","webp","bmp","tiff","gif","heic"].includes(out);
     document.getElementById("fileQualityField").hidden=!imageOut;
-    document.getElementById("fileWidthField").hidden=!(selectedKind==="imagem"&&fileExtension(f.files?.[0]?.name)==="svg");
-    document.getElementById("fileHeightField").hidden=!(selectedKind==="imagem"&&fileExtension(f.files?.[0]?.name)==="svg");
-    if(f.files?.[0]&&out)st.textContent="3. Pronto para converter para "+out.toUpperCase()+".";
+    document.getElementById("fileWidthField").hidden=!(selectedKind==="imagem"&&fileExtension(selectedFiles?.[0]?.name)==="svg");
+    document.getElementById("fileHeightField").hidden=!(selectedKind==="imagem"&&fileExtension(selectedFiles?.[0]?.name)==="svg");
+    if(selectedFiles?.[0]&&out)st.textContent="3. Pronto para converter para "+out.toUpperCase()+".";
   });
 
   btn.addEventListener("click",async()=>{
-    const files=[...(f.files||[])],out=fmt.value;
+    const files=[...selectedFiles],out=fmt.value;
     if(!files.length||!out)return;
-    btn.disabled=true;st.textContent="⏳ Convertendo...";
+    btn.disabled=true;
+    st.textContent=files.length>1
+      ?"⏳ Juntando os arquivos na ordem escolhida..."
+      :"⏳ Convertendo...";
     try{
       const fd=new FormData();
       files.forEach(x=>fd.append("files",x));
@@ -941,24 +1059,45 @@ function bindFileConverter(){
       fd.append("width",document.getElementById("convertWidth")?.value||0);
       fd.append("height",document.getElementById("convertHeight")?.value||0);
       const rr=await fetch("/api/files/convert-plus",{method:"POST",body:fd});
-      let data={}; if(!rr.ok){try{data=await rr.json()}catch{} throw new Error(data.detail||"Não foi possível converter o arquivo.");}
-      const blob=await rr.blob(),cd=rr.headers.get("content-disposition")||"",m=cd.match(/filename="?([^"]+)"?/i),name=m?m[1]:"resolvei-convertido."+out,url=URL.createObjectURL(blob);
-      res.innerHTML=`<div class="result-box"><div class="result-label">Conversão concluída</div><div class="result-main">✓</div><p>${esc(name)}</p><div class="actions"><a class="btn primary" href="${url}" download="${esc(name)}">Baixar novamente</a></div></div>`;
+      let data={};
+      if(!rr.ok){
+        try{data=await rr.json()}catch{}
+        throw new Error(data.detail||"Não foi possível converter o arquivo.");
+      }
+      const blob=await rr.blob();
+      const cd=rr.headers.get("content-disposition")||"";
+      const m=cd.match(/filename="?([^"]+)"?/i);
+      const name=m?m[1]:"resolvei-convertido."+out;
+      const url=URL.createObjectURL(blob);
+      res.innerHTML=\`<div class="result-box"><div class="result-label">Conversão concluída</div><div class="result-main">✓</div><p>\${esc(name)}</p><div class="actions"><a class="btn primary" href="\${url}" download="\${esc(name)}">Baixar novamente</a></div></div>\`;
       st.textContent="✅ Conversão concluída.";
-      const a=document.createElement("a");a.href=url;a.download=name;a.click();
+      const a=document.createElement("a");
+      a.href=url;
+      a.download=name;
+      a.click();
       setTimeout(()=>URL.revokeObjectURL(url),30000);
-    }catch(e){st.innerHTML="⚠️ "+esc(e.message||"Falha na conversão.");}
-    finally{btn.disabled=false;}
+    }catch(e){
+      st.innerHTML="⚠️ "+esc(e.message||"Falha na conversão.");
+    }finally{
+      btn.disabled=false;
+    }
   });
 
   document.getElementById("convertResetBtn")?.addEventListener("click",()=>{
-    selectedKind="";kindGrid.querySelectorAll("[data-file-kind]").forEach(x=>x.classList.remove("active"));
-    f.value="";f.accept="";f.multiple=false;
-    list.innerHTML='<div class="file-empty">Nenhum arquivo selecionado.</div>';
-    resetOutput();res.innerHTML='<div class="result-box"><div class="result-label">Resultado</div><div class="result-main">—</div><p>O arquivo convertido aparecerá aqui.</p></div>';
-    fileStep.hidden=true;st.textContent="1. Selecione o tipo de arquivo para começar.";
+    selectedKind="";
+    selectedFiles=[];
+    kindGrid.querySelectorAll("[data-file-kind]").forEach(x=>x.classList.remove("active"));
+    f.value="";
+    f.accept="";
+    f.multiple=false;
+    renderFiles();
+    resetOutput();
+    res.innerHTML='<div class="result-box"><div class="result-label">Resultado</div><div class="result-main">—</div><p>O arquivo convertido aparecerá aqui.</p></div>';
+    fileStep.hidden=true;
+    st.textContent="1. Selecione o tipo de arquivo para começar.";
   });
 }
+
 function toolUI(id){
   switch(id){
     case 'conversor-arquivos': return converterArquivosUI();
