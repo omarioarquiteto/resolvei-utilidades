@@ -122,6 +122,7 @@ async def login(req: ConsultorLoginRequest) -> dict[str, Any]:
         "ok": True,
         "session_id": sid,
         "connected": True,
+        "requires_2fa": False,
     }
 
 
