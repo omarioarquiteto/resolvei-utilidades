@@ -41,6 +41,7 @@ const tools = [
   {id:'guru-dos-sinais-iqoption',cat:'dinheiro',icon:'🧙‍♂️',title:'GURÚ DOS SINAIS IQOPTION',desc:'Analista técnico automático conectado aos candles da IQ Option, incluindo mercado OTC.',tags:'guru sinais iqoption iq option OTC opções binárias call put análise técnica candles forex'},
   {id:'visao-opcoes',cat:'investimentos',icon:'🔭',title:'VISÃO OPÇÕES',desc:'Terminal de análise de pares com dados da IQ Option, radar de mercado e fatos relevantes da Biquote.',tags:'visão opções iqoption pares radar análise técnica candles OTC biquote fatos relevantes calendário econômico call put'},
   {id:'analista-bin',cat:'investimentos',icon:'📡',title:'ANALISTA BIN',desc:'Motor técnico ponderado para confluência de 30 indicadores em pares da IQ Option.',tags:'analista bin iqoption opções binárias call put tendência rompimento reversão indicadores score confluência'},
+  {id:'consultor-senior',cat:'investimentos',icon:'🧠',title:'CONSULTOR SÊNIOR',desc:'Analista de mercado com Gemini e candles da IQ Option para identificar contexto, gatilhos e pontos de entrada.',tags:'consultor senior gemini iqoption opções binárias call put análise de mercado price action suporte resistência tendência entrada'},
   {id:'combustivel-viagem',cat:'carro',icon:'⛽',title:'Combustível da viagem',desc:'Estime litros necessários e custo da viagem.',tags:'gasolina etanol combustível viagem litros km'},
   {id:'custo-km',cat:'carro',icon:'🛣️',title:'Custo por km',desc:'Descubra quanto seu carro custa a cada quilômetro.',tags:'custo km carro combustível consumo'},
   {id:'gasolina-etanol',cat:'carro',icon:'⚖️',title:'Gasolina × etanol',desc:'Compare preços pela eficiência energética do combustível.',tags:'gasolina etanol álcool abastecer'},
@@ -1312,6 +1313,7 @@ function toolPage(id){
   if(id==='guru-dos-sinais-iqoption'||id==='laboratorio-estatistico')return '<div class="tool-page"><div class="card panel"><span class="eyebrow">DESCONTINUADA</span><h1>Esta ferramenta foi retirada do Resolvei.</h1><p>O catálogo foi enxugado para priorizar utilidades de uso cotidiano.</p><div class="actions"><a class="btn primary" href="#/ferramentas">Voltar às ferramentas</a></div></div></div>';
   if(id==='visao-opcoes')return '<div id="visaoOpcoesToolHost"></div>';
   if(id==='analista-bin')return '<div id="analistaBinToolHost"></div>';
+  if(id==='consultor-senior')return '<div id="consultorSeniorToolHost"></div>';
   if(id==='financiamento')return '<div class="tool-page"><div class="breadcrumb"><a href="#/">Início</a> / <a href="#/categoria/dinheiro">Dinheiro</a> / Financiamento</div><div id="financiamentoToolHost"></div></div>';
   const redirects={
     'emprestimo':'#/ferramenta/financiamento','gorjeta':'#/ferramenta/dividir-conta','posicao-solar':'#/ferramenta/placas-solares',
