@@ -20,8 +20,13 @@ body.cs-tool-active .app-shell { max-width: 1380px; }
 .cs-msg { color:#a33; font-size:13px; margin-top:10px; min-height:18px; }
 .cs-note { margin-top:16px; font-size:11px; color:var(--muted); line-height:1.5; }
 
-.cs-control { display:grid; grid-template-columns:minmax(280px,1.8fr) minmax(150px,.8fr) minmax(150px,.7fr) auto; gap:12px; align-items:end; padding:14px; }
-.cs-control button { min-height:46px; padding-inline:24px; }
+.cs-control { display:grid; grid-template-columns:minmax(320px,1fr) auto; gap:12px; align-items:end; padding:14px; }
+.cs-field select { min-height:46px; }
+.cs-control button { min-height:46px; padding-inline:28px; }
+.cs-ai-choice { margin-top:10px; padding:11px 14px; border:1px solid var(--border); border-radius:14px; background:var(--surface-2); display:grid; grid-template-columns:auto auto; gap:3px 10px; align-items:center; }
+.cs-ai-choice span { font-size:10px; letter-spacing:.11em; font-weight:800; opacity:.58; }
+.cs-ai-choice b { font-size:11px; letter-spacing:.05em; }
+.cs-ai-choice small { grid-column:1/-1; color:var(--muted); line-height:1.4; }
 .cs-progress { display:flex; flex-wrap:wrap; gap:8px 14px; align-items:center; margin:14px 0; padding:12px 14px; border:1px solid var(--border); border-radius:14px; background:var(--surface); }
 .cs-progress span { width:8px; height:8px; border-radius:50%; background:currentColor; animation:csPulse 1s infinite; }
 .cs-progress small { color:var(--muted); width:100%; margin-left:20px; }
@@ -64,8 +69,10 @@ body.cs-tool-active .app-shell { max-width: 1380px; }
 @keyframes csPulse { 50% { opacity:.25; } }
 
 @media (max-width: 920px) {
-  .cs-control { grid-template-columns:1fr 1fr; }
-  .cs-control button { grid-column:1/-1; }
+  .cs-control { grid-template-columns:1fr; }
+  .cs-control button { width:100%; }
+  .cs-ai-choice { grid-template-columns:1fr; }
+  .cs-ai-choice small { grid-column:auto; }
   .cs-summary-grid { grid-template-columns:1fr 1fr; }
   .cs-analysis-grid { grid-template-columns:1fr 1fr; }
   .cs-metric.wide { grid-column:span 2; }
