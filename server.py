@@ -79,8 +79,10 @@ from analista_bin_auth import router as analista_bin_auth_router
 app.include_router(analista_bin_auth_router)
 from analista_bin_api import router as analista_bin_router
 from financiamento_api import router as financiamento_router
+from consultor_senior_api import router as consultor_senior_router
 app.include_router(analista_bin_router)
 app.include_router(financiamento_router)
+app.include_router(consultor_senior_router)
 
 
 # O frontend atualmente é servido pelo próprio FastAPI, portanto as requisições
