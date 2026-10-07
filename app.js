@@ -764,60 +764,199 @@ async function updateSolarResource(){const st=document.getElementById('solarReso
 async function updateSolarPrices(){const st=document.getElementById('solarResourceStatus');try{const q=new URLSearchParams({city:document.getElementById('solarCity')?.value||'Cuiabá',state:document.getElementById('solarState')?.value||'MT'}),res=await fetch('/api/solar/prices?'+q.toString()),d=await res.json();if(!res.ok)throw new Error(d.detail||'Falha na consulta de preços.');if(!d.configured){if(st)st.textContent='⚠️ Consulta online desativada. Os preços editáveis continuam disponíveis.';return;}const map={panel:'pricePanel',inverter:'priceInverter',mounting:'priceMounting',dcProtection:'priceDcProtection',acProtection:'priceAcProtection'};let changed=0;for(const item of d.items||[]){const id=map[item.key];if(id&&item.best?.price){document.getElementById(id).value=Number(item.best.price).toFixed(2);changed++;}}if(st)st.textContent='✅ '+changed+' preços atualizados.';}catch(e){if(st)st.textContent='⚠️ '+esc(e.message);}}
 function bindSolarCalculatorInteractions(){solarLayoutState={mode:'roof',tempPoints:[],roofs:[],obstacles:[],calibration:{points:[],metersPerPixel:null,meters:0},placements:[],lat:0,lon:0,optimalAzimuth:0,optimalTilt:15};document.getElementById('solarMapImage')?.addEventListener('change',solarImageRead);document.getElementById('solarOverlay')?.addEventListener('click',e=>{const p=solarCanvasPoint(e);if(!p)return;if(solarLayoutState.mode==='calibrate'){if(solarLayoutState.tempPoints.length<2)solarLayoutState.tempPoints.push(p);if(solarLayoutState.tempPoints.length===2)solarFinishCalibration();return;}if(solarLayoutState.mode==='obstacle'){solarAddObstacle(p);return;}solarLayoutState.tempPoints.push(p);solarLayoutRender();solarSolarStatus('Ponto '+solarLayoutState.tempPoints.length+' marcado. Clique em “Concluir marcação”.');});document.getElementById('solarRoofModeBtn')?.addEventListener('click',()=>solarSetSolarMode('roof'));document.getElementById('solarObstacleModeBtn')?.addEventListener('click',()=>solarSetSolarMode('obstacle'));document.getElementById('solarCalibrateBtn')?.addEventListener('click',()=>{solarLayoutState.tempPoints=[];solarSetSolarMode('calibrate');solarSolarStatus('Clique em dois pontos cuja distância real você conhece.');});document.getElementById('solarFinishMarkBtn')?.addEventListener('click',()=>solarLayoutState.mode==='calibrate'?solarFinishCalibration():solarFinishRoof());document.getElementById('solarUndoBtn')?.addEventListener('click',solarUndo);document.getElementById('solarClearMarksBtn')?.addEventListener('click',solarClearMarks);document.getElementById('solarAutoLayoutBtn')?.addEventListener('click',solarLayoutAuto);document.getElementById('solarLayoutClearBtn')?.addEventListener('click',solarClearLayout);document.getElementById('solarCepBtn')?.addEventListener('click',fetchCepForSolar);document.getElementById('solarAddressBtn')?.addEventListener('click',searchSolarAddress);document.getElementById('solarResourceBtn')?.addEventListener('click',updateSolarResource);document.getElementById('solarPricesBtn')?.addEventListener('click',updateSolarPrices);['solarPanelLength','solarPanelWidth','solarPanelGap','solarEdgeClearance','solarShadowAltitude','solarMarkRoofAzimuth','solarMarkRoofTilt','solarObstacleHeight'].forEach(id=>document.getElementById(id)?.addEventListener('input',solarLayoutRender));window.addEventListener('resize',()=>setTimeout(solarLayoutRender,60));solarSetSolarMode('roof');solarPathDraw(document.getElementById('solarPathCanvas'),solarLayoutState.lat);}
 function converterArquivosUI(){
-  return `<div class="file-converter-layout"><section class="card panel file-converter-card"><div class="file-converter-header"><div><span class="eyebrow">ARQUIVOS</span><h2>Converter arquivos</h2><p>Converta, comprima, redimensione ou compacte arquivos em um único lugar.</p></div><span class="file-limit">Até 200 MB por arquivo</span></div><label class="file-dropzone" id="fileDropzone" tabindex="0"><input id="convertFile" type="file" multiple accept="image/*,video/*,audio/*,.pdf,.docx,.txt,.csv,.xlsx,.svg,.heic,.heif,.dxf,.dwg"><span class="file-drop-icon">↥</span><strong>Arraste o arquivo aqui</strong><small>ou clique para selecionar</small></label><div id="fileList" class="file-list"><div class="file-empty">Nenhum arquivo selecionado.</div></div><div class="file-tool-options"><div class="field"><label for="fileOperation">O que fazer?</label><select id="fileOperation"><option value="convert">Converter formato</option><option value="compress">Comprimir</option><option value="resize">Redimensionar imagem</option><option value="zip">Criar ZIP</option></select></div><div class="field" id="fileOutputField"><label for="convertFormat">Formato de saída</label><select id="convertFormat"><option value="">Selecione o arquivo primeiro</option></select></div><div class="field" id="fileQualityField"><label for="convertQuality">Qualidade</label><input id="convertQuality" type="number" min="10" max="100" value="85"><small>Usado principalmente em imagens.</small></div><div class="field" id="fileWidthField" style="display:none"><label for="convertWidth">Largura (px)</label><input id="convertWidth" type="number" min="1" placeholder="Automática"></div><div class="field" id="fileHeightField" style="display:none"><label for="convertHeight">Altura (px)</label><input id="convertHeight" type="number" min="1" placeholder="Automática"></div></div><div class="actions file-actions"><button class="btn primary" id="convertBtn" disabled>Converter</button><button class="btn ghost" id="convertResetBtn" type="button">Limpar</button></div><div id="convertStatus" class="notice">Selecione um arquivo para começar.</div></section><section id="convertResult"><div class="result-box"><div class="result-label">Resultado</div><div class="result-main">—</div><p>O arquivo processado aparecerá aqui.</p></div></section></div>`;
+  return `<div class="file-converter-layout">
+    <section class="card panel file-converter-card">
+      <div class="file-converter-header">
+        <div><span class="eyebrow">CONVERSOR UNIVERSAL</span><h2>Converter arquivos</h2><p>Escolha o tipo, selecione o arquivo e defina o formato de saída.</p></div>
+        <span class="file-limit">Até 200 MB por arquivo</span>
+      </div>
+
+      <div class="converter-step">
+        <div class="converter-step-head"><span class="converter-step-index">1</span><div><strong>Selecione o tipo de arquivo que será convertido</strong><small>Imagem, arquivo, áudio ou vídeo.</small></div></div>
+        <div class="converter-kind-grid" id="converterKindGrid">
+          <button type="button" class="converter-kind-card" data-file-kind="imagem"><span>🖼️</span><strong>Imagem</strong><small>JPG, PNG, WEBP, BMP, TIFF, GIF, HEIC, SVG</small></button>
+          <button type="button" class="converter-kind-card" data-file-kind="arquivo"><span>📄</span><strong>Arquivo</strong><small>PDF, DOCX, TXT, CSV, XLSX</small></button>
+          <button type="button" class="converter-kind-card" data-file-kind="audio"><span>🎵</span><strong>Áudio</strong><small>MP3, WAV, OGG, M4A, AAC, FLAC</small></button>
+          <button type="button" class="converter-kind-card" data-file-kind="video"><span>🎬</span><strong>Vídeo</strong><small>MP4, MOV, AVI, MKV, WEBM, M4V</small></button>
+        </div>
+      </div>
+
+      <div class="converter-step" id="converterFileStep" hidden>
+        <div class="converter-step-head"><span class="converter-step-index">2</span><div><strong>Escolha o arquivo</strong><small id="converterFileHint">Primeiro selecione uma categoria acima.</small></div></div>
+        <label class="file-dropzone" id="fileDropzone" tabindex="0">
+          <input id="convertFile" type="file">
+          <span class="file-drop-icon">↥</span>
+          <strong>Arraste o arquivo aqui</strong>
+          <small>ou clique para selecionar</small>
+        </label>
+        <div id="fileList" class="file-list"><div class="file-empty">Nenhum arquivo selecionado.</div></div>
+      </div>
+
+      <div class="converter-step" id="converterOutputStep" hidden>
+        <div class="converter-step-head"><span class="converter-step-index">3</span><div><strong>Escolha o formato de saída</strong><small>As opções abaixo são filtradas pelo arquivo escolhido.</small></div></div>
+        <div class="converter-output-grid">
+          <div class="field"><label for="convertFormat">Formato de saída</label><select id="convertFormat"><option value="">Selecione o arquivo primeiro</option></select></div>
+          <div class="field" id="fileQualityField"><label for="convertQuality">Qualidade</label><input id="convertQuality" type="number" min="10" max="100" value="85"><small>Usada principalmente em JPG, WEBP e HEIC.</small></div>
+        </div>
+        <div class="converter-extra-options">
+          <div class="field" id="fileWidthField" hidden><label for="convertWidth">Largura (px)</label><input id="convertWidth" type="number" min="1" placeholder="Automática"></div>
+          <div class="field" id="fileHeightField" hidden><label for="convertHeight">Altura (px)</label><input id="convertHeight" type="number" min="1" placeholder="Automática"></div>
+        </div>
+      </div>
+
+      <div class="actions file-actions">
+        <button class="btn primary" id="convertBtn" disabled>Converter</button>
+        <button class="btn ghost" id="convertResetBtn" type="button">Limpar</button>
+      </div>
+      <div id="convertStatus" class="notice">1. Selecione o tipo de arquivo para começar.</div>
+    </section>
+    <section id="convertResult"><div class="result-box"><div class="result-label">Resultado</div><div class="result-main">—</div><p>O arquivo convertido aparecerá aqui.</p></div></section>
+  </div>`;
 }
-const FILE_IMAGE_EXTS=new Set(["jpg","jpeg","png","webp","bmp","heic","heif"]);
-const FILE_VIDEO_EXTS=new Set(["mp4","mov","avi","mkv","webm"]);
+
+const FILE_IMAGE_EXTS=new Set(["jpg","jpeg","png","webp","bmp","tif","tiff","gif","heic","heif","svg"]);
+const FILE_VIDEO_EXTS=new Set(["mp4","mov","avi","mkv","webm","m4v"]);
 const FILE_AUDIO_EXTS=new Set(["mp3","wav","ogg","m4a","aac","flac"]);
+const FILE_DOC_EXTS=new Set(["pdf","docx","txt","csv","xlsx"]);
+const FILE_KIND_EXTS={
+  imagem: FILE_IMAGE_EXTS,
+  arquivo: FILE_DOC_EXTS,
+  audio: FILE_AUDIO_EXTS,
+  video: FILE_VIDEO_EXTS
+};
+const FILE_KIND_ACCEPT={
+  imagem:"image/*,.svg,.heic,.heif",
+  arquivo:".pdf,.docx,.txt,.csv,.xlsx",
+  audio:"audio/*,.mp3,.wav,.ogg,.m4a,.aac,.flac",
+  video:"video/*,.mp4,.mov,.avi,.mkv,.webm,.m4v"
+};
 function fileExtension(name){return String(name||"").split(".").pop().toLowerCase();}
-function fileOutputOptions(files,operation){
-  if(!files.length)return [];const ext=fileExtension(files[0].name);
-  if(operation==="zip")return [["zip","ZIP"]];
-  if(operation==="compress"){if(files.length!==1)return [];if(ext==="pdf")return [["pdf","PDF"]];if(FILE_IMAGE_EXTS.has(ext)&&!["heic","heif"].includes(ext))return [[ext==="jpeg"?"jpg":ext,ext.toUpperCase()]];return [];}
-  if(operation==="resize"){if(!FILE_IMAGE_EXTS.has(ext)||["heic","heif"].includes(ext))return [];return [["jpg","JPG"],["png","PNG"],["webp","WEBP"]];}
-  if(FILE_IMAGE_EXTS.has(ext))return [["jpg","JPG"],["png","PNG"],["webp","WEBP"],["heic","HEIC"],["pdf","PDF"]].filter(x=>x[0]!==ext&&!(ext==="jpeg"&&x[0]==="jpg"));
-  if(ext==="svg")return [["png","PNG"]];
-  if(ext==="pdf")return [["jpg","JPG (uma página / ZIP)"],["png","PNG (uma página / ZIP)"],["zip","ZIP de imagens"],["docx","DOCX"],["txt","TXT"],["xlsx","XLSX"],["dxf","DXF"],["dwg","DWG"]];
-  if(ext==="docx")return [["pdf","PDF"]];
-  if(ext==="txt")return [["pdf","PDF"]];
-  if(ext==="csv")return [["xlsx","XLSX"]];
-  if(ext==="xlsx")return [["csv","CSV"]];
-  if(FILE_VIDEO_EXTS.has(ext))return [["mp4","MP4"],["webm","WEBM"],["avi","AVI"],["gif","GIF"],["mp3","MP3"]].filter(x=>x[0]!==ext);
-  if(FILE_AUDIO_EXTS.has(ext))return [["mp3","MP3"],["wav","WAV"],["ogg","OGG"]].filter(x=>x[0]!==ext);
+function fileKindFromExtension(ext){
+  if(FILE_IMAGE_EXTS.has(ext)) return "imagem";
+  if(FILE_DOC_EXTS.has(ext)) return "arquivo";
+  if(FILE_AUDIO_EXTS.has(ext)) return "audio";
+  if(FILE_VIDEO_EXTS.has(ext)) return "video";
+  return "";
+}
+function fileOutputOptions(files){
+  if(!files.length)return [];
+  const ext=fileExtension(files[0].name);
+  const kind=fileKindFromExtension(ext);
+  if(files.length>1){
+    return kind==="imagem" && files.every(f=>fileKindFromExtension(fileExtension(f.name))==="imagem")
+      ? [["pdf","PDF (juntar imagens)"]]
+      : [];
+  }
+  if(kind==="imagem"){
+    if(ext==="svg") return [["png","PNG"],["jpg","JPG"],["webp","WEBP"],["pdf","PDF"]];
+    const opts=[["jpg","JPG"],["png","PNG"],["webp","WEBP"],["bmp","BMP"],["tiff","TIFF"],["gif","GIF"],["heic","HEIC"],["pdf","PDF"]];
+    return opts.filter(x=>x[0]!==ext && !(ext==="jpeg"&&x[0]==="jpg") && !(ext==="tif"&&x[0]==="tiff"));
+  }
+  if(ext==="pdf") return [["jpg","JPG (uma página ou ZIP se houver várias)"],["png","PNG (uma página ou ZIP se houver várias)"],["docx","DOCX"],["txt","TXT"],["xlsx","XLSX"],["dxf","DXF"]];
+  if(ext==="docx") return [["pdf","PDF"],["txt","TXT"]];
+  if(ext==="txt") return [["pdf","PDF"],["docx","DOCX"]];
+  if(ext==="csv") return [["xlsx","XLSX"]];
+  if(ext==="xlsx") return [["csv","CSV"]];
+  if(kind==="video"){
+    const opts=[["mp4","MP4"],["webm","WEBM"],["avi","AVI"],["gif","GIF"],["mp3","MP3"],["wav","WAV"],["m4a","M4A"],["aac","AAC"],["flac","FLAC"],["ogg","OGG"]];
+    return opts.filter(x=>x[0]!==ext);
+  }
+  if(kind==="audio"){
+    const opts=[["mp3","MP3"],["wav","WAV"],["ogg","OGG"],["m4a","M4A"],["aac","AAC"],["flac","FLAC"]];
+    return opts.filter(x=>x[0]!==ext);
+  }
   return [];
 }
 function bindFileConverter(){
-  const f=document.getElementById("convertFile"),drop=document.getElementById("fileDropzone"),op=document.getElementById("fileOperation"),fmt=document.getElementById("convertFormat"),btn=document.getElementById("convertBtn"),st=document.getElementById("convertStatus"),list=document.getElementById("fileList"),res=document.getElementById("convertResult");
-  if(!f||!drop||!op)return;
+  const f=document.getElementById("convertFile"),drop=document.getElementById("fileDropzone"),fmt=document.getElementById("convertFormat"),btn=document.getElementById("convertBtn"),st=document.getElementById("convertStatus"),list=document.getElementById("fileList"),res=document.getElementById("convertResult");
+  const kindGrid=document.getElementById("converterKindGrid"),fileStep=document.getElementById("converterFileStep"),outputStep=document.getElementById("converterOutputStep"),hint=document.getElementById("converterFileHint");
+  if(!f||!kindGrid||!fileStep||!outputStep)return;
+
+  let selectedKind="";
+  const resetOutput=()=>{fmt.innerHTML='<option value="">Selecione o arquivo primeiro</option>';btn.disabled=true;outputStep.hidden=true;};
   const update=()=>{
-    const files=[...(f.files||[])],operation=op.value,opts=fileOutputOptions(files,operation);
-    fmt.innerHTML=opts.length?opts.map(x=>`<option value="${x[0]}">${x[1]}</option>`).join(""):`<option value="">Não disponível para este arquivo</option>`;
-    document.getElementById("fileOutputField").style.display=operation==="zip"?"none":"";
-    document.getElementById("fileQualityField").style.display=operation==="convert"||operation==="compress"?"":"none";
-    document.getElementById("fileWidthField").style.display=operation==="resize"?"":"none";
-    document.getElementById("fileHeightField").style.display=operation==="resize"?"":"none";
+    const files=[...(f.files||[])];
+    const invalid=selectedKind && files.some(x=>fileKindFromExtension(fileExtension(x.name))!==selectedKind);
+    if(invalid){
+      f.value="";
+      list.innerHTML='<div class="file-empty">O tipo do arquivo não corresponde à categoria escolhida. Selecione um arquivo compatível.</div>';
+      resetOutput();
+      st.textContent="⚠️ Escolha um arquivo compatível com a categoria selecionada.";
+      return;
+    }
+    const opts=fileOutputOptions(files);
+    fmt.innerHTML=opts.length?opts.map(x=>`<option value="${x[0]}">${x[1]}</option>`).join(""):'<option value="">Nenhuma conversão disponível</option>';
+    list.innerHTML=files.length?files.map(x=>`<div class="file-item"><span class="file-item-icon">${fileKindFromExtension(fileExtension(x.name))==="imagem"?"🖼️":selectedKind==="audio"?"🎵":selectedKind==="video"?"🎬":"📄"}</span><span class="file-item-name">${esc(x.name)}</span><small>${num(x.size/1024/1024)} MB</small></div>`).join(""):'<div class="file-empty">Nenhum arquivo selecionado.</div>';
+    outputStep.hidden=!files.length;
     btn.disabled=!files.length||!opts.length;
-    btn.textContent=operation==="zip"?"Criar ZIP":operation==="compress"?"Comprimir arquivo":operation==="resize"?"Redimensionar":"Converter";
-    list.innerHTML=files.length?files.map(x=>`<div class="file-item"><span class="file-item-icon">📄</span><span class="file-item-name">${esc(x.name)}</span><small>${num(x.size/1024/1024)} MB</small></div>`).join(""):`<div class="file-empty">Nenhum arquivo selecionado.</div>`;
-    st.textContent=files.length?files.length+" arquivo(s) selecionado(s).":"Selecione um arquivo para começar.";
+    st.textContent=files.length?(files.length>1?"Vários arquivos selecionados.":"Arquivo selecionado: "+files[0].name):"Escolha um arquivo.";
   };
+
+  kindGrid.querySelectorAll("[data-file-kind]").forEach(card=>{
+    card.addEventListener("click",()=>{
+      selectedKind=card.dataset.fileKind;
+      kindGrid.querySelectorAll("[data-file-kind]").forEach(x=>x.classList.toggle("active",x===card));
+      f.accept=FILE_KIND_ACCEPT[selectedKind]||"*/*";
+      f.multiple=selectedKind==="imagem";
+      f.value="";
+      list.innerHTML='<div class="file-empty">Nenhum arquivo selecionado.</div>';
+      fileStep.hidden=false;outputStep.hidden=true;btn.disabled=true;
+      hint.textContent=selectedKind==="imagem"?"Imagens raster/vetoriais. Para juntar várias imagens em um PDF, selecione mais de uma.":selectedKind==="arquivo"?"PDF, Word, texto ou planilha.":"Selecione um arquivo de "+selectedKind+".";
+      st.textContent="2. Escolha o arquivo.";
+      fileStep.scrollIntoView({behavior:"smooth",block:"nearest"});
+    });
+  });
+
   f.addEventListener("change",update);
-  drop.addEventListener("dragover",e=>{e.preventDefault();drop.classList.add("is-dragging")});
-  drop.addEventListener("dragleave",()=>drop.classList.remove("is-dragging"));
-  drop.addEventListener("drop",e=>{e.preventDefault();drop.classList.remove("is-dragging");try{const dt=new DataTransfer();[...e.dataTransfer.files].forEach(x=>dt.items.add(x));f.files=dt.files;}catch{}update();});
-  drop.addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();f.click()}});
-  op.addEventListener("change",update);update();
-  document.getElementById("convertResetBtn")?.addEventListener("click",()=>{f.value="";op.value="convert";fmt.innerHTML="<option value=\"\">Selecione o arquivo primeiro</option>";btn.disabled=true;st.textContent="Selecione um arquivo para começar.";update();});
+  drop?.addEventListener("dragover",e=>{e.preventDefault();drop.classList.add("is-dragging")});
+  drop?.addEventListener("dragleave",()=>drop.classList.remove("is-dragging"));
+  drop?.addEventListener("drop",e=>{
+    e.preventDefault();drop.classList.remove("is-dragging");
+    if(!selectedKind)return;
+    try{const dt=new DataTransfer();[...e.dataTransfer.files].forEach(x=>dt.items.add(x));f.files=dt.files;}catch{}
+    update();
+  });
+  drop?.addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();f.click()}});
+
+  fmt.addEventListener("change",()=>{
+    const out=fmt.value;
+    const imageOut=["jpg","png","webp","bmp","tiff","gif","heic"].includes(out);
+    document.getElementById("fileQualityField").hidden=!imageOut;
+    document.getElementById("fileWidthField").hidden=!(selectedKind==="imagem"&&fileExtension(f.files?.[0]?.name)==="svg");
+    document.getElementById("fileHeightField").hidden=!(selectedKind==="imagem"&&fileExtension(f.files?.[0]?.name)==="svg");
+    if(f.files?.[0]&&out)st.textContent="3. Pronto para converter para "+out.toUpperCase()+".";
+  });
+
   btn.addEventListener("click",async()=>{
-    const files=[...(f.files||[])],operation=op.value,out=fmt.value;if(!files.length||(!out&&operation!=="zip"))return;
-    btn.disabled=true;st.textContent="⏳ Processando arquivo...";
+    const files=[...(f.files||[])],out=fmt.value;
+    if(!files.length||!out)return;
+    btn.disabled=true;st.textContent="⏳ Convertendo...";
     try{
-      const fd=new FormData();files.forEach(x=>fd.append("files",x));fd.append("output_format",out||"zip");fd.append("operation",operation);fd.append("tool_id","file-unified");fd.append("quality",document.getElementById("convertQuality")?.value||85);fd.append("width",document.getElementById("convertWidth")?.value||0);fd.append("height",document.getElementById("convertHeight")?.value||0);
-      const rr=await fetch("/api/files/convert-plus",{method:"POST",body:fd});let data={};if(!rr.ok){try{data=await rr.json()}catch{}throw new Error(data.detail||"Não foi possível processar o arquivo.");}
-      const blob=await rr.blob(),cd=rr.headers.get("content-disposition")||"",m=cd.match(/filename="?([^"]+)"?/i),name=m?m[1]:"resolvei-processado."+out,url=URL.createObjectURL(blob);
-      res.innerHTML=`<div class="result-box"><div class="result-label">Pronto</div><div class="result-main">✓</div><p>${esc(name)}</p><div class="actions"><a class="btn primary" href="${url}" download="${esc(name)}">Baixar novamente</a></div></div>`;
-      st.textContent="✅ Concluído.";const a=document.createElement("a");a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),30000);
-    }catch(e){st.innerHTML=`⚠️ ${esc(e.message)}`;}finally{btn.disabled=false;}
+      const fd=new FormData();
+      files.forEach(x=>fd.append("files",x));
+      fd.append("output_format",out);
+      fd.append("operation","convert");
+      fd.append("tool_id","file-unified");
+      fd.append("quality",document.getElementById("convertQuality")?.value||85);
+      fd.append("width",document.getElementById("convertWidth")?.value||0);
+      fd.append("height",document.getElementById("convertHeight")?.value||0);
+      const rr=await fetch("/api/files/convert-plus",{method:"POST",body:fd});
+      let data={}; if(!rr.ok){try{data=await rr.json()}catch{} throw new Error(data.detail||"Não foi possível converter o arquivo.");}
+      const blob=await rr.blob(),cd=rr.headers.get("content-disposition")||"",m=cd.match(/filename="?([^"]+)"?/i),name=m?m[1]:"resolvei-convertido."+out,url=URL.createObjectURL(blob);
+      res.innerHTML=`<div class="result-box"><div class="result-label">Conversão concluída</div><div class="result-main">✓</div><p>${esc(name)}</p><div class="actions"><a class="btn primary" href="${url}" download="${esc(name)}">Baixar novamente</a></div></div>`;
+      st.textContent="✅ Conversão concluída.";
+      const a=document.createElement("a");a.href=url;a.download=name;a.click();
+      setTimeout(()=>URL.revokeObjectURL(url),30000);
+    }catch(e){st.innerHTML="⚠️ "+esc(e.message||"Falha na conversão.");}
+    finally{btn.disabled=false;}
+  });
+
+  document.getElementById("convertResetBtn")?.addEventListener("click",()=>{
+    selectedKind="";kindGrid.querySelectorAll("[data-file-kind]").forEach(x=>x.classList.remove("active"));
+    f.value="";f.accept="";f.multiple=false;
+    list.innerHTML='<div class="file-empty">Nenhum arquivo selecionado.</div>';
+    resetOutput();res.innerHTML='<div class="result-box"><div class="result-label">Resultado</div><div class="result-main">—</div><p>O arquivo convertido aparecerá aqui.</p></div>';
+    fileStep.hidden=true;st.textContent="1. Selecione o tipo de arquivo para começar.";
   });
 }
 function toolUI(id){
