@@ -143,7 +143,7 @@ const ACTIVE_TOOL_IDS = new Set([
   'gerador-de-senhas','combustivel-viagem','tinta','piso','concreto','iluminacao','ar-condicionado','placas-solares',
   'conversor-arquivos','conversor-unidades','idade','datas-e-horarios','somar-horas','rescisao-clt','clt-vs-pj',
   'receita','custo-receita','por-quanto-vender','churrasco','festa','lista-compras',
-  'gerenciamento-risco','visao-opcoes','analista-bin'
+  'gerenciamento-risco','visao-opcoes','analista-bin','consultor-senior'
 ]);
 for(let i=tools.length-1;i>=0;i--){if(!ACTIVE_TOOL_IDS.has(tools[i].id))tools.splice(i,1);}
 const popular = ['porcentagem','combustivel-viagem','piso','tinta','financiamento','juros-compostos','conversor-arquivos','lista-compras'];
