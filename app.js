@@ -1,3 +1,5 @@
+let resolveiAuth=null,resolveiDb=null,resolveiUser=null,resolveiFirebaseError="";
+
 const CATS = {
   dinheiro: { name:'Dinheiro', icon:'💰', desc:'Contas, juros, descontos e planejamento.' },
   casa: { name:'Casa & Construção', icon:'🏠', desc:'Obra, reforma, pintura, piso e instalações.' },
@@ -1247,7 +1249,6 @@ const RESOLVEI_FIREBASE_CONFIG = {
   projectId:"resolvei-c95d1",storageBucket:"resolvei-c95d1.firebasestorage.app",
   messagingSenderId:"671425023175",appId:"1:671425023175:web:deb8ce2174b07e6c16c2e2"
 };
-let resolveiAuth=null,resolveiDb=null,resolveiUser=null,resolveiFirebaseError="";
 function resolveiAuthMessage(error){
   const code=error?.code||"";
   const map={
