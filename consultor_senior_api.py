@@ -672,9 +672,14 @@ def _call_openai_compatible(
             {"role": "user", "content": message},
         ],
         "temperature": 0.1,
-        "max_tokens": 1800,
-        "response_format": {"type": "json_object"},
+        "max_completion_tokens": 1800,
     }
+
+    # Groq suporta JSON mode neste endpoint. No OpenRouter/free alguns
+    # endpoints gratuitos não expõem response_format; o parser do Consultor
+    # valida o JSON depois da resposta.
+    if provider == "Groq":
+        payload["response_format"] = {"type": "json_object"}
 
     if provider == "Groq" and model.startswith("openai/gpt-oss"):
         payload["reasoning_effort"] = "medium"
