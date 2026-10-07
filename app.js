@@ -1240,7 +1240,7 @@ function downloadShoppingTxt(){const text=document.getElementById('shoppingText'
 document.getElementById('year').textContent=new Date().getFullYear();
 const savedTheme=localStorage.getItem('resolvei_theme');if(savedTheme)document.documentElement.dataset.theme=savedTheme;
 document.getElementById('themeToggle').addEventListener('click',()=>{const dark=document.documentElement.dataset.theme==='dark';document.documentElement.dataset.theme=dark?'':'dark';localStorage.setItem('resolvei_theme',dark?'light':'dark');});
-window.addEventListener('hashchange',()=>render()); render();
+window.addEventListener('hashchange',()=>render());
 
 /* =========================
    Resolvei — Firebase Auth + Minhas IAs
@@ -1407,3 +1407,4 @@ render=function(){
   } else if(!resolveiUser && (location.hash||'').includes('conta')) resolveiBindAuth();
 };
 resolveiFirebaseInit();
+render();
