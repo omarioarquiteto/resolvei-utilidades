@@ -192,3 +192,272 @@ def _adx(rows: list[dict[str, float]], period: int = 14) -> tuple[float, float, 
     pdi = 100.0 * p_vals[-1] / atr_vals[-1] if atr_vals[-1] > 0 else math.nan
     mdi = 100.0 * m_vals[-1] / atr_vals[-1] if atr_vals[-1] > 0 else math.nan
     return adx_vals[-1], pdi, mdi
+
+
+def _obv(rows: list[dict[str, float]]) -> list[float]:
+    out = [0.0]
+    for i in range(1, len(rows)):
+        volume = rows[i]["volume"]
+        if rows[i]["close"] > rows[i - 1]["close"]:
+            out.append(out[-1] + volume)
+        elif rows[i]["close"] < rows[i - 1]["close"]:
+            out.append(out[-1] - volume)
+        else:
+            out.append(out[-1])
+    return out
+
+
+def _swing_points(rows: list[dict[str, float]], width: int = 2):
+    highs = []
+    lows = []
+    for i in range(width, len(rows) - width):
+        h = rows[i]["high"]
+        l = rows[i]["low"]
+        if h >= max(rows[j]["high"] for j in range(i - width, i + width + 1)):
+            highs.append((i, h))
+        if l <= min(rows[j]["low"] for j in range(i - width, i + width + 1)):
+            lows.append((i, l))
+    return highs, lows
+
+
+def _safe(value: Any) -> Any:
+    if isinstance(value, float) and (math.isnan(value) or math.isinf(value)):
+        return None
+    return value
+
+
+def _nearest_level(levels: list[float], reference: float) -> dict[str, Any]:
+    if not levels or not reference:
+        return {"nearest": None, "distance_pct": None, "tests": 0}
+    nearest = min(levels, key=lambda x: abs(x - reference))
+    tolerance = max(reference * 0.0005, abs(reference) * 0.0008)
+    tests = sum(1 for level in levels if abs(level - nearest) <= tolerance)
+    return {
+        "nearest": nearest,
+        "distance_pct": abs(nearest - reference) / reference * 100,
+        "tests": tests,
+    }
+
+
+def _summarize(rows: list[dict[str, float]], timeframe: str) -> dict[str, Any]:
+    closes = [x["close"] for x in rows]
+    highs = [x["high"] for x in rows]
+    lows = [x["low"] for x in rows]
+    current = closes[-1]
+
+    ema9 = _ema(closes, 9)
+    ema21 = _ema(closes, 21)
+    ema50 = _ema(closes, 50)
+    ema100 = _ema(closes, 100)
+    rsi = _rsi(closes, 14)
+    atr = _atr(rows, 14)
+    macd_line, macd_hist = _macd(closes)
+    bb_mid, bb_up, bb_low = _bollinger(closes, 20)
+    st_k, st_d = _stoch(rows, 14)
+    adx, pdi, mdi = _adx(rows, 14)
+    obv = _obv(rows)
+
+    swing_highs, swing_lows = _swing_points(rows[-100:], 2)
+    recent_window = min(20, len(rows))
+    recent_high = max(highs[-recent_window:])
+    recent_low = min(lows[-recent_window:])
+
+    resistance = _nearest_level(
+        [recent_high] + [x[1] for x in swing_highs[-6:]],
+        current,
+    )
+    support = _nearest_level(
+        [recent_low] + [x[1] for x in swing_lows[-6:]],
+        current,
+    )
+
+    atr_now = atr[-1]
+    last = rows[-1]
+    body = abs(last["close"] - last["open"])
+    candle_range = max(last["high"] - last["low"], 1e-12)
+    upper_wick = last["high"] - max(last["open"], last["close"])
+    lower_wick = min(last["open"], last["close"]) - last["low"]
+
+    ema_slope = (
+        (ema21[-1] - ema21[-6]) / current * 100
+        if len(ema21) > 6 and current else 0
+    )
+
+    if ema9[-1] > ema21[-1] > ema50[-1] and ema_slope > 0:
+        trend = "ALTA"
+    elif ema9[-1] < ema21[-1] < ema50[-1] and ema_slope < 0:
+        trend = "BAIXA"
+    else:
+        trend = "LATERAL/TRANSIÇÃO"
+
+    sh = [x[1] for x in swing_highs[-4:]]
+    sl = [x[1] for x in swing_lows[-4:]]
+    structure = "NEUTRA"
+    if len(sh) >= 2 and len(sl) >= 2:
+        if sh[-1] > sh[-2] and sl[-1] > sl[-2]:
+            structure = "HH + HL (alta)"
+        elif sh[-1] < sh[-2] and sl[-1] < sl[-2]:
+            structure = "LH + LL (baixa)"
+        elif sh[-1] > sh[-2] or sl[-1] > sl[-2]:
+            structure = "MISTA, viés comprador"
+        elif sh[-1] < sh[-2] or sl[-1] < sl[-2]:
+            structure = "MISTA, viés vendedor"
+
+    return {
+        "timeframe": timeframe,
+        "candles": len(rows),
+        "current_price": current,
+        "trend": trend,
+        "structure": structure,
+        "ema": {
+            "ema9": _safe(ema9[-1]),
+            "ema21": _safe(ema21[-1]),
+            "ema50": _safe(ema50[-1]),
+            "ema100": _safe(ema100[-1]),
+            "slope_21_pct": _safe(ema_slope),
+            "price_vs_ema21_pct": _safe((current - ema21[-1]) / current * 100 if current else 0),
+            "price_vs_ema50_pct": _safe((current - ema50[-1]) / current * 100 if current else 0),
+        },
+        "support": support,
+        "resistance": resistance,
+        "momentum": {
+            "rsi14": _safe(rsi[-1]),
+            "rsi_change_5": _safe(rsi[-1] - rsi[-6] if len(rsi) > 6 else None),
+            "macd": _safe(macd_line[-1]),
+            "macd_hist": _safe(macd_hist[-1]),
+            "macd_hist_change": _safe(macd_hist[-1] - macd_hist[-4] if len(macd_hist) > 4 else None),
+            "roc10_pct": _safe((current / closes[-11] - 1.0) * 100 if len(closes) > 11 and closes[-11] else None),
+        },
+        "volatility": {
+            "atr14": _safe(atr_now),
+            "atr_pct_price": _safe(atr_now / current * 100 if current else None),
+            "recent_range_pct": _safe((recent_high - recent_low) / current * 100 if current else None),
+            "bollinger_width_pct": _safe((bb_up[-1] - bb_low[-1]) / bb_mid[-1] * 100 if bb_mid[-1] else None),
+        },
+        "stochastic": {
+            "k14": _safe(st_k[-1]),
+            "d3": _safe(st_d[-1]),
+        },
+        "adx": {
+            "adx14": _safe(adx),
+            "plus_di": _safe(pdi),
+            "minus_di": _safe(mdi),
+        },
+        "obv_direction": (
+            "alta" if len(obv) >= 8 and obv[-1] > obv[-8]
+            else "baixa" if len(obv) >= 8 and obv[-1] < obv[-8]
+            else "neutro"
+        ),
+        "last_candle": {
+            "direction": (
+                "alta" if last["close"] > last["open"]
+                else "baixa" if last["close"] < last["open"]
+                else "neutro"
+            ),
+            "body_pct": body / candle_range * 100,
+            "upper_wick_pct": upper_wick / candle_range * 100,
+            "lower_wick_pct": lower_wick / candle_range * 100,
+            "range_pct_atr": (
+                candle_range / atr_now
+                if atr_now and not math.isnan(atr_now) else None
+            ),
+        },
+        "recent_high": recent_high,
+        "recent_low": recent_low,
+    }
+
+
+def _compact_candles(rows: list[dict[str, float]], limit: int = 100):
+    return [[
+        round(x["time"]),
+        x["open"],
+        x["high"],
+        x["low"],
+        x["close"],
+        x["volume"],
+    ] for x in rows[-limit:]]
+
+
+def _parse_ai_json(raw: str) -> dict[str, Any]:
+    text = raw.strip()
+    fence = chr(96) * 3
+    if text.startswith(fence):
+        text = text.strip(chr(96))
+        if text.lower().startswith("json"):
+            text = text[4:].lstrip()
+
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError:
+        start = text.find("{")
+        end = text.rfind("}")
+        if start < 0 or end <= start:
+            raise HTTPException(
+                status_code=502,
+                detail="O Gemini não retornou um JSON de análise válido.",
+            )
+        try:
+            data = json.loads(text[start:end + 1])
+        except Exception as exc:
+            raise HTTPException(
+                status_code=502,
+                detail="Não foi possível interpretar a resposta do Gemini.",
+            ) from exc
+
+    if not isinstance(data, dict):
+        raise HTTPException(
+            status_code=502,
+            detail="A resposta do Gemini está em formato inválido.",
+        )
+    return data
+
+
+def _sanitize_analysis(data: dict[str, Any], expiry: int) -> dict[str, Any]:
+    decision = str(data.get("decision", "SEM OPERACAO")).upper().replace("Ç", "C")
+    status = str(data.get("status", "AGUARDAR")).upper().replace("Ó", "O")
+
+    if decision not in {"CALL", "PUT", "SEM OPERACAO"}:
+        decision = "SEM OPERACAO"
+    if status not in {"AGORA", "PROXIMO", "AGUARDAR", "NAO OPERAR"}:
+        status = "AGUARDAR"
+
+    try:
+        confidence = max(0.0, min(100.0, float(data.get("confidence", 0))))
+    except Exception:
+        confidence = 0.0
+
+    try:
+        exp = int(data.get("expiry_minutes", expiry))
+    except Exception:
+        exp = expiry
+    if exp not in {1, 5, 15}:
+        exp = expiry
+
+    def text_value(key: str, size: int) -> str:
+        return str(data.get(key, "") or "").strip()[:size]
+
+    def list_value(key: str) -> list[str]:
+        value = data.get(key, [])
+        if not isinstance(value, list):
+            value = [value]
+        return [str(x).strip() for x in value if str(x).strip()][:6]
+
+    return {
+        "decision": decision,
+        "status": status,
+        "confidence": round(confidence, 1),
+        "expiry_minutes": exp,
+        "summary": text_value("summary", 500),
+        "structure": text_value("structure", 1200),
+        "trend": text_value("trend", 700),
+        "zone": text_value("zone", 1000),
+        "trigger": text_value("trigger", 1000),
+        "momentum": text_value("momentum", 1000),
+        "volatility": text_value("volatility", 700),
+        "price_action": text_value("price_action", 1200),
+        "confluences": list_value("confluences"),
+        "risks": list_value("risks"),
+        "why_now": text_value("why_now", 1400),
+        "facts_warning": text_value("facts_warning", 800),
+        "data_quality": text_value("data_quality", 30),
+    }
