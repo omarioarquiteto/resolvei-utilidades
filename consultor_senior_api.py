@@ -596,7 +596,7 @@ def _ai_market_payload(
         # O motor local calcula os indicadores usando todos os candles.
         # Para a IA, enviamos apenas uma janela compacta para manter
         # a requisição confortável nos limites gratuitos.
-        tf: 25 if tf == "5m" else 12
+        tf: 22 if tf in {"1m", "5m"} else 15
         for tf in frames
     }
     return {
@@ -890,7 +890,7 @@ async def consult(
         "ok": True,
         "found": found,
         "analysis": analysis,
-        "next_check_seconds": 15 if not found else 0,
+        "next_check_seconds": 25 if not found else 0,
     }
 
 @router.get("/assets")
