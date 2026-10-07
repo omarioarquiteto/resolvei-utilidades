@@ -22,8 +22,6 @@ MIN_CLOSED = {"1m": 100, "5m": 90, "15m": 70}
 
 class ConsultRequest(BaseModel):
     symbol: str = Field(min_length=2, max_length=40)
-    timeframe: str = "1m"
-    expiry_minutes: int = 1
 
 
 def _clean_symbol(symbol: str) -> str:
@@ -418,7 +416,7 @@ def _token(value: Any) -> str:
     return "".join(ch for ch in text if not unicodedata.combining(ch))
 
 
-def _sanitize_analysis(data: dict[str, Any], expiry: int) -> dict[str, Any]:
+def _sanitize_analysis(data: dict[str, Any]) -> dict[str, Any]:
     decision = _token(data.get("decision", "SEM OPERACAO"))
     status = _token(data.get("status", "AGUARDAR"))
 
@@ -432,12 +430,16 @@ def _sanitize_analysis(data: dict[str, Any], expiry: int) -> dict[str, Any]:
     except Exception:
         confidence = 0.0
 
+    timeframe = str(data.get("timeframe", "5m") or "5m").strip().lower()
+    if timeframe not in {"1m", "5m", "15m"}:
+        timeframe = "5m"
+
     try:
-        exp = int(data.get("expiry_minutes", expiry))
+        exp = int(data.get("expiry_minutes", 5))
     except Exception:
-        exp = expiry
+        exp = 5
     if exp not in {1, 5, 15}:
-        exp = expiry
+        exp = 5
 
     def text_value(key: str, size: int) -> str:
         return str(data.get(key, "") or "").strip()[:size]
@@ -452,6 +454,7 @@ def _sanitize_analysis(data: dict[str, Any], expiry: int) -> dict[str, Any]:
         "decision": decision,
         "status": status,
         "confidence": round(confidence, 1),
+        "timeframe": timeframe,
         "expiry_minutes": exp,
         "summary": text_value("summary", 500),
         "structure": text_value("structure", 1200),
@@ -468,6 +471,19 @@ def _sanitize_analysis(data: dict[str, Any], expiry: int) -> dict[str, Any]:
         "data_quality": text_value("data_quality", 30),
     }
 
+
+def _entry_confirmed(analysis: dict[str, Any]) -> bool:
+    """
+    O Consultor só encerra o monitoramento quando existe uma entrada objetiva:
+    CALL/PUT + status AGORA + confiança mínima + gatilho textual + dados adequados.
+    """
+    return (
+        analysis.get("decision") in {"CALL", "PUT"}
+        and analysis.get("status") == "AGORA"
+        and float(analysis.get("confidence") or 0) >= 65
+        and bool(str(analysis.get("trigger") or "").strip())
+        and analysis.get("data_quality") != "insuficiente"
+    )
 
 async def _fetch_candles(client: Any, symbol: str, timeframe: str) -> list[dict[str, float]]:
     interval = INTERVALS[timeframe]
@@ -571,8 +587,6 @@ async def _assets(client: Any) -> list[dict[str, Any]]:
 
 def _ai_market_payload(
     symbol: str,
-    timeframe: str,
-    expiry: int,
     frames: dict[str, list[dict[str, float]]],
     facts: dict[str, Any],
 ) -> dict[str, Any]:
@@ -582,14 +596,17 @@ def _ai_market_payload(
         # O motor local calcula os indicadores usando todos os candles.
         # Para a IA, enviamos apenas uma janela compacta para manter
         # a requisição confortável nos limites gratuitos.
-        tf: 40 if tf == timeframe else 20
+        tf: 25 if tf == "5m" else 12
         for tf in frames
     }
     return {
         "asset": symbol,
         "is_otc": symbol.endswith("-OTC"),
-        "requested_timeframe": timeframe,
-        "expiry_minutes": expiry,
+        "selection": {
+            "timeframe_options": ["1m", "5m", "15m"],
+            "expiry_options_minutes": [1, 5, 15],
+            "instruction": "Escolha livremente o melhor timeframe de entrada e a melhor expiração com base na estrutura, gatilho, volatilidade e qualidade do setup."
+        },
         "timeframes": {
             tf: {
                 "summary": _summarize(rows, tf),
@@ -606,9 +623,13 @@ def _ai_market_payload(
         "rules": [
             "Não invente fatos, volume, preço, candle ou indicador.",
             "Use os dados fornecidos como base factual.",
+            "Você DEVE escolher timeframe e expiração na resposta final.",
+            "15m serve principalmente para contexto, 5m para estrutura/regiões e 1m para gatilho.",
+            "Escolha o timeframe que produzir o gatilho mais limpo e consistente; não escolha por preferência fixa.",
+            "Escolha a expiração que melhor corresponda ao tempo esperado de confirmação do movimento, usando somente 1, 5 ou 15 minutos.",
             "Conflito entre timeframes reduz a confiança.",
-            "Sem gatilho confirmado, não force entrada AGORA.",
-            "Se a localização do preço for ruim, prefira AGUARDAR.",
+            "Sem gatilho confirmado, use decision=SEM OPERACAO e status=AGUARDAR internamente; a aplicação continuará o monitoramento.",
+            "Só use status=AGORA quando existir ponto de entrada objetivo e ainda executável.",
             "A resposta final deve ser JSON válido sem markdown.",
         ],
     }
@@ -616,12 +637,10 @@ def _ai_market_payload(
 
 def _ai_message(
     symbol: str,
-    timeframe: str,
-    expiry: int,
     frames: dict[str, list[dict[str, float]]],
     facts: dict[str, Any],
 ) -> str:
-    market = _ai_market_payload(symbol, timeframe, expiry, frames, facts)
+    market = _ai_market_payload(symbol, frames, facts)
     return (
         CONSULTOR_PROMPT
         + "\n\nDADOS DO MERCADO ATUAL:\n"
@@ -721,8 +740,6 @@ def _call_openai_compatible(
 
 async def _call_gemini(
     symbol: str,
-    timeframe: str,
-    expiry: int,
     frames: dict[str, list[dict[str, float]]],
     facts: dict[str, Any],
 ) -> tuple[str, str]:
@@ -731,7 +748,7 @@ async def _call_gemini(
     if not GEMINI_API_KEY:
         raise RuntimeError("Gemini: chave não configurada.")
 
-    message = _ai_message(symbol, timeframe, expiry, frames, facts)
+    message = _ai_message(symbol, frames, facts)
     raw = await asyncio.to_thread(
         _provider_call,
         "gemini",
@@ -744,14 +761,12 @@ async def _call_gemini(
 
 async def _call_ai_with_fallback(
     symbol: str,
-    timeframe: str,
-    expiry: int,
     frames: dict[str, list[dict[str, float]]],
     facts: dict[str, Any],
 ) -> tuple[str, str, str]:
     import os
 
-    message = _ai_message(symbol, timeframe, expiry, frames, facts)
+    message = _ai_message(symbol, frames, facts)
     attempts: list[str] = []
 
     groq_key = os.getenv("GROQ_API_KEY", "").strip()
@@ -787,7 +802,7 @@ async def _call_ai_with_fallback(
             attempts.append(str(exc)[:260])
 
     try:
-        raw, model = await _call_gemini(symbol, timeframe, expiry, frames, facts)
+        raw, model = await _call_gemini(symbol, frames, facts)
         return raw, "Gemini", model
     except Exception as exc:
         attempts.append(str(exc)[:260])
@@ -806,21 +821,10 @@ async def consult(
     item = get_session(x_iq_session)
     symbol = _clean_symbol(req.symbol)
 
-    if req.timeframe not in INTERVALS:
-        raise HTTPException(
-            status_code=400,
-            detail="Timeframe inválido. Use 1m, 5m ou 15m.",
-        )
-
-    if req.expiry_minutes not in {1, 5, 15}:
-        raise HTTPException(
-            status_code=400,
-            detail="Expiração inválida. Use 1, 5 ou 15 minutos.",
-        )
-
     started = time.perf_counter()
     client = item["client"]
 
+    # Sempre coletamos 1m/5m/15m: a escolha do melhor período pertence ao Consultor.
     frame_results = await asyncio.gather(*(
         _fetch_candles(client, symbol, timeframe)
         for timeframe in INTERVALS
@@ -834,22 +838,18 @@ async def consult(
     facts = await _facts(symbol)
     raw_ai, provider, model = await _call_ai_with_fallback(
         symbol,
-        req.timeframe,
-        req.expiry_minutes,
         frames,
         facts,
     )
 
-    analysis = _sanitize_analysis(
-        _parse_ai_json(raw_ai),
-        req.expiry_minutes,
-    )
+    analysis = _sanitize_analysis(_parse_ai_json(raw_ai))
+    found = _entry_confirmed(analysis)
 
+    selected_tf = analysis["timeframe"]
     analysis.update({
         "asset": symbol,
-        "timeframe": req.timeframe,
         "is_otc": symbol.endswith("-OTC"),
-        "current_price": frames[req.timeframe][-1]["close"],
+        "current_price": frames[selected_tf][-1]["close"],
         "timestamp": time.strftime(
             "%Y-%m-%dT%H:%M:%SZ",
             time.gmtime(),
@@ -875,8 +875,23 @@ async def consult(
         },
     })
 
-    return {"ok": True, "analysis": analysis}
+    # A interface nunca recebe "SEM OPERAÇÃO" como resultado final.
+    # O ciclo sem gatilho é devolvido como "found=false" e o frontend inicia
+    # uma nova leitura automaticamente.
+    if not found:
+        analysis["decision"] = ""
+        analysis["status"] = "ANALISANDO"
+        analysis["summary"] = (
+            "Nenhum gatilho confirmado neste ciclo. "
+            "O Consultor continua monitorando o ativo."
+        )
 
+    return {
+        "ok": True,
+        "found": found,
+        "analysis": analysis,
+        "next_check_seconds": 15 if not found else 0,
+    }
 
 @router.get("/assets")
 async def assets(
