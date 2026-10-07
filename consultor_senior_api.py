@@ -24,6 +24,9 @@ class ConsultRequest(BaseModel):
     symbol: str = Field(min_length=2, max_length=40)
 
 
+LIVE_MARKET_CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
+LIVE_MARKET_CACHE_TTL = 4.0
+
 def _clean_symbol(symbol: str) -> str:
     s = symbol.strip().upper().replace(" ", "")
     if not s:
@@ -827,6 +830,67 @@ async def _call_ai_with_fallback(
         detail += " | Configure GROQ_API_KEY, OPENROUTER_API_KEY ou GEMINI_API_KEY."
     raise HTTPException(status_code=503, detail=detail)
 
+
+@router.get("/market")
+async def market_snapshot(
+    symbol: str,
+    timeframe: str = "1m",
+    x_iq_session: str | None = Header(default=None),
+) -> dict[str, Any]:
+    item = get_session(x_iq_session)
+    cleaned = _clean_symbol(symbol)
+    selected_tf = str(timeframe or "1m").strip().lower()
+    if selected_tf not in INTERVALS:
+        selected_tf = "1m"
+
+    cache_key = cleaned
+    now = time.monotonic()
+    cached = LIVE_MARKET_CACHE.get(cache_key)
+    if cached and now - cached[0] < LIVE_MARKET_CACHE_TTL:
+        snapshot = cached[1]
+    else:
+        client = item["client"]
+        frame_results = await asyncio.gather(*(
+            _fetch_candles(client, cleaned, tf)
+            for tf in INTERVALS
+        ))
+        frames = {
+            tf: rows
+            for tf, rows in zip(INTERVALS.keys(), frame_results)
+        }
+
+        snapshot = {
+            "asset": cleaned,
+            "timestamp": time.strftime(
+                "%Y-%m-%dT%H:%M:%SZ",
+                time.gmtime(),
+            ),
+            "frames": {
+                tf: {
+                    "summary": _summarize(rows, tf),
+                    "candles": _compact_candles(
+                        rows,
+                        110 if tf == "1m" else 90 if tf == "5m" else 70,
+                    ),
+                }
+                for tf, rows in frames.items()
+            },
+        }
+        LIVE_MARKET_CACHE[cache_key] = (now, snapshot)
+
+    selected = snapshot["frames"][selected_tf]
+    return {
+        "ok": True,
+        "asset": snapshot["asset"],
+        "timestamp": snapshot["timestamp"],
+        "timeframe": selected_tf,
+        "summary": selected["summary"],
+        "candles": selected["candles"],
+        "frames": {
+            tf: {"summary": payload["summary"]}
+            for tf, payload in snapshot["frames"].items()
+        },
+    }
 
 @router.post("/consult")
 async def consult(
