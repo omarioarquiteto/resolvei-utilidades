@@ -2,6 +2,9 @@
   const API = "/api/consultor-senior";
   const KEY = "resolvei_consultor_senior_iq_session";
   let assetNames = [];
+  let monitoring = false;
+  let monitorCycle = 0;
+  let monitorToken = 0;
 
   const $ = id => document.getElementById(id);
   const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;" }[c]));
@@ -98,19 +101,17 @@
 
         '<section class="cs-control card">' +
           '<div class="cs-field">' +
-            '<label for="csAsset">ATIVO</label>' +
-            '<input id="csAsset" list="csAssetList" placeholder="Ex.: EURUSD-OTC" autocomplete="off">' +
-            '<datalist id="csAssetList"></datalist>' +
+            '<label for="csAsset">ATIVO PARA CONSULTA</label>' +
+            '<select id="csAsset"><option value="">SELECIONE UM ATIVO</option></select>' +
           '</div>' +
-          '<div class="cs-field"><label for="csTimeframe">TIMEFRAME</label><select id="csTimeframe"><option value="1m">1 minuto</option><option value="5m" selected>5 minutos</option><option value="15m">15 minutos</option></select></div>' +
-          '<div class="cs-field"><label for="csExpiry">EXPIRAÇÃO</label><select id="csExpiry"><option value="1">1 min</option><option value="5" selected>5 min</option><option value="15">15 min</option></select></div>' +
           '<button id="csConsult" type="button">CONSULTAR</button>' +
         '</section>' +
+        '<div class="cs-ai-choice"><span>TIMEFRAME E EXPIRAÇÃO</span><b>DETERMINADOS PELO CONSULTOR</b><small>O sistema compara 1m, 5m e 15m e escolhe a combinação que apresentar o melhor gatilho.</small></div>
 
-        '<div id="csProgress" class="cs-progress" hidden><span></span><b>Consultando o mercado…</b><small>Coletando candles → contexto → fatos → Gemini</small></div>' +
+        '<div id="csProgress" class="cs-progress" hidden><span></span><b id="csProgressTitle">Monitorando o mercado…</b><small id="csProgressDetail">Comparando 15m → 5m → 1m · contexto → estrutura → gatilho</small></div>' +
         '<div id="csError" class="cs-msg"></div>' +
         '<main id="csResult"><div class="cs-empty"><strong>Escolha um ativo e clique em CONSULTAR.</strong><span>O Consultor Sênior fará uma leitura multi-timeframe e procurará o melhor gatilho disponível.</span></div></main>' +
-        '<footer class="cs-foot"><span id="csMeta">Sessão IQ Option ativa</span><span>Gemini do Resolvei · sem execução automática</span></footer>' +
+        '<footer class="cs-foot"><span id="csMeta">Sessão IQ Option ativa</span><span>IA automática · sem execução de ordens</span></footer>' +
       '</div>';
 
     $("csLogout").onclick = async () => {
@@ -119,36 +120,58 @@
       renderRoute();
     };
 
-    $("csConsult").onclick = consult;
+    $("csConsult").onclick = () => monitoring ? stopMonitoring() : consult();
   }
 
-  function progress(show) {
+  function progress(show, cycle = 0) {
     const box = $("csProgress");
     const button = $("csConsult");
+    const asset = $("csAsset")?.value || "";
     if (box) box.hidden = !show;
-    if (button) {
-      button.disabled = show;
-      button.textContent = show ? "CONSULTANDO…" : "CONSULTAR";
+
+    if (show) {
+      $("csProgressTitle").textContent = cycle
+        ? "Analisando " + asset + " · ciclo " + cycle
+        : "Monitorando o mercado…";
+      $("csProgressDetail").textContent =
+        "15m → 5m → 1m · contexto → estrutura → regiões → price action → gatilho";
     }
+
+    if (button) {
+      button.disabled = false;
+      button.textContent = show ? "PARAR CONSULTA" : "CONSULTAR";
+    }
+
+    const select = $("csAsset");
+    if (select) select.disabled = show;
+  }
+
+  function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+  }
+
+  function stopMonitoring() {
+    monitoring = false;
+    monitorToken += 1;
+    progress(false);
+    const error = $("csError");
+    if (error) error.textContent = "Monitoramento interrompido pelo usuário.";
   }
 
   async function loadAssets() {
-    const input = $("csAsset");
-    const list = $("csAssetList");
-    if (!input || !list) return;
+    const select = $("csAsset");
+    if (!select) return;
 
     try {
       const data = await call("/assets");
-      assetNames = (data.assets || []).map(x => x.symbol).filter(Boolean);
+      assetNames = (data.assets || [])
+        .map(x => x.symbol)
+        .filter(Boolean)
+        .sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" }));
 
-      list.innerHTML = assetNames
-        .map(x => '<option value="' + esc(x) + '"></option>')
-        .join("");
-
-      if (!input.value && assetNames.length) {
-        const preferred = assetNames.find(x => /^(EURUSD|EURUSD-OTC)$/i.test(x));
-        input.value = preferred || assetNames[0];
-      }
+      select.innerHTML =
+        '<option value="">SELECIONE UM ATIVO</option>' +
+        assetNames.map(x => '<option value="' + esc(x) + '">' + esc(x) + '</option>').join("");
 
       $("csMeta").textContent = "IQ Option ativa · " + assetNames.length + " ativos disponíveis";
     } catch (error) {
@@ -233,50 +256,85 @@
 
   async function consult() {
     const asset = ($("csAsset").value || "").trim().toUpperCase();
-    const timeframe = $("csTimeframe").value;
-    const expiry = Number($("csExpiry").value);
     const error = $("csError");
     const result = $("csResult");
 
     if (!asset) {
-      error.textContent = "Informe o ativo que será analisado.";
+      error.textContent = "Selecione o ativo que será analisado.";
       return;
     }
 
     error.textContent = "";
-    progress(true);
+    monitoring = true;
+    monitorCycle = 0;
+    const token = ++monitorToken;
+
+    progress(true, 0);
 
     result.innerHTML =
       '<div class="cs-thinking">' +
         '<div class="cs-spinner"></div>' +
-        '<strong>O Consultor está analisando…</strong>' +
-        '<span>Estrutura · suporte/resistência · price action · momentum · volatilidade · multi-timeframe</span>' +
+        '<strong>O Consultor está procurando um ponto de entrada…</strong>' +
+        '<span>Ele vai continuar analisando o ativo até encontrar um gatilho confirmado. Timeframe e expiração serão escolhidos automaticamente.</span>' +
       '</div>';
 
-    try {
-      const data = await call("/consult", {
-        method: "POST",
-        body: JSON.stringify({
-          symbol: asset,
-          timeframe: timeframe,
-          expiry_minutes: expiry
-        })
-      });
+    while (monitoring && token === monitorToken) {
+      monitorCycle += 1;
+      progress(true, monitorCycle);
 
-      result.innerHTML = resultCard(data.analysis || {});
-      const provider = data.analysis?.ai_provider || (data.analysis?.gemini_model ? "Gemini" : "IA");
-      const model = data.analysis?.ai_model || data.analysis?.gemini_model || "";
-      $("csMeta").textContent = provider + (model ? " · " + model : "") + " · análise concluída";
-    } catch (ex) {
-      error.textContent = "⚠️ " + ex.message;
-      result.innerHTML =
-        '<div class="cs-empty">' +
-          '<strong>Não foi possível concluir a consulta.</strong>' +
-          '<span>Verifique o ativo, a sessão da IQ Option e a configuração do Gemini.</span>' +
-        '</div>';
-    } finally {
-      progress(false);
+      try {
+        const data = await call("/consult", {
+          method: "POST",
+          body: JSON.stringify({ symbol: asset })
+        });
+
+        if (data.found && data.analysis) {
+          monitoring = false;
+          result.innerHTML = resultCard(data.analysis);
+
+          const provider = data.analysis?.ai_provider || "IA";
+          const model = data.analysis?.ai_model || data.analysis?.gemini_model || "";
+          const tf = data.analysis?.timeframe || "—";
+          const exp = data.analysis?.expiry_minutes || "—";
+          $("csMeta").textContent =
+            provider + (model ? " · " + model : "") +
+            " · " + tf + " · expiração " + exp + " min · ENTRADA ENCONTRADA";
+
+          progress(false);
+          return;
+        }
+
+        error.textContent = "";
+        result.innerHTML =
+          '<div class="cs-thinking">' +
+            '<div class="cs-spinner"></div>' +
+            '<strong>Nenhum gatilho confirmado ainda.</strong>' +
+            '<span>O Consultor continua monitorando ' + esc(asset) + ' e aguardará uma configuração de entrada com confiança suficiente.</span>' +
+          '</div>';
+
+        const waitSeconds = Math.max(8, Math.min(30, Number(data.next_check_seconds || 15)));
+        $("csProgressDetail").textContent =
+          "Próxima leitura em " + waitSeconds + "s · comparando 15m → 5m → 1m";
+
+        await sleep(waitSeconds * 1000);
+      } catch (ex) {
+        if (!monitoring || token !== monitorToken) break;
+
+        // Erros de provedor/candles podem ser transitórios. Não encerramos o
+        // monitoramento: mostramos o problema e tentamos novamente.
+        error.textContent = "⚠️ " + ex.message + " · nova tentativa automática.";
+        result.innerHTML =
+          '<div class="cs-thinking">' +
+            '<div class="cs-spinner"></div>' +
+            '<strong>Reconectando a análise…</strong>' +
+            '<span>O Consultor continuará tentando enquanto a sessão da IQ Option estiver ativa.</span>' +
+          '</div>';
+
+        await sleep(10000);
+      }
     }
+
+    progress(false);
   }
 
   async function renderConnected() {
