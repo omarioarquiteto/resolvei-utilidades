@@ -579,7 +579,10 @@ def _ai_market_payload(
     # Mantém o contexto suficiente para a leitura, mas reduz tokens para
     # funcionar melhor nos planos gratuitos da Groq/OpenRouter.
     candle_limits = {
-        tf: 60 if tf == timeframe else 35
+        # O motor local calcula os indicadores usando todos os candles.
+        # Para a IA, enviamos apenas uma janela compacta para manter
+        # a requisição confortável nos limites gratuitos.
+        tf: 40 if tf == timeframe else 20
         for tf in frames
     }
     return {
@@ -672,7 +675,9 @@ def _call_openai_compatible(
             {"role": "user", "content": message},
         ],
         "temperature": 0.1,
-        "max_completion_tokens": 1800,
+        # O Consultor devolve JSON compacto; 1200 tokens são suficientes e
+        # reduzem o consumo de TPM nos planos gratuitos.
+        "max_completion_tokens": 1200,
     }
 
     # Groq suporta JSON mode neste endpoint. No OpenRouter/free alguns
@@ -682,7 +687,9 @@ def _call_openai_compatible(
         payload["response_format"] = {"type": "json_object"}
 
     if provider == "Groq" and model.startswith("openai/gpt-oss"):
-        payload["reasoning_effort"] = "medium"
+        # Mantém a capacidade de raciocínio sem reservar tanto orçamento de
+        # tokens quanto "medium", importante para o limite gratuito de TPM.
+        payload["reasoning_effort"] = "low"
 
     response = requests.post(
         api_url,
