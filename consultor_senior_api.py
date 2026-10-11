@@ -32,6 +32,8 @@ FACTS_CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
 FACTS_CACHE_TTL = 45.0
 AI_PROVIDER_COOLDOWN: dict[str, float] = {}
 AI_PROVIDER_COOLDOWN_SECONDS = 60.0
+CONSULT_RESULT_CACHE: dict[str, tuple[str, float, dict[str, Any]]] = {}
+CONSULT_RESULT_CACHE_TTL = 75.0
 
 def _clean_symbol(symbol: str) -> str:
     s = symbol.strip().upper().replace(" ", "")
@@ -481,6 +483,72 @@ def _sanitize_analysis(data: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _directional_score(summary: dict[str, Any]) -> int:
+    """
+    Lightweight directional score from independent technical dimensions.
+    It intentionally uses the underlying indicators instead of requiring the
+    strict EMA9/21/50 trend label to say ALTA/BAIXA.
+    """
+    score = 0
+    ema = summary.get("ema") or {}
+    momentum = summary.get("momentum") or {}
+    adx = summary.get("adx") or {}
+
+    e9, e21, e50 = ema.get("ema9"), ema.get("ema21"), ema.get("ema50")
+    if e9 is not None and e21 is not None:
+        score += 1 if e9 > e21 else -1 if e9 < e21 else 0
+    if e21 is not None and e50 is not None:
+        score += 1 if e21 > e50 else -1 if e21 < e50 else 0
+
+    slope = ema.get("slope_21_pct")
+    if slope is not None:
+        score += 1 if slope > 0 else -1 if slope < 0 else 0
+
+    macd_hist = momentum.get("macd_hist")
+    if macd_hist is not None:
+        score += 1 if macd_hist > 0 else -1 if macd_hist < 0 else 0
+
+    rsi = momentum.get("rsi14")
+    if rsi is not None:
+        score += 1 if rsi >= 52 else -1 if rsi <= 48 else 0
+
+    pdi, mdi = adx.get("plus_di"), adx.get("minus_di")
+    if pdi is not None and mdi is not None:
+        score += 1 if pdi > mdi else -1 if pdi < mdi else 0
+
+    return score
+
+
+def _frames_fingerprint(frames: dict[str, list[dict[str, float]]]) -> str:
+    # All frames contain closed candles only; an unchanged fingerprint means
+    # an identical technical snapshot, so a new AI request cannot add information.
+    return "|".join(
+        f"{tf}:{int(rows[-1]['time']) if rows else 0}"
+        for tf, rows in sorted(frames.items())
+    )
+
+
+def _cached_consult_response(symbol: str, fingerprint: str, started: float) -> dict[str, Any] | None:
+    cached = CONSULT_RESULT_CACHE.get(symbol)
+    if not cached or cached[0] != fingerprint:
+        return None
+    if time.monotonic() - cached[1] >= CONSULT_RESULT_CACHE_TTL:
+        return None
+
+    payload = dict(cached[2])
+    analysis = dict(payload.get("analysis") or {})
+    diagnostics = dict(analysis.get("diagnostics") or {})
+    diagnostics["serverDurationMs"] = round((time.perf_counter() - started) * 1000)
+    diagnostics["cachedSnapshot"] = True
+    analysis["diagnostics"] = diagnostics
+    payload["analysis"] = analysis
+    return payload
+
+
+def _save_consult_response(symbol: str, fingerprint: str, response: dict[str, Any]) -> None:
+    CONSULT_RESULT_CACHE[symbol] = (fingerprint, time.monotonic(), response)
+
+
 def _entry_confirmed(
     analysis: dict[str, Any],
     frames: dict[str, list[dict[str, float]]],
@@ -506,13 +574,18 @@ def _entry_confirmed(
         return False
 
     try:
-        trend_15m = _summarize(frames["15m"], "15m")["trend"]
-        trend_5m = _summarize(frames["5m"], "5m")["trend"]
+        score_15m = _directional_score(_summarize(frames["15m"], "15m"))
+        score_5m = _directional_score(_summarize(frames["5m"], "5m"))
     except (KeyError, IndexError, TypeError):
         return False
 
-    expected = "ALTA" if decision == "CALL" else "BAIXA"
-    return trend_15m == expected and trend_5m == expected
+    expected_sign = 1 if decision == "CALL" else -1
+    # A moderate directional bias is enough only when both horizons agree;
+    # require a recent, explicit trigger and the confidence threshold above too.
+    return (
+        score_15m * expected_sign >= 2
+        and score_5m * expected_sign >= 2
+    )
 
 async def _fetch_candles(client: Any, symbol: str, timeframe: str) -> list[dict[str, float]]:
     interval = INTERVALS[timeframe]
@@ -583,34 +656,41 @@ async def _load_frames(
 def _fast_screen(
     frames: dict[str, list[dict[str, float]]],
 ) -> tuple[bool, str, dict[str, dict[str, Any]]]:
-    # A triagem local descarta conflitos claros sem pagar o custo de uma chamada de IA.
+    # Always calculate a useful local diagnostic. Only call the AI when the
+    # underlying EMA, slope and momentum evidence offers a directional setup.
     summaries = {
         timeframe: _summarize(frames[timeframe], timeframe)
         for timeframe in ("15m", "5m")
     }
-    trend_15m = summaries["15m"]["trend"]
-    trend_5m = summaries["5m"]["trend"]
+    s15, s5 = summaries["15m"], summaries["5m"]
+    score_15m = _directional_score(s15)
+    score_5m = _directional_score(s5)
+    s15["directional_score"] = score_15m
+    s5["directional_score"] = score_5m
 
-    if trend_15m not in {"ALTA", "BAIXA"} or trend_15m != trend_5m:
-        return (
-            False,
-            f"Triagem rápida: contexto 15m ({trend_15m}) e estrutura 5m ({trend_5m}) ainda não estão alinhados.",
-            summaries,
+    if score_15m * score_5m <= 0 or abs(score_15m) < 2 or abs(score_5m) < 2:
+        reason = (
+            "Diagnóstico rápido: sem alinhamento direcional suficiente entre 15m "
+            f"(pontuação {score_15m:+d}, tendência {s15['trend']}) e 5m "
+            f"(pontuação {score_5m:+d}, tendência {s5['trend']}). "
+            "Aguardar nova confirmação; esta leitura foi calculada sem IA."
         )
+        return False, reason, summaries
 
-    candle_atr = summaries["5m"].get("last_candle", {}).get("range_pct_atr")
+    candle_atr = s5.get("last_candle", {}).get("range_pct_atr")
     if candle_atr is not None and candle_atr >= 2.8:
-        return (
-            False,
-            "Triagem rápida: candle de 5m com amplitude extrema; aguardando estabilização antes de avaliar entrada.",
-            summaries,
+        reason = (
+            "Diagnóstico rápido: viés direcional identificado, mas o último candle "
+            "de 5m tem amplitude extrema. Aguardar estabilização; nenhum sinal de entrada."
         )
+        return False, reason, summaries
 
-    return (
-        True,
-        f"Triagem aprovada: tendência alinhada em 15m e 5m ({trend_15m}); buscando gatilho objetivo.",
-        summaries,
+    direction = "comprador" if score_15m > 0 else "vendedor"
+    reason = (
+        f"Triagem aprovada: viés {direction} alinhado em 15m ({score_15m:+d}) "
+        f"e 5m ({score_5m:+d}). Avaliando gatilho objetivo para expiração de 15/30 min."
     )
+    return True, reason, summaries
 
 
 def _screen_wait_analysis(
@@ -634,7 +714,10 @@ def _screen_wait_analysis(
         "expiry_minutes": 15,
         "summary": reason,
         "structure": str(s5.get("structure") or "Estrutura indisponível"),
-        "trend": f"15m: {s15.get('trend', '—')} · 5m: {s5.get('trend', '—')}",
+        "trend": (
+            f"15m: {s15.get('trend', '—')} (viés {s15.get('directional_score', 0):+d}) · "
+            f"5m: {s5.get('trend', '—')} (viés {s5.get('directional_score', 0):+d})"
+        ),
         "zone": f"Suporte próximo: {support if support is not None else '—'} · resistência próxima: {resistance if resistance is not None else '—'}",
         "trigger": reason,
         "momentum": f"RSI 5m: {momentum.get('rsi14') if momentum.get('rsi14') is not None else '—'} · MACD histograma: {momentum.get('macd_hist') if momentum.get('macd_hist') is not None else '—'}",
@@ -1047,11 +1130,16 @@ async def consult(
     symbol = _clean_symbol(req.symbol)
 
     started = time.perf_counter()
-    client = item["client"]
-    frames = await _load_frames(client, symbol)
+    frames = await _load_frames(item["client"], symbol)
+    fingerprint = _frames_fingerprint(frames)
 
-    # Triagem local: quando 15m/5m entram em conflito ou há um candle extremo,
-    # devolve o motivo imediatamente e não desperdiça uma chamada de IA.
+    cached_response = _cached_consult_response(symbol, fingerprint, started)
+    if cached_response is not None:
+        return cached_response
+
+    # Quick local screen. It returns a complete diagnostic immediately when
+    # the technical context is mixed; the frontend displays it rather than
+    # holding the whole page in a spinner for a trade that may never appear.
     eligible, reason, summaries = _fast_screen(frames)
     if not eligible:
         analysis = _screen_wait_analysis(symbol, frames, summaries, reason)
@@ -1059,13 +1147,20 @@ async def consult(
             "serverDurationMs": round((time.perf_counter() - started) * 1000),
             "screening": "local",
             "aiCalled": False,
+            "directionalScores": {
+                "15m": summaries["15m"].get("directional_score", 0),
+                "5m": summaries["5m"].get("directional_score", 0),
+            },
+            "cachedSnapshot": False,
         }
-        return {
+        response = {
             "ok": True,
             "found": False,
             "analysis": analysis,
-            "next_check_seconds": 15,
+            "next_check_seconds": 8,
         }
+        _save_consult_response(symbol, fingerprint, response)
+        return response
 
     facts = await _facts(symbol)
     raw_ai, provider, model = await _call_ai_with_fallback(symbol, frames, facts)
@@ -1073,10 +1168,11 @@ async def consult(
     found = _entry_confirmed(analysis, frames, symbol)
 
     selected_tf = analysis["timeframe"]
+    selected_rows = frames.get(selected_tf) or frames["5m"]
     analysis.update({
         "asset": symbol,
         "is_otc": symbol.endswith("-OTC"),
-        "current_price": frames[selected_tf][-1]["close"],
+        "current_price": selected_rows[-1]["close"],
         "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
         "gemini_model": model if provider == "Gemini" else "",
         "ai_provider": provider,
@@ -1089,24 +1185,44 @@ async def consult(
             "factsAvailable": bool(facts.get("available", False)),
             "screening": "aprovada",
             "aiCalled": True,
+            "directionalScores": {
+                "15m": _directional_score(summaries["15m"]),
+                "5m": _directional_score(summaries["5m"]),
+            },
+            "cachedSnapshot": False,
         },
     })
 
-    # A interface nunca recebe "SEM OPERAÇÃO" como resultado final.
     if not found:
-        analysis["decision"] = ""
-        analysis["status"] = "ANALISANDO"
-        analysis["summary"] = (
-            "A triagem encontrou contexto para análise, mas ainda não há "
-            "gatilho confirmado com confiança suficiente. O monitoramento continua."
-        )
+        candidate = analysis["decision"] if analysis["decision"] in {"CALL", "PUT"} else ""
+        candidate_trigger = str(analysis.get("trigger") or "").strip()
+        analysis["candidate_direction"] = candidate
+        analysis["decision"] = "SEM OPERACAO"
+        analysis["status"] = "AGUARDAR"
+        analysis["confidence"] = 0
+        if candidate:
+            reason_text = (
+                f"A IA avaliou um cenário {candidate}, mas a validação técnica independente "
+                "não confirmou todos os requisitos. Sem entrada; aguardar novo candle/confirmacão."
+            )
+            analysis["summary"] = reason_text
+            analysis["risks"] = (analysis.get("risks") or [])[:5] + ["Cenário direcional não passou na validação final."]
+        elif not analysis.get("summary"):
+            analysis["summary"] = (
+                "Nenhum gatilho confirmado neste ciclo. A análise técnica foi atualizada "
+                "e o monitoramento continua."
+            )
+        if not candidate_trigger:
+            analysis["trigger"] = "Nenhum gatilho objetivo confirmado neste ciclo."
 
-    return {
+    response = {
         "ok": True,
         "found": found,
         "analysis": analysis,
-        "next_check_seconds": 15 if not found else 0,
+        "next_check_seconds": 8 if not found else 0,
     }
+    _save_consult_response(symbol, fingerprint, response)
+    return response
 
 @router.get("/assets")
 async def assets(
