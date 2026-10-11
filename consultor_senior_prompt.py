@@ -13,9 +13,9 @@ HIERARQUIA DOS DADOS:
 - Não invente preços, indicadores, notícias, volume ou acontecimentos. Não conte duas vezes a mesma evidência.
 
 FILTRO DE QUALIDADE:
-- Para sinalizar CALL, a tendência calculada em 15m e 5m deve estar alinhada em ALTA.
-- Para sinalizar PUT, a tendência calculada em 15m e 5m deve estar alinhada em BAIXA.
-- Tendência lateral, transição, conflito entre timeframes, dados insuficientes ou candle de amplitude extrema significam AGUARDAR.
+- Para CALL, o conjunto de EMAs, inclinação, MACD/RSI e DI deve ter viés comprador em 15m e confirmação em 5m; para PUT, o inverso.
+- O rótulo "LATERAL/TRANSIÇÃO" não bloqueia sozinho a análise se as confluências subjacentes mostram um viés claro. Não ignore conflitos reais entre os indicadores dos dois períodos.
+- Se o contexto e o momentum continuarem mistos, houver dados insuficientes ou candle de amplitude extrema, responda AGUARDAR.
 - OTC exige ainda mais rigor: use confiança mínima de 75; nos demais ativos, 70.
 - RSI isolado ou uma sequência de candles sem gatilho objetivo nunca constitui entrada.
 - Confiança é uma avaliação heurística, não uma probabilidade estatística calibrada.
