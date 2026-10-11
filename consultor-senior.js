@@ -174,7 +174,7 @@
         ? "Analisando " + asset + " · ciclo " + cycle
         : "Monitorando o mercado…";
       $("csProgressDetail").textContent =
-        "15m → 5m → 1m · contexto → estrutura → regiões → price action → gatilho";
+        "Leitura rápida · contexto 15m → confirmação 5m · horizonte 15/30 min";
     }
 
     if (button) {
@@ -543,17 +543,21 @@
         }
 
         error.textContent = "";
-        if (data.analysis) updateTraceFromAnalysis(data.analysis, false);
-        result.innerHTML =
-          '<div class="cs-thinking">' +
-            '<div class="cs-spinner"></div>' +
-            '<strong>Nenhum gatilho confirmado ainda.</strong>' +
-            '<span>' + esc(data.analysis?.summary || ("O Consultor continua monitorando " + asset + " e aguardará confirmação suficiente.")) + '</span>' +
-          '</div>';
+        if (data.analysis) {
+          updateTraceFromAnalysis(data.analysis, false);
+          // Exibe a leitura técnica a cada ciclo. Não deixa o usuário esperando
+          // indefinidamente por um sinal final para enxergar o diagnóstico.
+          result.innerHTML = resultCard(data.analysis);
+          const source = data.analysis?.ai_provider || (data.analysis?.diagnostics?.aiCalled ? "IA" : "análise local");
+          const duration = data.analysis?.diagnostics?.serverDurationMs;
+          $("csMeta").textContent =
+            source + (duration != null ? " · " + duration + " ms" : "") +
+            " · diagnóstico atualizado · ciclo " + monitorCycle;
+        }
 
-        const waitSeconds = Math.max(15, Math.min(30, Number(data.next_check_seconds || 15)));
+        const waitSeconds = Math.max(8, Math.min(15, Number(data.next_check_seconds || 8)));
         $("csProgressDetail").textContent =
-          "Próxima leitura em " + waitSeconds + "s · triagem 15m/5m e gatilho de entrada";
+          "Próxima leitura em " + waitSeconds + "s · diagnóstico local rápido + confirmação multi-timeframe";
 
         await sleep(waitSeconds * 1000);
       } catch (ex) {
