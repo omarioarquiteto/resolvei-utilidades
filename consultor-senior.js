@@ -109,7 +109,7 @@
           '</div>' +
           '<button id="csConsult" type="button">CONSULTAR</button>' +
         '</section>' +
-        '<div class="cs-ai-choice"><span>TIMEFRAME E EXPIRAÇÃO</span><b>DETERMINADOS PELO CONSULTOR</b><small>O sistema compara 1m, 5m e 15m e escolhe a combinação que apresentar o melhor gatilho.</small></div>' +
+        '<div class="cs-ai-choice"><span>HORIZONTE DE ENTRADA</span><b>EXPIRAÇÕES DE 15 OU 30 MINUTOS</b><small>15m define o contexto, 5m confirma a estrutura e 1m serve apenas como apoio de timing. Nenhum sinal é forçado quando falta confirmação.</small></div>' +
 
         '<div id="csProgress" class="cs-progress" hidden><span></span><b id="csProgressTitle">Monitorando o mercado…</b><small id="csProgressDetail">Comparando 15m → 5m → 1m · contexto → estrutura → gatilho</small></div>' +
         '<div id="csError" class="cs-msg"></div>' +
@@ -548,12 +548,12 @@
           '<div class="cs-thinking">' +
             '<div class="cs-spinner"></div>' +
             '<strong>Nenhum gatilho confirmado ainda.</strong>' +
-            '<span>O Consultor continua monitorando ' + esc(asset) + ' e aguardará uma configuração de entrada com confiança suficiente.</span>' +
+            '<span>' + esc(data.analysis?.summary || ("O Consultor continua monitorando " + asset + " e aguardará confirmação suficiente.")) + '</span>' +
           '</div>';
 
-        const waitSeconds = Math.max(15, Math.min(45, Number(data.next_check_seconds || 25)));
+        const waitSeconds = Math.max(15, Math.min(30, Number(data.next_check_seconds || 15)));
         $("csProgressDetail").textContent =
-          "Próxima leitura em " + waitSeconds + "s · comparando 15m → 5m → 1m";
+          "Próxima leitura em " + waitSeconds + "s · triagem 15m/5m e gatilho de entrada";
 
         await sleep(waitSeconds * 1000);
       } catch (ex) {
