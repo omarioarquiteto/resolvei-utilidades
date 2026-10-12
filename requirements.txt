@@ -22,3 +22,5 @@ git+https://github.com/victalejo/iqoptionapi.git@master#egg=iqoptionapi
 aiohttp>=3.9,<4
 websockets>=12,<16
 ta>=0.11,<1
+pdfplumber>=0.11,<1
+pytesseract>=0.3.13,<1
