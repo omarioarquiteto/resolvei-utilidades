@@ -97,15 +97,15 @@ async def convert_pdfa(file: UploadFile = File(...)) -> Response:
                 raise HTTPException(status_code=503, detail="Ghostscript está instalado, mas não encontrei um perfil ICC sRGB necessário para gerar PDF/A.")
             definition = root / "PDFA_def.ps"
             definition.write_text(
-                f"/ICCProfile ({str(icc)}) def\\n"
-                "[/_objdef {icc_PDFA} /type /stream /OBJ pdfmark\\n"
-                "[{icc_PDFA} << /N 3 >> /PUT pdfmark\\n"
-                "[{icc_PDFA} ICCProfile (r) file /PUT pdfmark\\n"
-                "[/_objdef {OutputIntent_PDFA} /type /dict /OBJ pdfmark\\n"
+                f"/ICCProfile ({str(icc)}) def\n"
+                "[/_objdef {icc_PDFA} /type /stream /OBJ pdfmark\n"
+                "[{icc_PDFA} << /N 3 >> /PUT pdfmark\n"
+                "[{icc_PDFA} ICCProfile (r) file /PUT pdfmark\n"
+                "[/_objdef {OutputIntent_PDFA} /type /dict /OBJ pdfmark\n"
                 "[{OutputIntent_PDFA} << /Type /OutputIntent /S /GTS_PDFA1 "
                 "/DestOutputProfile {icc_PDFA} /OutputConditionIdentifier (sRGB IEC61966-2.1) "
-                "/Info (sRGB IEC61966-2.1) >> /PUT pdfmark\\n"
-                "[{Catalog} << /OutputIntents [ {OutputIntent_PDFA} ] >> /PUT pdfmark\\n",
+                "/Info (sRGB IEC61966-2.1) >> /PUT pdfmark\n"
+                "[{Catalog} << /OutputIntents [ {OutputIntent_PDFA} ] >> /PUT pdfmark\n",
                 encoding="latin-1",
             )
             cmd = [gs, "-dPDFA=2", "-dBATCH", "-dNOPAUSE", "-dNOOUTERSAVE", "-sDEVICE=pdfwrite",
