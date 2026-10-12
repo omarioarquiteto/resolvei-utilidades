@@ -64,6 +64,37 @@ def _read_text(path: Path) -> list[str]:
     raise HTTPException(status_code=415, detail="Formato não suportado. Use PDF, DOCX ou TXT.")
 
 
+def _ocr_image(image: Any) -> str:
+    """Use Tesseract when available and a Python/ONNX OCR engine as fallback."""
+    try:
+        import pytesseract
+        if shutil.which("tesseract"):
+            text = pytesseract.image_to_string(image, lang="por+eng").strip()
+            if text:
+                return text
+    except Exception:
+        pass
+    try:
+        import numpy as np
+        from rapidocr_onnxruntime import RapidOCR
+        engine = _rapid_ocr_engine()
+        result, _elapsed = engine(np.asarray(image))
+        return "\\n".join(str(item[1]).strip() for item in (result or []) if len(item) > 1 and str(item[1]).strip())
+    except Exception as exc:
+        raise RuntimeError("Nenhum motor OCR disponível (Tesseract ou RapidOCR).") from exc
+
+
+_rapid_engine = None
+
+
+def _rapid_ocr_engine():
+    global _rapid_engine
+    if _rapid_engine is None:
+        from rapidocr_onnxruntime import RapidOCR
+        _rapid_engine = RapidOCR()
+    return _rapid_engine
+
+
 def _download(data: bytes, filename: str, media_type: str) -> Response:
     safe = re.sub(r"[^A-Za-z0-9._-]", "_", filename)
     return Response(content=data, media_type=media_type, headers={"Content-Disposition": f'attachment; filename="{safe}"', "Cache-Control": "no-store"})
@@ -94,7 +125,15 @@ async def convert_pdfa(file: UploadFile = File(...)) -> Response:
             ]
             icc = next((p for p in icc_candidates if p.exists()), None)
             if not icc:
-                raise HTTPException(status_code=503, detail="Ghostscript está instalado, mas não encontrei um perfil ICC sRGB necessário para gerar PDF/A.")
+                # Gera um perfil ICC sRGB local com Pillow, evitando depender de um
+                # caminho específico de distribuição Linux.
+                try:
+                    from PIL import ImageCms
+                    profile = ImageCms.ImageCmsProfile(ImageCms.createProfile("sRGB"))
+                    icc = root / "sRGB.icc"
+                    icc.write_bytes(profile.tobytes())
+                except Exception as exc:
+                    raise HTTPException(status_code=503, detail="Não foi possível criar o perfil ICC sRGB exigido pelo PDF/A.") from exc
             definition = root / "PDFA_def.ps"
             definition.write_text(
                 f"/ICCProfile ({str(icc)}) def\n"
@@ -154,28 +193,22 @@ async def extract_ocr(file: UploadFile = File(...), output_format: str = Form("t
                     missing = [i for i, text in enumerate(pages) if len(text) < 15]
                     if missing:
                         try:
-                            import pytesseract
                             from PIL import Image
-                            if not shutil.which("tesseract"):
-                                raise RuntimeError("binário tesseract não instalado")
                             for i in missing:
                                 pix = doc[i].get_pixmap(matrix=fitz.Matrix(2, 2), alpha=False)
                                 image = Image.open(io.BytesIO(pix.tobytes("png")))
-                                pages[i] = pytesseract.image_to_string(image, lang="por+eng").strip()
+                                pages[i] = _ocr_image(image)
                         except Exception as exc:
                             if not any(pages):
-                                raise HTTPException(status_code=503, detail="Este documento parece digitalizado, mas o OCR não está disponível no servidor. É necessário instalar Tesseract OCR com o idioma português.") from exc
+                                raise HTTPException(status_code=503, detail="Este documento parece digitalizado, mas nenhum motor OCR conseguiu processá-lo. Tente uma imagem mais nítida ou reporte o problema.") from exc
                 text = "\n\n".join(f"--- Página {i + 1} ---\n{content}" for i, content in enumerate(pages))
             else:
                 try:
-                    import pytesseract
                     from PIL import Image, ImageOps
-                    if not shutil.which("tesseract"):
-                        raise RuntimeError("binário tesseract não instalado")
                     image = ImageOps.exif_transpose(Image.open(src))
-                    text = pytesseract.image_to_string(image, lang="por+eng").strip()
+                    text = _ocr_image(image)
                 except Exception as exc:
-                    raise HTTPException(status_code=503, detail="OCR indisponível: instale Tesseract OCR com os idiomas português e inglês no servidor.") from exc
+                    raise HTTPException(status_code=503, detail="OCR indisponível. Verifique a imagem e tente novamente.") from exc
             if not text.strip():
                 raise HTTPException(status_code=422, detail="Nenhum texto foi reconhecido. Tente uma imagem mais nítida ou verifique o idioma do documento.")
             return _download(text.encode("utf-8"), Path(filename).stem + "-ocr.txt", "text/plain; charset=utf-8")
