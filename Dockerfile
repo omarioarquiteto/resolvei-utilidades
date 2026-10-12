@@ -7,6 +7,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
        ffmpeg \
+       ghostscript \
+       tesseract-ocr \
+       tesseract-ocr-por \
+       tesseract-ocr-eng \
+       icc-profiles-free \
        libcairo2 \
        libglib2.0-0 \
        libpango-1.0-0 \
