@@ -79,7 +79,7 @@ def _ocr_image(image: Any) -> str:
         from rapidocr_onnxruntime import RapidOCR
         engine = _rapid_ocr_engine()
         result, _elapsed = engine(np.asarray(image))
-        return "\\n".join(str(item[1]).strip() for item in (result or []) if len(item) > 1 and str(item[1]).strip())
+        return "\n".join(str(item[1]).strip() for item in (result or []) if len(item) > 1 and str(item[1]).strip())
     except Exception as exc:
         raise RuntimeError("Nenhum motor OCR disponível (Tesseract ou RapidOCR).") from exc
 
