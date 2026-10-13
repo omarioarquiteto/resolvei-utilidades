@@ -135,8 +135,11 @@ async def convert_pdfa(file: UploadFile = File(...)) -> Response:
                 except Exception as exc:
                     raise HTTPException(status_code=503, detail="Não foi possível criar o perfil ICC sRGB exigido pelo PDF/A.") from exc
             definition = root / "PDFA_def.ps"
+            icc_path = str(icc.resolve())
+            # Escape characters that are special inside PostScript strings.
+            ps_icc_path = icc_path.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
             definition.write_text(
-                f"/ICCProfile ({str(icc)}) def\n"
+                f"/ICCProfile ({ps_icc_path}) def\n"
                 "[/_objdef {icc_PDFA} /type /stream /OBJ pdfmark\n"
                 "[{icc_PDFA} << /N 3 >> /PUT pdfmark\n"
                 "[{icc_PDFA} ICCProfile (r) file /PUT pdfmark\n"
@@ -147,12 +150,13 @@ async def convert_pdfa(file: UploadFile = File(...)) -> Response:
                 "[{Catalog} << /OutputIntents [ {OutputIntent_PDFA} ] >> /PUT pdfmark\n",
                 encoding="latin-1",
             )
-            cmd = [gs, "-dPDFA=2", "-dBATCH", "-dNOPAUSE", "-dNOOUTERSAVE", "-sDEVICE=pdfwrite",
+            cmd = [gs, f"--permit-file-read={icc.resolve()}", "-dPDFA=2", "-dBATCH", "-dNOPAUSE", "-dNOOUTERSAVE", "-sDEVICE=pdfwrite",
                    "-dPDFACompatibilityPolicy=1", "-sColorConversionStrategy=RGB",
                    "-sProcessColorModel=DeviceRGB", f"-sOutputFile={out}", str(definition), str(src)]
             proc = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
             if proc.returncode != 0 or not out.exists() or out.stat().st_size == 0:
-                detail = (proc.stderr or proc.stdout or "Ghostscript não conseguiu gerar o PDF/A.")[-1200:]
+                combined_output = "\n".join(part.strip() for part in (proc.stdout, proc.stderr) if part and part.strip())
+                detail = (combined_output or "Ghostscript não conseguiu gerar o PDF/A.")[-2500:]
                 raise HTTPException(status_code=422, detail=f"Falha na conversão PDF/A: {detail}")
             with fitz.open(out) as result:
                 if not len(result):
