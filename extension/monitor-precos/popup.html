@@ -69,7 +69,15 @@
         <p id="coverage-note" class="hint"></p>
       </section>
       <section id="history-panel" class="history-panel hidden">
-        <div class="section-title-row"><h2>Histórico comunitário recente</h2><span id="history-count" class="muted small"></span></div>
+        <div class="section-title-row"><h2>Histórico de preços</h2><span id="history-count" class="muted small"></span></div>
+        <div class="history-ranges" role="group" aria-label="Período do histórico">
+          <button type="button" data-history-days="40" class="history-range">40 dias</button>
+          <button type="button" data-history-days="180" class="history-range active">6 meses</button>
+          <button type="button" data-history-days="365" class="history-range">1 ano</button>
+        </div>
+        <div id="history-stats" class="history-stats"></div>
+        <canvas id="price-history-chart" class="price-history-chart" width="390" height="170" aria-label="Gráfico do histórico comunitário de preços"></canvas>
+        <div id="history-chart-empty" class="history-chart-empty hidden">Ainda não há registros suficientes. O histórico será construído pelas próximas consultas automáticas.</div>
         <div id="price-history" class="price-history"></div>
       </section>
       <section id="coupon-note" class="coupon-note hidden"></section>
