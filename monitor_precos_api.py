@@ -177,10 +177,11 @@ def _serialize(snapshot):
     return data
 
 def _refresh_ref(ref, product):
-    q = " ".join(x for x in [_text(product.get("title"),160),_text(product.get("brand"),70),
-        _text(product.get("model"),70),_text(product.get("ean"),20)] if x).strip()
+    match_query = " ".join(x for x in [_text(product.get("title"),160),_text(product.get("brand"),70),
+        _text(product.get("model"),70)] if x).strip()
+    q = " ".join(x for x in [match_query, _text(product.get("ean"),20)] if x).strip()
     offers = _shopping(q)
-    matched = [offer for offer in offers if _score(q, offer["title"]) >= 0.35]
+    matched = [offer for offer in offers if _score(match_query, offer["title"]) >= 0.35]
     now = _now()
     updates = {"lastCheckedAt":_iso(now),"nextRefreshAt":_iso(now+timedelta(hours=REFRESH_HOURS)),
         "lastRefreshError":"","updatedAt":_iso(now)}
