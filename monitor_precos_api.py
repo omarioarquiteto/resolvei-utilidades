@@ -552,14 +552,13 @@ def _community_offers(product_ref, limit=20):
 
 
 def _community_history(product_ref, limit=12):
+    from google.cloud.firestore_v1 import Query
     events = []
-    for offer_doc in product_ref.collection("offers").limit(100).stream():
-        for event_doc in offer_doc.reference.collection("history").limit(60).stream():
-            event = event_doc.to_dict() or {}
-            event["id"] = event_doc.id
-            events.append(event)
-    events.sort(key=lambda item: str(item.get("observedAt") or ""), reverse=True)
-    return events[:limit]
+    for event_doc in product_ref.collection("history").order_by("observedAt", direction=Query.DESCENDING).limit(limit).stream():
+        event = event_doc.to_dict() or {}
+        event["id"] = event_doc.id
+        events.append(event)
+    return events
 
 
 @router.post("/community/observe")
@@ -603,6 +602,10 @@ def observe_community_product(req: CommunityObservation, authorization: str | No
         product_data["stores"] = []
     from google.cloud.firestore_v1 import ArrayUnion, Increment
     product_data["stores"] = ArrayUnion([host])
+    search_tokens = sorted(_words(" ".join([
+        _text(req.title, 300), _text(req.brand, 150), _text(req.model, 150), re.sub(r"\\D", "", _text(req.ean, 32))
+    ])))[:40]
+    product_data["searchTokens"] = ArrayUnion(search_tokens)
     product_ref.set(product_data, merge=True)
     offer_data = {
         "title": _text(req.title, 300),
@@ -623,12 +626,13 @@ def observe_community_product(req: CommunityObservation, authorization: str | No
     }
     if req.price is not None:
         offer_data["priceObservedAt"] = now
-        price_event_id = hashlib.sha256(f"{today}|{req.price:.2f}".encode("utf-8")).hexdigest()[:28]
-        history_ref = offer_ref.collection("history").document(price_event_id)
+        price_event_id = hashlib.sha256(f"{offer_id}|{today}|{req.price:.2f}".encode("utf-8")).hexdigest()[:32]
+        history_ref = product_ref.collection("history").document(price_event_id)
         if not history_ref.get().exists:
             history_ref.set({
                 "price": round(req.price, 2),
                 "source": host,
+                "offerId": offer_id,
                 "url": url,
                 "title": _text(req.title, 300),
                 "observedAt": now,
@@ -668,11 +672,19 @@ def search_community_products(
     authorization: str | None = Header(default=None),
 ):
     _uid(authorization)
-    query_words = _words(q)
+    collection = _db().collection("communityPriceProducts")
+    query_tokens = sorted(_words(q), key=lambda token: (-len(token), token))[:6]
+    candidates = {}
+    # Usa array_contains em tokens indexados; evita percorrer ofertas e históricos de toda a base.
+    for token in query_tokens:
+        for snapshot in collection.where("searchTokens", "array_contains", token).limit(120).stream():
+            candidates[snapshot.id] = snapshot
+    if not candidates:
+        # Compatibilidade com fichas antigas sem índice de palavras.
+        for snapshot in collection.limit(300).stream():
+            candidates[snapshot.id] = snapshot
     matches = []
-    # Firestore não fornece busca textual nativa; limita-se o conjunto lido e ordena-se
-    # localmente. Para uma comunidade maior, este endpoint pode migrar para um índice dedicado.
-    for snapshot in _db().collection("communityPriceProducts").limit(1500).stream():
+    for snapshot in candidates.values():
         product = snapshot.to_dict() or {}
         searchable = " ".join([
             _text(product.get("title"), 300),
@@ -683,8 +695,6 @@ def search_community_products(
         score = _score(q, searchable)
         if score < 0.25:
             continue
-        offers = _community_offers(snapshot.reference, limit=20)
-        priced = [item for item in offers if isinstance(item.get("price"), (int, float)) and item["price"] > 0]
         matches.append({
             "id": snapshot.id,
             "title": _text(product.get("title"), 300),
@@ -695,22 +705,27 @@ def search_community_products(
             "contributorCount": int(product.get("contributorCount") or 0),
             "stores": product.get("stores") or [],
             "matchScore": score,
-            "offers": offers,
-            "bestOffer": priced[0] if priced else None,
-            "history": _community_history(snapshot.reference, limit=10),
             "updatedAt": product.get("updatedAt", ""),
         })
     matches.sort(key=lambda item: (
         item.get("matchScore", 0) < 0.4,
         -float(item.get("matchScore") or 0),
-        item.get("bestOffer") is None,
-        float((item.get("bestOffer") or {}).get("price") or 0),
+        str(item.get("updatedAt") or ""),
     ))
+    selected = matches[:6]
+    for item in selected:
+        product_ref = collection.document(item["id"])
+        offers = _community_offers(product_ref, limit=20)
+        priced = [offer for offer in offers if isinstance(offer.get("price"), (int, float)) and offer["price"] > 0]
+        item["offers"] = offers
+        item["bestOffer"] = priced[0] if priced else None
+        item["history"] = _community_history(product_ref, limit=10)
     return {
         "query": q,
-        "products": matches[:6],
+        "products": selected,
         "coverageNote": "Base comunitária: preços e condições registrados pelos usuários do Resolvei. Frete, parcelas e cupons podem mudar e precisam ser confirmados na loja.",
     }
+
 
 async def _scheduler_loop():
     while True:
