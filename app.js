@@ -11,7 +11,8 @@ const CATS = {
   festas: { name:'Festas & Eventos', icon:'🎉', desc:'Planeje quantidades para receber pessoas.' },
   trabalho: { name:'Trabalho & Rotina', icon:'💼', desc:'Horas, produtividade e pequenas contas.' },
   outros: { name:'Outras utilidades', icon:'🧰', desc:'Ferramentas rápidas para problemas cotidianos.' },
-  investimentos: { name:'Investimentos', icon:'📊', desc:'Análise de mercado, risco e ferramentas de apoio às operações.' }
+  investimentos: { name:'Investimentos', icon:'📊', desc:'Análise de mercado, risco e ferramentas de apoio às operações.' },
+  compras: { name:'Compras & Economia', icon:'🛍️', desc:'Acompanhe preços, histórico e ofertas de produtos online.' }
 };
 
 const fmt = new Intl.NumberFormat('pt-BR',{maximumFractionDigits:2});
@@ -42,6 +43,7 @@ const tools = [
   {id:'visao-opcoes',cat:'investimentos',icon:'🔭',title:'VISÃO OPÇÕES',desc:'Terminal de análise de pares com dados da IQ Option, radar de mercado e fatos relevantes da Biquote.',tags:'visão opções iqoption pares radar análise técnica candles OTC biquote fatos relevantes calendário econômico call put'},
   {id:'analista-bin',cat:'investimentos',icon:'📡',title:'ANALISTA BIN',desc:'Motor técnico ponderado para confluência de 30 indicadores em pares da IQ Option.',tags:'analista bin iqoption opções binárias call put tendência rompimento reversão indicadores score confluência'},
   {id:'consultor-senior',cat:'investimentos',icon:'🧠',title:'CONSULTOR SÊNIOR',desc:'Analista de mercado com Gemini e candles da IQ Option para identificar contexto, gatilhos e pontos de entrada.',tags:'consultor senior gemini iqoption opções binárias call put análise de mercado price action suporte resistência tendência entrada'},
+  {id:'monitor-precos',cat:'compras',icon:'🛍️',title:'Monitor de Preços',desc:'Acompanhe o histórico de preços e compare ofertas em lojas online.',tags:'monitor preço preços histórico produto comparar lojas oferta promoção economia rastrear'},
   {id:'combustivel-viagem',cat:'carro',icon:'⛽',title:'Combustível da viagem',desc:'Estime litros necessários e custo da viagem.',tags:'gasolina etanol combustível viagem litros km'},
   {id:'custo-km',cat:'carro',icon:'🛣️',title:'Custo por km',desc:'Descubra quanto seu carro custa a cada quilômetro.',tags:'custo km carro combustível consumo'},
   {id:'gasolina-etanol',cat:'carro',icon:'⚖️',title:'Gasolina × etanol',desc:'Compare preços pela eficiência energética do combustível.',tags:'gasolina etanol álcool abastecer'},
@@ -143,10 +145,10 @@ const ACTIVE_TOOL_IDS = new Set([
   'gerador-de-senhas','combustivel-viagem','tinta','piso','concreto','iluminacao','ar-condicionado','placas-solares',
   'conversor-arquivos','conversor-unidades','idade','datas-e-horarios','somar-horas','rescisao-clt','clt-vs-pj',
   'receita','custo-receita','por-quanto-vender','churrasco','festa','lista-compras',
-  'gerenciamento-risco','visao-opcoes','analista-bin','consultor-senior'
+  'gerenciamento-risco','visao-opcoes','analista-bin','consultor-senior','monitor-precos'
 ]);
 for(let i=tools.length-1;i>=0;i--){if(!ACTIVE_TOOL_IDS.has(tools[i].id))tools.splice(i,1);}
-const popular = ['porcentagem','combustivel-viagem','piso','tinta','financiamento','juros-compostos','conversor-arquivos','lista-compras'];
+const popular = ['monitor-precos','porcentagem','combustivel-viagem','piso','tinta','financiamento','juros-compostos','lista-compras'];
 
 const input = (id,label,opts={}) => {
   const type = opts.type || 'number';
@@ -1311,6 +1313,7 @@ function toolsPage(list=tools,title='Todas as ferramentas',sub='Escolha uma ferr
 function categoriesPage(){return `<div class="section-head"><div><h1 style="margin:0;letter-spacing:-.04em">Categorias</h1><p>Explore o Resolvei por assunto.</p></div></div><div class="category-grid">${Object.entries(CATS).map(categoryCard).join('')}</div>`}
 function toolPage(id){
   if(id==='guru-dos-sinais-iqoption'||id==='laboratorio-estatistico')return '<div class="tool-page"><div class="card panel"><span class="eyebrow">DESCONTINUADA</span><h1>Esta ferramenta foi retirada do Resolvei.</h1><p>O catálogo foi enxugado para priorizar utilidades de uso cotidiano.</p><div class="actions"><a class="btn primary" href="#/ferramentas">Voltar às ferramentas</a></div></div></div>';
+  if(id==='monitor-precos')return '<div id="monitorPrecosToolHost"></div>';
   if(id==='visao-opcoes')return '<div id="visaoOpcoesToolHost"></div>';
   if(id==='analista-bin')return '<div id="analistaBinToolHost"></div>';
   if(id==='consultor-senior')return '<div id="consultorSeniorToolHost"></div>';
@@ -1421,6 +1424,7 @@ function bind(){
     if(window.resolveiFinanciamentoInit)startFin();
     else {const s=document.createElement('script');s.src='/ferramenta/financiamento/financiamento.js?v=20261006';s.onload=startFin;document.head.appendChild(s);}
   }
+  if(rid==='monitor-precos' && window.resolveiMonitorPrecosInit) window.resolveiMonitorPrecosInit();
   const calc=document.getElementById('calcBtn'); if(calc&&rid)calc.addEventListener('click',()=>calculate(rid));
   if(rid==='conversor-arquivos')bindFileConverter();
   if(rid==='conversor-unidades')bindUnitConverter();

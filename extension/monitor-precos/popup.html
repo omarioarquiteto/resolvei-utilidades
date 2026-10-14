@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Monitor de Preços — Resolvei</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <main class="popup">
+    <header class="brand"><span class="brand-mark">✓</span><div><strong>Resolvei</strong><small>Monitor de Preços</small></div></header>
+    <div id="state" class="state">Identificando o produto desta página…</div>
+    <section id="product" class="product hidden">
+      <img id="image" alt="" class="image hidden">
+      <div id="title" class="title"></div>
+      <div id="store" class="store"></div>
+      <div class="price-row"><span>Preço detectado</span><strong id="price">Não identificado</strong></div>
+      <div class="field"><label for="manual-price">Corrigir preço (R$)</label><input id="manual-price" type="number" min="0.01" step="0.01" placeholder="Caso não tenha sido detectado"></div>
+      <button id="send" class="button primary" type="button" disabled>Enviar ao Resolvei ↗</button>
+    </section>
+    <footer>Os dados da página são lidos somente quando você abre esta extensão. Confira o produto antes de salvá-lo.</footer>
+  </main>
+  <script src="popup.js"></script>
+</body>
+</html>
