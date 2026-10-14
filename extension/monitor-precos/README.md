@@ -20,12 +20,14 @@ Extensão Manifest V3 para Chrome, Microsoft Edge e navegadores compatíveis com
 - Compartilha automaticamente preço e condições reconhecidos com a base comunitária de preços e histórico.
 - Mostra a menor oferta anunciada, a loja, condições de frete e parcelamento e cupons encontrados. Os códigos de cupom podem ser copiados clicando neles.
 - Mantém uma sessão da extensão revogável no servidor por até 30 dias. O botão **Sair** encerra essa sessão.
+- Exibe gráfico de histórico comunitário com janelas de 40 dias, 6 meses e 1 ano, incluindo mínimo, máximo e última observação.
+- O histórico comunitário é atualizado pela rotina agendada do servidor; as verificações independem de alguém abrir a página do produto.
 
 ## Dados comunitários e precisão
 
 Os dados da base de comunidade são compartilhados entre usuários autenticados da extensão. O banco registra a loja, o link do produto, observações de preço e a data/hora, além de frete, parcelamento e cupons quando essas informações são identificadas. A contribuição não inclui senha, e-mail ou nome do usuário na ficha pública do produto.
 
-A captura é iniciada somente quando você clica no ícone da extensão. O reconhecimento depende do HTML e do texto publicados pela loja; algumas páginas podem esconder preço, parcelamento ou cupom. A comparação externa depende da configuração de `SERPAPI_KEY` no Render. Se o provedor externo não responder ou a chave não estiver configurada, as ofertas já registradas pela comunidade continuam disponíveis.
+A captura é iniciada somente quando você clica no ícone da extensão. O reconhecimento depende do HTML e do texto publicados pela loja; algumas páginas podem esconder preço, parcelamento ou cupom. A comparação externa e as verificações agendadas dependem da configuração de `SERPAPI_KEY` no Render e do serviço de rotina agendada `Monitor de Preços - Atualização automática`. Se o provedor externo não responder ou a chave não estiver configurada, as ofertas já registradas pela comunidade continuam disponíveis. A frequência depende do agendamento configurado e da cota de consultas disponível.
 
 **Importante:** preço, disponibilidade, frete, juros e cupons podem mudar. O Resolvei não confirma validade de cupom nem custo final; confira os detalhes no carrinho/checkout antes de comprar. A extensão não faz compras nem aplica cupons automaticamente.
 

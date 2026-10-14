@@ -551,13 +551,24 @@ def _community_offers(product_ref, limit=20):
     return rows[:limit]
 
 
-def _community_history(product_ref, limit=12):
+def _community_history(product_ref, limit=1000, days=365):
     from google.cloud.firestore_v1 import Query
+    cutoff = _now() - timedelta(days=max(40, min(int(days or 365), 365)))
+    read_limit = max(150, min(int(limit or 1000), 1000))
     events = []
-    for event_doc in product_ref.collection("history").order_by("observedAt", direction=Query.DESCENDING).limit(limit).stream():
+    query = product_ref.collection("history").order_by("observedAt", direction=Query.DESCENDING).limit(read_limit)
+    for event_doc in query.stream():
         event = event_doc.to_dict() or {}
         event["id"] = event_doc.id
-        events.append(event)
+        try:
+            observed = datetime.fromisoformat(str(event.get("observedAt") or "").replace("Z", "+00:00"))
+            if observed.tzinfo is None:
+                observed = observed.replace(tzinfo=timezone.utc)
+        except ValueError:
+            continue
+        if observed >= cutoff:
+            events.append(event)
+    events.sort(key=lambda item: str(item.get("observedAt") or ""))
     return events
 
 
@@ -595,6 +606,7 @@ def observe_community_product(req: CommunityObservation, authorization: str | No
         "image_url": _text(req.image_url, 2048) or current_product.get("image_url", ""),
         "updatedAt": now,
         "lastObservedAt": now,
+        "nextRefreshAt": _iso(now_dt + timedelta(hours=6)),
     }
     if not prior_product.exists:
         product_data["createdAt"] = now
@@ -627,15 +639,41 @@ def observe_community_product(req: CommunityObservation, authorization: str | No
     if req.price is not None:
         offer_data["priceObservedAt"] = now
         price_event_id = hashlib.sha256(f"{offer_id}|{today}|{req.price:.2f}".encode("utf-8")).hexdigest()[:32]
-        history_ref = product_ref.collection("history").document(price_event_id)
-        if not history_ref.get().exists:
-            history_ref.set({
+        offer_history_ref = offer_ref.collection("history").document(price_event_id)
+        if not offer_history_ref.get().exists:
+            offer_history_ref.set({
+                "price": round(req.price, 2),
+                "source": host,
+                "url": url,
+                "title": _text(req.title, 300),
+                "observedAt": now,
+                "origin": "community-capture",
+                "free_shipping": free_shipping,
+                "shipping_text": shipping_text,
+                "installment_count": installment_count,
+                "installment_amount": installment_amount,
+                "installment_total": installment_total,
+                "installment_interest": installment_interest,
+                "coupons": coupons,
+            })
+        current_best = _price(current_product.get("bestCommunityPrice"))
+        if current_best is None or req.price < current_best:
+            product_ref.set({
+                "bestCommunityPrice": round(req.price, 2),
+                "bestCommunityOfferUrl": url,
+                "bestCommunityOfferSource": host,
+                "bestCommunityOfferTitle": _text(req.title, 300),
+                "bestCommunityPriceObservedAt": now,
+            }, merge=True)
+            product_history_id = "capture-" + hashlib.sha256(f"{offer_id}|{now}|{req.price:.2f}".encode("utf-8")).hexdigest()[:28]
+            product_ref.collection("history").document(product_history_id).set({
                 "price": round(req.price, 2),
                 "source": host,
                 "offerId": offer_id,
                 "url": url,
                 "title": _text(req.title, 300),
                 "observedAt": now,
+                "origin": "community-capture",
                 "free_shipping": free_shipping,
                 "shipping_text": shipping_text,
                 "installment_count": installment_count,
@@ -668,9 +706,227 @@ def observe_community_product(req: CommunityObservation, authorization: str | No
     }
 
 
+
+def _community_match(query: str, product: dict[str, Any], offer: dict[str, Any]) -> bool:
+    title = _text(offer.get("title"), 300)
+    if not title:
+        return False
+    # Nome + marca + modelo; exige similaridade mínima para não misturar variantes.
+    base_title = _text(product.get("title"), 220)
+    brand = _text(product.get("brand"), 100)
+    model = _text(product.get("model"), 100)
+    title_score = _score(base_title, title)
+    query_score = _score(query, title)
+    if title_score < 0.35 or query_score < 0.32:
+        return False
+    brand_words = _words(brand)
+    title_words = _words(title)
+    if brand_words and len(brand_words & title_words) == 0:
+        return False
+    # Se o modelo tiver identificadores numéricos, exige ao menos uma correspondência deles.
+    model_words = _words(model)
+    important_model = {word for word in model_words if any(ch.isdigit() for ch in word) or len(word) >= 4}
+    if important_model and not (important_model & title_words):
+        # Evita bloquear modelos não indexados no título se a similaridade for excepcionalmente alta.
+        if title_score < 0.78:
+            return False
+    return True
+
+
+def _refresh_community_product(product_ref, product):
+    now_dt = _now()
+    now = _iso(now_dt)
+    query = " ".join(part for part in [
+        _text(product.get("brand"), 70),
+        _text(product.get("model"), 70),
+        _text(product.get("title"), 160),
+    ] if part).strip()
+    if len(query) < 2:
+        product_ref.update({"lastCommunityRefreshAt": now, "nextRefreshAt": _iso(now_dt + timedelta(hours=12)),
+                            "lastCommunityRefreshError": "O produto não tem dados suficientes para uma busca."})
+        return {"ok": False, "reason": "insufficient_data"}
+    offers = _shopping(query)
+    matched = [item for item in offers if _community_match(query, product, item)]
+    matched.sort(key=lambda item: float(item.get("price") or float("inf")))
+    product_title = _text(product.get("title"), 300)
+    offer_collection = product_ref.collection("offers")
+    offers_updated = 0
+    old_best = _price(product.get("bestCommunityPrice"))
+    current_best = None
+    current_best_offer = None
+    for offer in matched:
+        offer_url = _validate_url(offer["url"])
+        offer_id = _community_offer_id(offer_url)
+        offer_ref = offer_collection.document(offer_id)
+        prior = offer_ref.get()
+        old = prior.to_dict() or {}
+        new_price = _price(offer.get("price"))
+        if new_price is None:
+            continue
+        current_offer = {
+            "title": _text(offer.get("title"), 300),
+            "source": _text(offer.get("source"), 100) or (urlparse(offer_url).hostname or "Loja"),
+            "url": offer_url,
+            "price": new_price,
+            "image_url": _text(offer.get("image_url"), 2048) or _text(old.get("image_url"), 2048),
+            "updatedAt": now,
+            "lastSeenAt": now,
+            "priceObservedAt": now,
+            "automaticPriceCheck": True,
+            "active": True,
+            "lastRefreshQuery": query[:180],
+        }
+        # Preservar condições comunitárias se o fornecedor não as divulgou nesta consulta.
+        for field in ("free_shipping", "shipping_text", "installment_count", "installment_amount",
+                      "installment_total", "installment_interest", "installment_text", "coupons"):
+            value = offer.get(field)
+            if value not in (None, "", []):
+                current_offer[field] = value
+            elif field in old:
+                current_offer[field] = old[field]
+        old_price = _price(old.get("price"))
+        if not prior.exists:
+            current_offer["createdAt"] = now
+        offer_ref.set(current_offer, merge=True)
+        offers_updated += 1
+        if old_price is None or abs(old_price - new_price) >= 0.01:
+            change_id = hashlib.sha256(f"{offer_id}|{now}|{new_price:.2f}".encode("utf-8")).hexdigest()[:32]
+            offer_ref.collection("history").document(change_id).set({
+                "price": new_price, "source": current_offer["source"], "url": offer_url,
+                "title": current_offer["title"], "observedAt": now, "origin": "automatic-check",
+                "free_shipping": current_offer.get("free_shipping"),
+                "shipping_text": current_offer.get("shipping_text", ""),
+                "installment_count": current_offer.get("installment_count"),
+                "installment_amount": current_offer.get("installment_amount"),
+                "installment_total": current_offer.get("installment_total"),
+                "installment_interest": current_offer.get("installment_interest"),
+                "coupons": current_offer.get("coupons", []),
+            })
+        if current_best is None or new_price < current_best:
+            current_best = new_price
+            current_best_offer = current_offer
+
+    updates = {
+        "lastCommunityRefreshAt": now,
+        "nextRefreshAt": _iso(now_dt + timedelta(hours=6)),
+        "lastCommunityRefreshError": "" if matched else "A consulta externa não encontrou oferta com correspondência suficiente; valores anteriores foram mantidos.",
+        "updatedAt": now,
+    }
+    if matched and current_best is not None and current_best_offer:
+        updates.update({
+            "bestCommunityPrice": current_best,
+            "bestCommunityOfferUrl": current_best_offer["url"],
+            "bestCommunityOfferSource": current_best_offer["source"],
+            "bestCommunityOfferTitle": current_best_offer["title"],
+            "bestCommunityPriceObservedAt": now,
+        })
+        latest_history = None
+        latest_docs = list(product_ref.collection("history").order_by("observedAt", direction=__import__("google.cloud.firestore_v1", fromlist=["Query"]).Query.DESCENDING).limit(1).stream())
+        if latest_docs:
+            latest_history = latest_docs[0].to_dict() or {}
+        last_history_price = _price((latest_history or {}).get("price"))
+        try:
+            last_history_dt = datetime.fromisoformat(str((latest_history or {}).get("observedAt") or "").replace("Z", "+00:00"))
+            if last_history_dt.tzinfo is None:
+                last_history_dt = last_history_dt.replace(tzinfo=timezone.utc)
+        except ValueError:
+            last_history_dt = None
+        price_changed = last_history_price is None or abs(last_history_price-current_best) >= 0.01
+        daily_checkpoint_due = last_history_dt is None or (now_dt - last_history_dt) >= timedelta(hours=24)
+        if price_changed or daily_checkpoint_due:
+            if price_changed:
+                history_id = "change-" + hashlib.sha256(f"{now}|{current_best:.2f}".encode("utf-8")).hexdigest()[:28]
+            else:
+                history_id = "daily-" + now_dt.date().isoformat()
+            product_ref.collection("history").document(history_id).set({
+                "price": current_best,
+                "source": current_best_offer["source"],
+                "offerId": _community_offer_id(current_best_offer["url"]),
+                "url": current_best_offer["url"],
+                "title": product_title,
+                "observedAt": now,
+                "origin": "automatic-check",
+                "free_shipping": current_best_offer.get("free_shipping"),
+                "shipping_text": current_best_offer.get("shipping_text", ""),
+                "installment_count": current_best_offer.get("installment_count"),
+                "installment_amount": current_best_offer.get("installment_amount"),
+                "installment_total": current_best_offer.get("installment_total"),
+                "installment_interest": current_best_offer.get("installment_interest"),
+                "coupons": current_best_offer.get("coupons", []),
+            }, merge=True)
+    product_ref.set(updates, merge=True)
+    return {
+        "ok": bool(matched),
+        "productId": product_ref.id,
+        "title": product_title,
+        "offersUpdated": offers_updated,
+        "bestPrice": current_best,
+        "priceChanged": current_best is not None and (old_best is None or abs(old_best-current_best) >= 0.01),
+        "reason": "" if matched else "no_confident_matching_offer",
+    }
+
+
+@router.post("/admin/refresh-community")
+def refresh_community_price_history(x_price_monitor_cron_key: str | None = Header(default=None, alias="X-Price-Monitor-Cron-Key")):
+    expected = os.getenv("PRICE_MONITOR_CRON_KEY", "").strip()
+    if not expected or not x_price_monitor_cron_key or not secrets.compare_digest(expected, x_price_monitor_cron_key):
+        raise HTTPException(403, "Chave de execução automática ausente ou inválida.")
+    if not os.getenv("SERPAPI_KEY", "").strip():
+        raise HTTPException(503, "SERPAPI_KEY não está configurada no Render.")
+    now = _now()
+    docs = list(_db().collection("communityPriceProducts").stream())
+    due = []
+    for doc in docs:
+        product = doc.to_dict() or {}
+        next_at = str(product.get("nextRefreshAt") or "")
+        try:
+            target = datetime.fromisoformat(next_at.replace("Z", "+00:00")) if next_at else None
+            if target and target.tzinfo is None:
+                target = target.replace(tzinfo=timezone.utc)
+        except ValueError:
+            target = None
+        if target is None or target <= now:
+            due.append((next_at, doc.reference, product))
+    due.sort(key=lambda item: item[0])
+    batch_size = max(1, min(int(os.getenv("PRICE_MONITOR_REFRESH_BATCH", "25")), 100))
+    results = []
+    errors = 0
+    for _, ref, product in due[:batch_size]:
+        try:
+            results.append(_refresh_community_product(ref, product))
+        except HTTPException as exc:
+            errors += 1
+            delay = 12 if exc.status_code == 429 else 6
+            ref.set({
+                "lastCommunityRefreshAt": _iso(),
+                "nextRefreshAt": _iso(_now() + timedelta(hours=delay)),
+                "lastCommunityRefreshError": _text(exc.detail, 240),
+            }, merge=True)
+        except Exception as exc:
+            errors += 1
+            ref.set({
+                "lastCommunityRefreshAt": _iso(),
+                "nextRefreshAt": _iso(_now() + timedelta(hours=12)),
+                "lastCommunityRefreshError": "Falha na atualização automática: " + _text(type(exc).__name__, 60),
+            }, merge=True)
+    return {
+        "ok": errors == 0,
+        "totalProducts": len(docs),
+        "dueProducts": len(due),
+        "processed": len(results) + errors,
+        "offersUpdated": sum(int(item.get("offersUpdated") or 0) for item in results),
+        "priceChanges": sum(1 for item in results if item.get("priceChanged")),
+        "errors": errors,
+        "remainingDue": max(0, len(due) - batch_size),
+        "checkedAt": _iso(),
+        "results": results,
+    }
+
+
 @router.get("/community/search")
 def search_community_products(
     q: str = Query(min_length=2, max_length=180),
+    days: int = Query(default=180, ge=40, le=365),
     authorization: str | None = Header(default=None),
 ):
     _uid(authorization)
@@ -721,7 +977,7 @@ def search_community_products(
         priced = [offer for offer in offers if isinstance(offer.get("price"), (int, float)) and offer["price"] > 0]
         item["offers"] = offers
         item["bestOffer"] = priced[0] if priced else None
-        item["history"] = _community_history(product_ref, limit=10)
+        item["history"] = _community_history(product_ref, limit=1000, days=days)
     return {
         "query": q,
         "products": selected,
