@@ -131,17 +131,76 @@ def _score(query, title):
     a, b = _words(query), _words(title)
     return round(len(a & b) / len(a), 3) if a and b else 0.0
 
+
+def _flatten_offer_text(value):
+    if isinstance(value, str):
+        return value
+    if isinstance(value, (int, float)):
+        return str(value)
+    if isinstance(value, dict):
+        return " ".join(_flatten_offer_text(v) for v in value.values())
+    if isinstance(value, (list, tuple)):
+        return " ".join(_flatten_offer_text(v) for v in value)
+    return ""
+
+
+def _extract_conditions(text):
+    text = _text(text, 1600)
+    low = text.lower()
+    free_shipping = True if re.search(r"frete\s+(?:gr[aá]tis|gratis|gratuito|gratuita)|envio\s+gr[aá]tis|entrega\s+gr[aá]tis", low) else None
+    shipping_match = re.search(r"(?:frete|entrega|envio)[^.;\n]{0,100}", text, re.I)
+    shipping_text = _text(shipping_match.group(0), 180) if shipping_match else ""
+    installment_count = installment_amount = installment_total = installment_interest = None
+    installment_text = ""
+    installment_match = re.search(
+        r"(\d{1,2})\s*x\s*(?:de\s*)?(?:R\$\s*)?([\d.]+,\d{2}|[\d,]+\.\d{2})?\s*(sem\s+juros|com\s+juros)?",
+        text, re.I
+    )
+    if installment_match:
+        count = int(installment_match.group(1))
+        amount = _price(installment_match.group(2)) if installment_match.group(2) else None
+        interest_text = (installment_match.group(3) or "").lower()
+        if 1 <= count <= 48:
+            installment_count = count
+            installment_amount = amount
+            installment_total = round(amount * count, 2) if amount else None
+            if "sem juros" in interest_text:
+                installment_interest = False
+            elif "com juros" in interest_text:
+                installment_interest = True
+            installment_text = _text(installment_match.group(0), 180)
+    coupons = []
+    for match in re.finditer(r"(?:cupom|c[oó]digo\s+(?:promocional|de\s+desconto)|use\s+o\s+c[oó]digo)[^\n.;]{0,100}", text, re.I):
+        snippet = match.group(0)
+        tokens = re.findall(r"\b[A-Z0-9][A-Z0-9_-]{3,19}\b", snippet.upper())
+        for token in tokens:
+            if token not in {"CUPOM", "DESCONTO", "CODIGO", "PROMOCIONAL", "USE", "OFF"} and not any(c["code"] == token for c in coupons):
+                coupons.append({"code": token, "description": _text(snippet, 160)})
+        if len(coupons) >= 6:
+            break
+    return {
+        "free_shipping": free_shipping,
+        "shipping_text": shipping_text,
+        "installment_count": installment_count,
+        "installment_amount": installment_amount,
+        "installment_total": installment_total,
+        "installment_interest": installment_interest,
+        "installment_text": installment_text,
+        "coupons": coupons[:6],
+    }
+
+
 def _shopping(query):
     key = os.getenv("SERPAPI_KEY", "").strip()
     if not key:
-        raise HTTPException(503, "A comparação entre lojas requer SERPAPI_KEY nas variáveis de ambiente do Render. O histórico e os preços registrados manualmente continuam disponíveis.")
+        raise HTTPException(503, "A comparação entre lojas requer SERPAPI_KEY nas variáveis de ambiente do Render. A extensão continuará mostrando a base comunitária.")
     query = _text(query, 180)
     if len(query) < 2:
         raise HTTPException(422, "Informe o nome, marca ou modelo do produto.")
     try:
         response = requests.get("https://serpapi.com/search.json",
             params={"engine":"google_shopping","q":query,"gl":"br","hl":"pt-br","api_key":key},
-            timeout=(5, 20), headers={"User-Agent":"ResolveiMonitorPrecos/1.0"})
+            timeout=(5, 20), headers={"User-Agent":"ResolveiMonitorPrecos/2.0"})
     except requests.RequestException as exc:
         raise HTTPException(502, "Não foi possível consultar ofertas agora. Tente novamente mais tarde.") from exc
     if response.status_code == 429:
@@ -164,11 +223,22 @@ def _shopping(query):
         if canonical in seen:
             continue
         seen.add(canonical)
+        source = _text(row.get("source"), 100) or (urlparse(link).hostname or "Loja")
+        terms = " ".join(filter(None, [
+            _text(row.get("title"), 300), _text(row.get("delivery"), 180),
+            _flatten_offer_text(row.get("extensions")), _flatten_offer_text(row.get("snippets")),
+            _flatten_offer_text(row.get("offers")), _flatten_offer_text(row.get("tags")),
+        ]))
+        conditions = _extract_conditions(terms)
+        delivery = _text(row.get("delivery"), 180)
+        if delivery and re.search(r"gr[aá]tis|gratis|gratuit", delivery, re.I):
+            conditions["free_shipping"] = True
+            conditions["shipping_text"] = delivery
         results.append({
-            "title":_text(row.get("title"), 300), "price":amount,
-            "source":_text(row.get("source"), 100) or (urlparse(link).hostname or "Loja"),
+            "title":_text(row.get("title"), 300), "price":amount, "source":source,
             "url":link[:2048], "image_url":_text(row.get("thumbnail"), 2048),
-            "delivery":_text(row.get("delivery"), 180), "rating":row.get("rating"), "reviews":row.get("reviews")
+            "delivery":delivery, "rating":row.get("rating"), "reviews":row.get("reviews"),
+            **conditions,
         })
     return sorted(results, key=lambda x:x["price"])[:20]
 
