@@ -1568,7 +1568,6 @@ function resolveiFirebaseInit(){
             window.opener.postMessage({
               type:"resolvei-extension-auth",
               idToken,
-              refreshToken:user.refreshToken,
               email:user.email||"",
               expiresAt:Date.now()+3500000
             },extensionOrigin);
