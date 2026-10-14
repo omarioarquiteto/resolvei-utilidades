@@ -1,0 +1,20 @@
+name: Validate Monitor de Preços
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Check JavaScript syntax
+        run: |
+          node --check monitor-precos.js
+          node --check extension/monitor-precos/popup.js
+      - name: Validate extension manifest
+        run: python -c "import json; json.load(open('extension/monitor-precos/manifest.json', encoding='utf-8'))"
