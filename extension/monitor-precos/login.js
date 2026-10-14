@@ -2,7 +2,9 @@
 
 const SESSION_KEY = "resolveiPriceMonitorSession";
 const RESOLVEI_ORIGIN = "https://resolvei-utilidades.onrender.com";
+const API_BASE = RESOLVEI_ORIGIN + "/api/price-monitor";
 let authWindow = null;
+let savingSession = false;
 const state = document.getElementById("login-state");
 const button = document.getElementById("google-start");
 
@@ -26,24 +28,39 @@ button.addEventListener("click", function () {
   authWindow.focus();
 });
 
-window.addEventListener("message", function (event) {
-  if (event.origin !== RESOLVEI_ORIGIN || !authWindow || event.source !== authWindow) return;
+window.addEventListener("message", async function (event) {
+  if (event.origin !== RESOLVEI_ORIGIN || !authWindow || event.source !== authWindow || savingSession) return;
   const data = event.data || {};
   if (data.type !== "resolvei-extension-auth" || !data.idToken) return;
-  const session = {
-    idToken: data.idToken,
-    email: String(data.email || ""),
-    expiresAt: Number(data.expiresAt || (Date.now() + 3500000))
-  };
-  chrome.storage.local.set({ [SESSION_KEY]: session }, function () {
-    if (chrome.runtime.lastError) {
-      setState("O login funcionou, mas não consegui salvar a sessão: " + chrome.runtime.lastError.message, "error");
-      button.disabled = false;
-      return;
+  savingSession = true;
+  setState("Login confirmado. Protegendo a sessão da extensão…");
+  try {
+    const response = await fetch(API_BASE + "/extension/session", {
+      method: "POST",
+      headers: { "Authorization": "Bearer " + data.idToken }
+    });
+    const result = await response.json().catch(function () { return {}; });
+    if (!response.ok || !result.accessToken) {
+      throw new Error(result.detail || "O servidor não conseguiu iniciar a sessão da extensão.");
     }
-    setState("Login concluído. A sessão do Resolvei foi conectada à extensão.", "success");
+    const session = {
+      apiToken: result.accessToken,
+      email: String(data.email || ""),
+      expiresAt: Date.parse(result.expiresAt || "") || (Date.now() + 30 * 24 * 60 * 60 * 1000)
+    };
+    await new Promise(function (resolve, reject) {
+      chrome.storage.local.set({ [SESSION_KEY]: session }, function () {
+        if (chrome.runtime.lastError) reject(new Error(chrome.runtime.lastError.message));
+        else resolve();
+      });
+    });
+    setState("Login concluído. Sua conta do Resolvei está conectada à extensão.", "success");
     if (authWindow && !authWindow.closed) authWindow.close();
     authWindow = null;
     window.setTimeout(function () { window.close(); }, 1200);
-  });
+  } catch (error) {
+    setState(error.message || "Não foi possível guardar a sessão. Tente novamente.", "error");
+    button.disabled = false;
+    savingSession = false;
+  }
 });
