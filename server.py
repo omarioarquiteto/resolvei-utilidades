@@ -88,6 +88,13 @@ app.include_router(financiamento_router)
 app.include_router(consultor_senior_router)
 app.include_router(documents_router)
 
+from monitor_precos_api import router as monitor_precos_router, start_price_monitor_scheduler
+app.include_router(monitor_precos_router)
+
+@app.on_event("startup")
+async def _start_monitor_precos_scheduler():
+    start_price_monitor_scheduler()
+
 
 # O frontend atualmente é servido pelo próprio FastAPI, portanto as requisições
 # são same-origin. Mantemos CORS configurável para o domínio próprio e futuros
