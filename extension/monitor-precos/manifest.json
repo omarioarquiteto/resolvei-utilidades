@@ -1,0 +1,15 @@
+{
+  "manifest_version": 3,
+  "name": "Monitor de Preços — Resolvei",
+  "version": "1.0.0",
+  "description": "Capture os dados de um produto e envie ao Monitor de Preços do Resolvei.",
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "storage"
+  ],
+  "action": {
+    "default_title": "Monitor de Preços — Resolvei",
+    "default_popup": "popup.html"
+  }
+}
