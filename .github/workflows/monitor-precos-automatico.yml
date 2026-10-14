@@ -1,0 +1,48 @@
+name: Atualizar histórico comunitário de preços
+
+on:
+  schedule:
+    # 10:17 UTC = 06:17 no horário de Cuiabá. Um lote pequeno preserva a cota gratuita.
+    - cron: "17 10 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: resolvei-price-monitor-background-refresh
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Validate required secrets
+        env:
+          PRICE_MONITOR_CRON_KEY: ${{ secrets.PRICE_MONITOR_CRON_KEY }}
+        run: |
+          if [ -z "$PRICE_MONITOR_CRON_KEY" ]; then
+            echo "::error::Configure o secret PRICE_MONITOR_CRON_KEY no repositório para habilitar a rotina."
+            exit 1
+          fi
+
+      - name: Refresh a small batch of community prices
+        env:
+          PRICE_MONITOR_CRON_KEY: ${{ secrets.PRICE_MONITOR_CRON_KEY }}
+        run: |
+          set -eu
+          response_file="$(mktemp)"
+          trap 'rm -f "$response_file"' EXIT
+          status="$(curl --silent --show-error --max-time 900 \
+            --output "$response_file" \
+            --write-out "%{http_code}" \
+            --request POST \
+            --header "X-Price-Monitor-Cron-Key: $PRICE_MONITOR_CRON_KEY" \
+            --header "Accept: application/json" \
+            "https://resolvei-utilidades.onrender.com/api/price-monitor/admin/refresh-community?batch_size=3")"
+          cat "$response_file"
+          if [ "$status" != "200" ]; then
+            echo "::error::O endpoint de atualização retornou HTTP $status."
+            exit 1
+          fi
