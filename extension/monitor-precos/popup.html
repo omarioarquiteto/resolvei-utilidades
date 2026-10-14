@@ -3,22 +3,75 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Monitor de Preços — Resolvei</title>
+  <title>Resolvei — Comparador de Preços</title>
   <link rel="stylesheet" href="popup.css">
 </head>
 <body>
   <main class="popup">
-    <header class="brand"><span class="brand-mark">✓</span><div><strong>Resolvei</strong><small>Monitor de Preços</small></div></header>
-    <div id="state" class="state">Identificando o produto desta página…</div>
-    <section id="product" class="product hidden">
-      <img id="image" alt="" class="image hidden">
-      <div id="title" class="title"></div>
-      <div id="store" class="store"></div>
-      <div class="price-row"><span>Preço detectado</span><strong id="price">Não identificado</strong></div>
-      <div class="field"><label for="manual-price">Corrigir preço (R$)</label><input id="manual-price" type="number" min="0.01" step="0.01" placeholder="Caso não tenha sido detectado"></div>
-      <button id="send" class="button primary" type="button" disabled>Enviar ao Resolvei ↗</button>
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-mark">R</span>
+        <div><strong>Resolvei</strong><small>Comparador comunitário</small></div>
+      </div>
+      <button id="logout" class="link-button hidden" type="button">Sair</button>
+    </header>
+
+    <div id="state" class="state" role="status">Preparando comparador…</div>
+
+    <section id="login-panel" class="panel hidden">
+      <h1>Entre para comparar</h1>
+      <p class="muted">Use a mesma conta do Resolvei. Cada captura contribui para o histórico comunitário de preços e condições.</p>
+      <form id="login-form">
+        <label for="email">E-mail</label>
+        <input id="email" type="email" autocomplete="username" required placeholder="voce@exemplo.com">
+        <label for="password">Senha</label>
+        <input id="password" type="password" autocomplete="current-password" required placeholder="Sua senha do Resolvei">
+        <button id="login-email" class="button primary" type="submit">Entrar com e-mail</button>
+      </form>
+      <div class="separator"><span>ou</span></div>
+      <button id="login-google" class="button google" type="button">Continuar com Google</button>
+      <p class="hint">Sua senha não é salva pela extensão. A sessão é protegida pelo Firebase e pode ser encerrada em “Sair”.</p>
     </section>
-    <footer>Os dados da página são lidos somente quando você abre esta extensão. Confira o produto antes de salvá-lo.</footer>
+
+    <section id="app-panel" class="hidden">
+      <div id="account-line" class="account-line"></div>
+      <section id="product-panel" class="product panel hidden">
+        <div class="product-head">
+          <img id="product-image" class="product-image hidden" alt="">
+          <div class="product-copy">
+            <div id="product-title" class="product-title">Identificando produto…</div>
+            <div id="product-store" class="muted small"></div>
+          </div>
+        </div>
+        <div class="current-price-row">
+          <span>Preço na página atual</span>
+          <strong id="product-price">Não identificado</strong>
+        </div>
+        <div id="current-conditions" class="condition-chips"></div>
+      </section>
+
+      <section id="summary-panel" class="summary-panel hidden">
+        <div class="summary-head">
+          <div><span class="eyebrow">MELHOR OFERTA ENCONTRADA</span><strong id="best-price">—</strong></div>
+          <div id="best-store" class="best-store"></div>
+        </div>
+        <div id="community-count" class="community-count"></div>
+      </section>
+
+      <section class="offers-section">
+        <div class="section-title-row">
+          <h2>Comparação entre lojas</h2>
+          <button id="compare-again" class="link-button" type="button">Atualizar ↻</button>
+        </div>
+        <div id="offers" class="offers">
+          <div class="empty">Abra a página de um produto e clique no ícone do Resolvei.</div>
+        </div>
+        <p id="coverage-note" class="hint"></p>
+      </section>
+      <section id="coupon-note" class="coupon-note hidden"></section>
+    </section>
+
+    <footer>Frete, parcelamento e cupons são exibidos quando encontrados na página ou na base comunitária. Confirme as condições finais no checkout da loja.</footer>
   </main>
   <script src="popup.js"></script>
 </body>
