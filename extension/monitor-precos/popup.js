@@ -10,6 +10,7 @@ let activeUser = null;
 let combinedOffers = [];
 let comparisonBusy = false;
 let communityData = null;
+let selectedHistoryDays = 180;
 
 function parsePrice(value) {
   if (typeof value === "number") return value > 0 ? Math.round(value * 100) / 100 : null;
@@ -474,24 +475,119 @@ function renderCommunityHistory(events) {
   const panel = document.getElementById("history-panel");
   const box = document.getElementById("price-history");
   const count = document.getElementById("history-count");
-  const rows = (events || []).filter(function (item) { return Number(item.price) > 0; }).slice(0, 8);
+  const canvas = document.getElementById("price-history-chart");
+  const empty = document.getElementById("history-chart-empty");
+  const stats = document.getElementById("history-stats");
+  const cutoff = Date.now() - selectedHistoryDays * 24 * 60 * 60 * 1000;
+  const rows = (events || []).filter(function (item) {
+    if (!(Number(item.price) > 0)) return false;
+    const date = new Date(item.observedAt).getTime();
+    return Number.isFinite(date) && date >= cutoff;
+  }).sort(function (a, b) {
+    return new Date(a.observedAt).getTime() - new Date(b.observedAt).getTime();
+  });
+  panel.classList.remove("hidden");
+  document.querySelectorAll("[data-history-days]").forEach(function (button) {
+    button.classList.toggle("active", Number(button.getAttribute("data-history-days")) === selectedHistoryDays);
+  });
+
   if (!rows.length) {
-    panel.classList.add("hidden");
+    count.textContent = "0 pontos";
+    stats.innerHTML = "";
+    canvas.classList.add("hidden");
+    empty.classList.remove("hidden");
+    empty.textContent = "Ainda não há registros neste período. As próximas consultas automáticas formarão o histórico de preços.";
     box.innerHTML = "";
-    count.textContent = "";
     return;
   }
-  panel.classList.remove("hidden");
-  count.textContent = rows.length + " registro(s)";
-  box.innerHTML = rows.map(function (item) {
+
+  canvas.classList.remove("hidden");
+  empty.classList.add("hidden");
+  count.textContent = rows.length + (rows.length === 1 ? " ponto" : " pontos");
+  const values = rows.map(function (item) { return Number(item.price); });
+  const min = Math.min.apply(null, values);
+  const max = Math.max.apply(null, values);
+  const latest = rows[rows.length - 1];
+  stats.innerHTML =
+    '<div class="history-stat"><span>Menor preço</span><strong>' + escapeHtml(money(min)) + '</strong></div>' +
+    '<div class="history-stat"><span>Maior preço</span><strong>' + escapeHtml(money(max)) + '</strong></div>' +
+    '<div class="history-stat"><span>Última observação</span><strong>' + escapeHtml(money(latest.price)) + '</strong></div>';
+
+  const rectWidth = canvas.getBoundingClientRect().width || 390;
+  const chartHeight = 170;
+  const dpr = Math.max(1, window.devicePixelRatio || 1);
+  canvas.width = Math.round(rectWidth * dpr);
+  canvas.height = Math.round(chartHeight * dpr);
+  canvas.style.height = chartHeight + "px";
+  const ctx = canvas.getContext("2d");
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, rectWidth, chartHeight);
+  const pad = { left: 50, right: 12, top: 14, bottom: 28 };
+  const innerW = rectWidth - pad.left - pad.right;
+  const innerH = chartHeight - pad.top - pad.bottom;
+  const spread = max === min ? Math.max(1, max * 0.04) : (max - min) * 0.12;
+  const low = Math.max(0, min - spread);
+  const high = max + spread;
+  const startTime = new Date(rows[0].observedAt).getTime();
+  const endTime = new Date(latest.observedAt).getTime();
+  const timeSpan = Math.max(1, endTime - startTime);
+  function xFor(item) {
+    return pad.left + ((new Date(item.observedAt).getTime() - startTime) / timeSpan) * innerW;
+  }
+  function yFor(value) {
+    return pad.top + ((high - Number(value)) / Math.max(0.01, high - low)) * innerH;
+  }
+  ctx.font = "9px system-ui,sans-serif";
+  ctx.lineWidth = 1;
+  ctx.strokeStyle = "#e2e8f0";
+  ctx.fillStyle = "#64748b";
+  ctx.textAlign = "right";
+  for (let i = 0; i <= 4; i += 1) {
+    const y = pad.top + innerH * i / 4;
+    const val = high - (high - low) * i / 4;
+    ctx.beginPath();
+    ctx.moveTo(pad.left, y);
+    ctx.lineTo(rectWidth - pad.right, y);
+    ctx.stroke();
+    ctx.fillText(val.toLocaleString("pt-BR", { maximumFractionDigits: 0 }), pad.left - 6, y + 3);
+  }
+  const points = rows.map(function (item) { return { x: xFor(item), y: yFor(item.price), item: item }; });
+  if (points.length > 1) {
+    ctx.beginPath();
+    points.forEach(function (point, index) {
+      if (index === 0) ctx.moveTo(point.x, point.y);
+      else ctx.lineTo(point.x, point.y);
+    });
+    ctx.strokeStyle = "#15803d";
+    ctx.lineWidth = 2.2;
+    ctx.lineJoin = "round";
+    ctx.lineCap = "round";
+    ctx.stroke();
+  }
+  points.forEach(function (point) {
+    ctx.beginPath();
+    ctx.arc(point.x, point.y, points.length > 45 ? 1.8 : 2.8, 0, Math.PI * 2);
+    ctx.fillStyle = "#15803d";
+    ctx.fill();
+  });
+  ctx.fillStyle = "#64748b";
+  ctx.textAlign = "left";
+  const startDate = new Date(rows[0].observedAt);
+  ctx.fillText(startDate.toLocaleDateString("pt-BR"), pad.left, chartHeight - 9);
+  ctx.textAlign = "right";
+  ctx.fillText(new Date(latest.observedAt).toLocaleDateString("pt-BR"), rectWidth - pad.right, chartHeight - 9);
+
+  const recent = rows.slice().reverse().slice(0, 5);
+  box.innerHTML = recent.map(function (item) {
     let when = "Data não informada";
     try {
       const date = new Date(item.observedAt);
       if (!Number.isNaN(date.getTime())) when = date.toLocaleDateString("pt-BR") + " " + date.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
     } catch (_) {}
+    const origin = item.origin === "automatic-check" ? "Consulta automática" : (item.origin === "community-capture" ? "Captura comunitária" : "Registro histórico");
     return '<div class="history-row"><div><div class="history-source">' +
-      escapeHtml(item.source || "Loja") + '</div><div class="history-date">' +
-      escapeHtml(when) + '</div></div><strong class="history-price">' +
+      escapeHtml(item.source || origin) + '</div><div class="history-date">' +
+      escapeHtml(when + " · " + origin) + '</div></div><strong class="history-price">' +
       escapeHtml(money(item.price)) + '</strong></div>';
   }).join("");
 }
@@ -578,7 +674,7 @@ async function runComparison() {
     });
     const query = makeSearchQuery(currentProduct);
     const [communityResult, shoppingResult] = await Promise.all([
-      api("/community/search?q=" + encodeURIComponent(query)).catch(function (error) {
+      api("/community/search?q=" + encodeURIComponent(query) + "&days=365").catch(function (error) {
         return { products: [], error: error.message };
       }),
       api("/search?q=" + encodeURIComponent(query)).catch(function (error) {
@@ -701,6 +797,13 @@ function bindUI() {
 
   document.getElementById("compare-again").addEventListener("click", function () {
     runComparison().catch(function () {});
+  });
+
+  document.getElementById("history-panel").addEventListener("click", function (event) {
+    const button = event.target.closest("[data-history-days]");
+    if (!button) return;
+    selectedHistoryDays = Number(button.getAttribute("data-history-days")) || 180;
+    renderCommunityHistory(communityData && communityData.searchMatch ? communityData.searchMatch.history : []);
   });
 
   document.getElementById("offers").addEventListener("click", async function (event) {
