@@ -21,6 +21,23 @@ function parsePrice(value) {
 }
 
 function extractProductFromPage() {
+  // Chrome serializa a função executada na página sem closures; mantenha o parser aqui.
+  function parsePrice(value) {
+    if (typeof value === "number") return value > 0 ? Math.round(value * 100) / 100 : null;
+    var text = String(value == null ? "" : value).replace(/[^\\d,.\\-]/g, "").trim();
+    if (!text) return null;
+    if (text.indexOf(",") >= 0 && text.indexOf(".") >= 0) {
+      text = text.lastIndexOf(",") > text.lastIndexOf(".")
+        ? text.replace(/\\./g, "").replace(",", ".")
+        : text.replace(/,/g, "");
+    } else if (text.indexOf(",") >= 0) text = text.replace(/\\./g, "").replace(",", ".");
+    else if ((text.match(/\\./g) || []).length > 1) {
+      var parts = text.split(".");
+      text = parts.slice(0, -1).join("") + "." + parts[parts.length - 1];
+    }
+    var n = Number(text);
+    return Number.isFinite(n) && n > 0 ? Math.round(n * 100) / 100 : null;
+  }
   function firstText(selectors) {
     for (var i = 0; i < selectors.length; i += 1) {
       var el = document.querySelector(selectors[i]);
