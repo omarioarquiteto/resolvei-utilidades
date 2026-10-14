@@ -603,7 +603,7 @@ def observe_community_product(req: CommunityObservation, authorization: str | No
     from google.cloud.firestore_v1 import ArrayUnion, Increment
     product_data["stores"] = ArrayUnion([host])
     search_tokens = sorted(_words(" ".join([
-        _text(req.title, 300), _text(req.brand, 150), _text(req.model, 150), re.sub(r"\\D", "", _text(req.ean, 32))
+        _text(req.title, 300), _text(req.brand, 150), _text(req.model, 150), re.sub(r"\D", "", _text(req.ean, 32))
     ])))[:40]
     product_data["searchTokens"] = ArrayUnion(search_tokens)
     product_ref.set(product_data, merge=True)
