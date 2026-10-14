@@ -5,8 +5,7 @@
   "description": "Capture os dados de um produto e envie ao Monitor de Preços do Resolvei.",
   "permissions": [
     "activeTab",
-    "scripting",
-    "storage"
+    "scripting"
   ],
   "action": {
     "default_title": "Monitor de Preços — Resolvei",
