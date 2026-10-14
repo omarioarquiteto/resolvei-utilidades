@@ -1,14 +1,22 @@
 {
   "manifest_version": 3,
-  "name": "Monitor de Preços — Resolvei",
-  "version": "1.0.0",
-  "description": "Capture os dados de um produto e envie ao Monitor de Preços do Resolvei.",
+  "name": "Resolvei — Comparador de Preços",
+  "version": "2.0.0",
+  "description": "Compare preços, frete, parcelamento e cupons. Contribua com a base comunitária de ofertas do Resolvei.",
+  "minimum_chrome_version": "109",
   "permissions": [
     "activeTab",
-    "scripting"
+    "scripting",
+    "storage",
+    "clipboardWrite"
+  ],
+  "host_permissions": [
+    "https://resolvei-utilidades.onrender.com/*",
+    "https://identitytoolkit.googleapis.com/*",
+    "https://securetoken.googleapis.com/*"
   ],
   "action": {
-    "default_title": "Monitor de Preços — Resolvei",
+    "default_title": "Resolvei — Comparador de Preços",
     "default_popup": "popup.html"
   }
 }

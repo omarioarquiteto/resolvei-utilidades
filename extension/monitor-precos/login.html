@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Entrar com Google — Resolvei</title>
+  <link rel="stylesheet" href="popup.css">
+  <style>
+    body{width:410px;max-height:none;min-height:100vh;background:#fff}
+    .popup{max-height:none;padding:22px}
+    .auth-illustration{display:grid;place-items:center;width:54px;height:54px;border-radius:16px;background:#111827;color:#fff;font-size:25px;font-weight:900;margin:18px 0}
+    .login-explain{font-size:12px;line-height:1.6;color:#64748b}
+  </style>
+</head>
+<body>
+  <main class="popup">
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-mark">R</span>
+        <div><strong>Resolvei</strong><small>Login seguro da extensão</small></div>
+      </div>
+    </header>
+    <div class="auth-illustration">✓</div>
+    <h1>Conectar sua conta</h1>
+    <p class="login-explain">O login Google é feito pela própria página de autenticação do Resolvei. Depois, a sessão é guardada no armazenamento protegido da extensão; a senha não é compartilhada com ela.</p>
+    <button id="google-start" class="button primary" type="button">Continuar com Google</button>
+    <div id="login-state" class="state" role="status" style="margin-top:12px">Clique para abrir a janela oficial de login.</div>
+    <p class="hint">Após concluir o login, esta janela será fechada automaticamente. Clique novamente no ícone da extensão para comparar o produto.</p>
+  </main>
+  <script src="login.js"></script>
+</body>
+</html>

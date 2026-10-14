@@ -1,6 +1,6 @@
 """API do Monitor de Preços, isolada das demais ferramentas."""
 from __future__ import annotations
-import asyncio, ipaddress, os, re, threading, uuid
+import asyncio, hashlib, ipaddress, os, re, secrets, threading, uuid
 from datetime import datetime, timedelta, timezone
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 from typing import Any
@@ -39,15 +39,14 @@ def _now():
 def _iso(value=None):
     return (value or _now()).isoformat()
 
-def _uid(authorization: str | None) -> str:
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(401, "Entre na sua conta do Resolvei para usar o Monitor de Preços.")
+
+def _firebase_uid_from_token(token: str) -> str:
     try:
         import firebase_admin
         from firebase_admin import auth
         if not firebase_admin._apps:
             raise HTTPException(503, "Firebase Admin não está configurado no servidor.")
-        uid = str(auth.verify_id_token(authorization[7:].strip()).get("uid") or "")
+        uid = str(auth.verify_id_token(token).get("uid") or "")
         if not uid:
             raise HTTPException(401, "Sessão Firebase inválida.")
         return uid
@@ -55,6 +54,33 @@ def _uid(authorization: str | None) -> str:
         raise
     except Exception as exc:
         raise HTTPException(401, "Sessão inválida ou expirada. Entre novamente no Resolvei.") from exc
+
+
+def _uid(authorization: str | None) -> str:
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(401, "Entre na sua conta do Resolvei para usar o Monitor de Preços.")
+    token = authorization[7:].strip()
+    try:
+        return _firebase_uid_from_token(token)
+    except HTTPException as exc:
+        if exc.status_code == 503:
+            raise
+    token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
+    snapshot = _db().collection("priceMonitorExtensionSessions").document(token_hash).get()
+    if not snapshot.exists:
+        raise HTTPException(401, "Sessão inválida ou expirada. Entre novamente no Resolvei.")
+    session = snapshot.to_dict() or {}
+    if not session.get("active", True) or not session.get("uid"):
+        raise HTTPException(401, "Esta sessão da extensão foi encerrada. Entre novamente no Resolvei.")
+    try:
+        expires = datetime.fromisoformat(str(session.get("expiresAt") or "").replace("Z", "+00:00"))
+        if expires.tzinfo is None:
+            expires = expires.replace(tzinfo=timezone.utc)
+    except ValueError:
+        raise HTTPException(401, "A sessão da extensão expirou. Entre novamente.")
+    if expires <= _now():
+        raise HTTPException(401, "A sessão da extensão expirou. Entre novamente.")
+    return str(session["uid"])
 
 def _db():
     try:
@@ -131,17 +157,76 @@ def _score(query, title):
     a, b = _words(query), _words(title)
     return round(len(a & b) / len(a), 3) if a and b else 0.0
 
+
+def _flatten_offer_text(value):
+    if isinstance(value, str):
+        return value
+    if isinstance(value, (int, float)):
+        return str(value)
+    if isinstance(value, dict):
+        return " ".join(_flatten_offer_text(v) for v in value.values())
+    if isinstance(value, (list, tuple)):
+        return " ".join(_flatten_offer_text(v) for v in value)
+    return ""
+
+
+def _extract_conditions(text):
+    text = _text(text, 1600)
+    low = text.lower()
+    free_shipping = True if re.search(r"frete\s+(?:gr[aá]tis|gratis|gratuito|gratuita)|envio\s+gr[aá]tis|entrega\s+gr[aá]tis", low) else None
+    shipping_match = re.search(r"(?:frete|entrega|envio)[^.;\n]{0,100}", text, re.I)
+    shipping_text = _text(shipping_match.group(0), 180) if shipping_match else ""
+    installment_count = installment_amount = installment_total = installment_interest = None
+    installment_text = ""
+    installment_match = re.search(
+        r"(\d{1,2})\s*x\s*(?:de\s*)?(?:R\$\s*)?([\d.]+,\d{2}|[\d,]+\.\d{2})?\s*(sem\s+juros|com\s+juros)?",
+        text, re.I
+    )
+    if installment_match:
+        count = int(installment_match.group(1))
+        amount = _price(installment_match.group(2)) if installment_match.group(2) else None
+        interest_text = (installment_match.group(3) or "").lower()
+        if 1 <= count <= 48:
+            installment_count = count
+            installment_amount = amount
+            installment_total = round(amount * count, 2) if amount else None
+            if "sem juros" in interest_text:
+                installment_interest = False
+            elif "com juros" in interest_text:
+                installment_interest = True
+            installment_text = _text(installment_match.group(0), 180)
+    coupons = []
+    for match in re.finditer(r"(?:cupom|c[oó]digo\s+(?:promocional|de\s+desconto)|use\s+o\s+c[oó]digo)[^\n.;]{0,100}", text, re.I):
+        snippet = match.group(0)
+        tokens = re.findall(r"\b[A-Z0-9][A-Z0-9_-]{3,19}\b", snippet.upper())
+        for token in tokens:
+            if token not in {"CUPOM", "DESCONTO", "CODIGO", "PROMOCIONAL", "USE", "OFF"} and not any(c["code"] == token for c in coupons):
+                coupons.append({"code": token, "description": _text(snippet, 160)})
+        if len(coupons) >= 6:
+            break
+    return {
+        "free_shipping": free_shipping,
+        "shipping_text": shipping_text,
+        "installment_count": installment_count,
+        "installment_amount": installment_amount,
+        "installment_total": installment_total,
+        "installment_interest": installment_interest,
+        "installment_text": installment_text,
+        "coupons": coupons[:6],
+    }
+
+
 def _shopping(query):
     key = os.getenv("SERPAPI_KEY", "").strip()
     if not key:
-        raise HTTPException(503, "A comparação entre lojas requer SERPAPI_KEY nas variáveis de ambiente do Render. O histórico e os preços registrados manualmente continuam disponíveis.")
+        raise HTTPException(503, "A comparação entre lojas requer SERPAPI_KEY nas variáveis de ambiente do Render. A extensão continuará mostrando a base comunitária.")
     query = _text(query, 180)
     if len(query) < 2:
         raise HTTPException(422, "Informe o nome, marca ou modelo do produto.")
     try:
         response = requests.get("https://serpapi.com/search.json",
             params={"engine":"google_shopping","q":query,"gl":"br","hl":"pt-br","api_key":key},
-            timeout=(5, 20), headers={"User-Agent":"ResolveiMonitorPrecos/1.0"})
+            timeout=(5, 20), headers={"User-Agent":"ResolveiMonitorPrecos/2.0"})
     except requests.RequestException as exc:
         raise HTTPException(502, "Não foi possível consultar ofertas agora. Tente novamente mais tarde.") from exc
     if response.status_code == 429:
@@ -164,11 +249,22 @@ def _shopping(query):
         if canonical in seen:
             continue
         seen.add(canonical)
+        source = _text(row.get("source"), 100) or (urlparse(link).hostname or "Loja")
+        terms = " ".join(filter(None, [
+            _text(row.get("title"), 300), _text(row.get("delivery"), 180),
+            _flatten_offer_text(row.get("extensions")), _flatten_offer_text(row.get("snippets")),
+            _flatten_offer_text(row.get("offers")), _flatten_offer_text(row.get("tags")),
+        ]))
+        conditions = _extract_conditions(terms)
+        delivery = _text(row.get("delivery"), 180)
+        if delivery and re.search(r"gr[aá]tis|gratis|gratuit", delivery, re.I):
+            conditions["free_shipping"] = True
+            conditions["shipping_text"] = delivery
         results.append({
-            "title":_text(row.get("title"), 300), "price":amount,
-            "source":_text(row.get("source"), 100) or (urlparse(link).hostname or "Loja"),
+            "title":_text(row.get("title"), 300), "price":amount, "source":source,
             "url":link[:2048], "image_url":_text(row.get("thumbnail"), 2048),
-            "delivery":_text(row.get("delivery"), 180), "rating":row.get("rating"), "reviews":row.get("reviews")
+            "delivery":delivery, "rating":row.get("rating"), "reviews":row.get("reviews"),
+            **conditions,
         })
     return sorted(results, key=lambda x:x["price"])[:20]
 
@@ -221,6 +317,38 @@ def _refresh_ref(ref, product):
             "title":best["title"],"url":best["url"]})
     ref.update(updates)
     return {"ok":True,"matched":True,"bestOffer":best,"offers":matched[:12],"checkedAt":updates["lastCheckedAt"]}
+
+
+@router.post("/extension/session")
+def create_extension_session(authorization: str | None = Header(default=None)):
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(401, "Entre na sua conta do Resolvei.")
+    # Apenas um ID token Firebase válido pode criar uma sessão duradoura da extensão.
+    uid = _firebase_uid_from_token(authorization[7:].strip())
+    access_token = secrets.token_urlsafe(48)
+    expires = _now() + timedelta(days=30)
+    token_hash = hashlib.sha256(access_token.encode("utf-8")).hexdigest()
+    _db().collection("priceMonitorExtensionSessions").document(token_hash).set({
+        "uid": uid,
+        "active": True,
+        "client": "resolvei-browser-extension",
+        "createdAt": _iso(),
+        "expiresAt": _iso(expires),
+    })
+    return {"accessToken": access_token, "expiresAt": _iso(expires), "expiresInDays": 30}
+
+
+@router.post("/extension/session/revoke")
+def revoke_extension_session(authorization: str | None = Header(default=None)):
+    uid = _uid(authorization)
+    token = authorization[7:].strip() if authorization else ""
+    token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
+    ref = _db().collection("priceMonitorExtensionSessions").document(token_hash)
+    snapshot = ref.get()
+    if snapshot.exists and str((snapshot.to_dict() or {}).get("uid") or "") == uid:
+        ref.update({"active": False, "revokedAt": _iso()})
+    return {"ok": True}
+
 
 @router.get("/status")
 def monitor_status(authorization: str | None = Header(default=None)):
@@ -344,6 +472,262 @@ def delete_product(product_id: str, authorization: str | None = Header(default=N
         event.reference.delete()
     ref.delete()
     return {"ok":True}
+
+
+class CommunityObservation(BaseModel):
+    title: str = Field(min_length=1, max_length=300)
+    url: str = Field(min_length=8, max_length=2048)
+    price: float | None = Field(default=None, gt=0, le=100000000)
+    brand: str = Field(default="", max_length=150)
+    model: str = Field(default="", max_length=150)
+    ean: str = Field(default="", max_length=32)
+    image_url: str = Field(default="", max_length=2048)
+    free_shipping: bool | None = None
+    shipping_text: str = Field(default="", max_length=240)
+    installment_count: int | None = Field(default=None, ge=1, le=48)
+    installment_amount: float | None = Field(default=None, gt=0, le=100000000)
+    installment_total: float | None = Field(default=None, gt=0, le=100000000)
+    installment_interest: bool | None = None
+    installment_text: str = Field(default="", max_length=240)
+    coupons: list[dict[str, str]] = Field(default_factory=list, max_length=10)
+
+
+def _normalized_product_title(value: str) -> str:
+    import unicodedata
+    text = unicodedata.normalize("NFKD", value or "").encode("ascii", "ignore").decode().lower()
+    text = re.sub(r"[^a-z0-9]+", " ", text)
+    return re.sub(r"\s+", " ", text).strip()[:280]
+
+
+def _community_key(req: CommunityObservation) -> str:
+    ean = re.sub(r"\D", "", req.ean or "")
+    if len(ean) in {8, 12, 13, 14}:
+        identity = "ean:" + ean
+    else:
+        title = _normalized_product_title(req.title)
+        brand = _normalized_product_title(req.brand)
+        model = _normalized_product_title(req.model)
+        identity = "product:" + "|".join(part for part in (brand, model, title) if part)
+    return hashlib.sha256(identity.encode("utf-8")).hexdigest()[:40]
+
+
+def _community_offer_id(url: str) -> str:
+    parsed = urlparse(url)
+    identity = (parsed.hostname or "").lower() + "|" + _canonical(url)
+    return hashlib.sha256(identity.encode("utf-8")).hexdigest()[:32]
+
+
+def _clean_coupons(items):
+    cleaned, seen = [], set()
+    for item in items or []:
+        if not isinstance(item, dict):
+            continue
+        code = re.sub(r"[^A-Za-z0-9_-]", "", _text(item.get("code"), 50)).upper()
+        description = _text(item.get("description"), 180)
+        if not code or code in seen or len(code) < 3:
+            continue
+        if code in {"CUPOM", "DESCONTO", "CODIGO", "PROMO", "CUPONS", "OFFICIAL"}:
+            continue
+        seen.add(code)
+        cleaned.append({"code": code, "description": description or "Identificado na página; confira validade e regras."})
+        if len(cleaned) >= 10:
+            break
+    return cleaned
+
+
+def _community_offer_payload(snapshot):
+    data = snapshot.to_dict() or {}
+    data["id"] = snapshot.id
+    return data
+
+
+def _community_offers(product_ref, limit=20):
+    rows = [_community_offer_payload(doc) for doc in product_ref.collection("offers").limit(200).stream()]
+    rows.sort(key=lambda item: (
+        item.get("price") is None,
+        float(item.get("price") or 0),
+        str(item.get("updatedAt") or "")
+    ))
+    return rows[:limit]
+
+
+def _community_history(product_ref, limit=12):
+    from google.cloud.firestore_v1 import Query
+    events = []
+    for event_doc in product_ref.collection("history").order_by("observedAt", direction=Query.DESCENDING).limit(limit).stream():
+        event = event_doc.to_dict() or {}
+        event["id"] = event_doc.id
+        events.append(event)
+    return events
+
+
+@router.post("/community/observe")
+def observe_community_product(req: CommunityObservation, authorization: str | None = Header(default=None)):
+    uid = _uid(authorization)
+    url = _validate_url(req.url)
+    now_dt, now = _now(), _iso()
+    today = now_dt.date().isoformat()
+    product_key = _community_key(req)
+    product_ref = _db().collection("communityPriceProducts").document(product_key)
+    prior_product = product_ref.get()
+    current_product = prior_product.to_dict() or {}
+    host = (urlparse(url).hostname or "loja").lower()
+    offer_id = _community_offer_id(url)
+    offer_ref = product_ref.collection("offers").document(offer_id)
+    prior_offer = offer_ref.get()
+    old_offer = prior_offer.to_dict() or {}
+    price = req.price if req.price is not None else old_offer.get("price")
+    coupons = _clean_coupons(req.coupons)
+    if not coupons:
+        coupons = old_offer.get("coupons", [])
+    free_shipping = req.free_shipping if req.free_shipping is not None else old_offer.get("free_shipping")
+    shipping_text = _text(req.shipping_text, 240) or _text(old_offer.get("shipping_text"), 240)
+    installment_count = req.installment_count if req.installment_count is not None else old_offer.get("installment_count")
+    installment_amount = req.installment_amount if req.installment_amount is not None else old_offer.get("installment_amount")
+    installment_total = req.installment_total if req.installment_total is not None else old_offer.get("installment_total")
+    installment_interest = req.installment_interest if req.installment_interest is not None else old_offer.get("installment_interest")
+    installment_text = _text(req.installment_text, 240) or _text(old_offer.get("installment_text"), 240)
+    product_data = {
+        "title": _text(req.title, 300),
+        "brand": _text(req.brand, 150) or current_product.get("brand", ""),
+        "model": _text(req.model, 150) or current_product.get("model", ""),
+        "ean": re.sub(r"\D", "", _text(req.ean, 32)) or current_product.get("ean", ""),
+        "image_url": _text(req.image_url, 2048) or current_product.get("image_url", ""),
+        "updatedAt": now,
+        "lastObservedAt": now,
+    }
+    if not prior_product.exists:
+        product_data["createdAt"] = now
+        product_data["contributorCount"] = 0
+        product_data["stores"] = []
+    from google.cloud.firestore_v1 import ArrayUnion, Increment
+    product_data["stores"] = ArrayUnion([host])
+    search_tokens = sorted(_words(" ".join([
+        _text(req.title, 300), _text(req.brand, 150), _text(req.model, 150), re.sub(r"\D", "", _text(req.ean, 32))
+    ])))[:40]
+    product_data["searchTokens"] = ArrayUnion(search_tokens)
+    product_ref.set(product_data, merge=True)
+    offer_data = {
+        "title": _text(req.title, 300),
+        "source": host,
+        "url": url,
+        "price": price,
+        "image_url": _text(req.image_url, 2048) or old_offer.get("image_url", ""),
+        "free_shipping": free_shipping,
+        "shipping_text": shipping_text,
+        "installment_count": installment_count,
+        "installment_amount": installment_amount,
+        "installment_total": installment_total,
+        "installment_interest": installment_interest,
+        "installment_text": installment_text,
+        "coupons": coupons,
+        "updatedAt": now,
+        "lastObservedAt": now,
+    }
+    if req.price is not None:
+        offer_data["priceObservedAt"] = now
+        price_event_id = hashlib.sha256(f"{offer_id}|{today}|{req.price:.2f}".encode("utf-8")).hexdigest()[:32]
+        history_ref = product_ref.collection("history").document(price_event_id)
+        if not history_ref.get().exists:
+            history_ref.set({
+                "price": round(req.price, 2),
+                "source": host,
+                "offerId": offer_id,
+                "url": url,
+                "title": _text(req.title, 300),
+                "observedAt": now,
+                "free_shipping": free_shipping,
+                "shipping_text": shipping_text,
+                "installment_count": installment_count,
+                "installment_amount": installment_amount,
+                "installment_total": installment_total,
+                "installment_interest": installment_interest,
+                "coupons": coupons,
+            })
+    if not prior_offer.exists:
+        offer_data["createdAt"] = now
+    offer_ref.set(offer_data, merge=True)
+    contribution_id = hashlib.sha256((uid + "|" + product_key).encode("utf-8")).hexdigest()[:32]
+    contribution_ref = product_ref.collection("contributions").document(contribution_id)
+    if not contribution_ref.get().exists:
+        contribution_ref.set({"contributorRef": contribution_id, "createdAt": now, "lastContributedAt": now})
+        product_ref.set({"contributorCount": Increment(1)}, merge=True)
+    else:
+        contribution_ref.set({"lastContributedAt": now}, merge=True)
+    product_snapshot = product_ref.get().to_dict() or {}
+    all_offers = _community_offers(product_ref, limit=30)
+    priced = [item for item in all_offers if isinstance(item.get("price"), (int, float)) and item["price"] > 0]
+    return {
+        "ok": True,
+        "productKey": product_key,
+        "product": {**product_snapshot, "id": product_key},
+        "offers": all_offers,
+        "bestOffer": priced[0] if priced else None,
+        "contributorCount": int(product_snapshot.get("contributorCount") or 0),
+        "communityShared": True,
+    }
+
+
+@router.get("/community/search")
+def search_community_products(
+    q: str = Query(min_length=2, max_length=180),
+    authorization: str | None = Header(default=None),
+):
+    _uid(authorization)
+    collection = _db().collection("communityPriceProducts")
+    query_tokens = sorted(_words(q), key=lambda token: (-len(token), token))[:6]
+    candidates = {}
+    # Usa array_contains em tokens indexados; evita percorrer ofertas e históricos de toda a base.
+    for token in query_tokens:
+        for snapshot in collection.where("searchTokens", "array_contains", token).limit(120).stream():
+            candidates[snapshot.id] = snapshot
+    if not candidates:
+        # Compatibilidade com fichas antigas sem índice de palavras.
+        for snapshot in collection.limit(300).stream():
+            candidates[snapshot.id] = snapshot
+    matches = []
+    for snapshot in candidates.values():
+        product = snapshot.to_dict() or {}
+        searchable = " ".join([
+            _text(product.get("title"), 300),
+            _text(product.get("brand"), 150),
+            _text(product.get("model"), 150),
+            _text(product.get("ean"), 32),
+        ]).strip()
+        score = _score(q, searchable)
+        if score < 0.25:
+            continue
+        matches.append({
+            "id": snapshot.id,
+            "title": _text(product.get("title"), 300),
+            "brand": _text(product.get("brand"), 150),
+            "model": _text(product.get("model"), 150),
+            "ean": _text(product.get("ean"), 32),
+            "image_url": _text(product.get("image_url"), 2048),
+            "contributorCount": int(product.get("contributorCount") or 0),
+            "stores": product.get("stores") or [],
+            "matchScore": score,
+            "updatedAt": product.get("updatedAt", ""),
+        })
+    matches.sort(key=lambda item: (
+        item.get("matchScore", 0) < 0.4,
+        -float(item.get("matchScore") or 0),
+        str(item.get("updatedAt") or ""),
+    ))
+    selected = matches[:6]
+    for item in selected:
+        product_ref = collection.document(item["id"])
+        offers = _community_offers(product_ref, limit=20)
+        priced = [offer for offer in offers if isinstance(offer.get("price"), (int, float)) and offer["price"] > 0]
+        item["offers"] = offers
+        item["bestOffer"] = priced[0] if priced else None
+        item["history"] = _community_history(product_ref, limit=10)
+    return {
+        "query": q,
+        "products": selected,
+        "coverageNote": "Base comunitária: preços e condições registrados pelos usuários do Resolvei. Frete, parcelas e cupons podem mudar e precisam ser confirmados na loja.",
+    }
+
 
 async def _scheduler_loop():
     while True:
