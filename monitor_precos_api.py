@@ -647,11 +647,13 @@ def observe_community_product(req: CommunityObservation, authorization: str | No
     if not prior_offer.exists:
         offer_data["createdAt"] = now
     offer_ref.set(offer_data, merge=True)
-    contribution_id = hashlib.sha256((uid + "|" + product_key + "|" + today).encode("utf-8")).hexdigest()[:32]
+    contribution_id = hashlib.sha256((uid + "|" + product_key).encode("utf-8")).hexdigest()[:32]
     contribution_ref = product_ref.collection("contributions").document(contribution_id)
     if not contribution_ref.get().exists:
-        contribution_ref.set({"date": today, "contributorRef": contribution_id, "createdAt": now})
+        contribution_ref.set({"contributorRef": contribution_id, "createdAt": now, "lastContributedAt": now})
         product_ref.set({"contributorCount": Increment(1)}, merge=True)
+    else:
+        contribution_ref.set({"lastContributedAt": now}, merge=True)
     product_snapshot = product_ref.get().to_dict() or {}
     all_offers = _community_offers(product_ref, limit=30)
     priced = [item for item in all_offers if isinstance(item.get("price"), (int, float)) and item["price"] > 0]
