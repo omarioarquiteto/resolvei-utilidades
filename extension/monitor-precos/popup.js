@@ -379,6 +379,14 @@ function shippingLabel(offer) {
   return { text: "Frete não confirmado", kind: "warn" };
 }
 
+function observedPriceLabel(offer) {
+  const value = offer && (offer.priceObservedAt || offer.lastObservedAt || offer.updatedAt);
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return "Preço observado " + date.toLocaleDateString("pt-BR");
+}
+
 function installmentLabel(offer) {
   const count = Number(offer && offer.installment_count);
   if (!count) return { text: "Parcelamento não identificado", kind: "warn" };
@@ -531,6 +539,10 @@ function renderOffers(offers) {
       '<span class="offer-detail ' + installment.kind + '">' + escapeHtml(installment.text) + '</span>'
     ];
     if (offer.installment_total) detailParts.push('<span class="offer-detail">Total parcelado: ' + escapeHtml(money(offer.installment_total)) + '</span>');
+    if (offer.community || offer.isCurrent) {
+      const observedLabel = observedPriceLabel(offer);
+      if (observedLabel) detailParts.push('<span class="offer-detail">' + escapeHtml(observedLabel) + '</span>');
+    }
     if (offer.rating) detailParts.push('<span class="offer-detail">★ ' + escapeHtml(offer.rating) + (offer.reviews ? ' (' + escapeHtml(offer.reviews) + ')' : "") + '</span>');
     const label = offer.isCurrent ? "Página aberta agora" : (offer.community ? "Base da comunidade" : (offer.sourceType === "shopping" ? "Pesquisa de lojas" : "Oferta registrada"));
     const safeUrl = /^https:\/\//i.test(String(offer.url || "")) ? offer.url : "";
