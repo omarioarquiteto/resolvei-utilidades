@@ -639,15 +639,41 @@ def observe_community_product(req: CommunityObservation, authorization: str | No
     if req.price is not None:
         offer_data["priceObservedAt"] = now
         price_event_id = hashlib.sha256(f"{offer_id}|{today}|{req.price:.2f}".encode("utf-8")).hexdigest()[:32]
-        history_ref = product_ref.collection("history").document(price_event_id)
-        if not history_ref.get().exists:
-            history_ref.set({
+        offer_history_ref = offer_ref.collection("history").document(price_event_id)
+        if not offer_history_ref.get().exists:
+            offer_history_ref.set({
+                "price": round(req.price, 2),
+                "source": host,
+                "url": url,
+                "title": _text(req.title, 300),
+                "observedAt": now,
+                "origin": "community-capture",
+                "free_shipping": free_shipping,
+                "shipping_text": shipping_text,
+                "installment_count": installment_count,
+                "installment_amount": installment_amount,
+                "installment_total": installment_total,
+                "installment_interest": installment_interest,
+                "coupons": coupons,
+            })
+        current_best = _price(current_product.get("bestCommunityPrice"))
+        if current_best is None or req.price < current_best:
+            product_ref.set({
+                "bestCommunityPrice": round(req.price, 2),
+                "bestCommunityOfferUrl": url,
+                "bestCommunityOfferSource": host,
+                "bestCommunityOfferTitle": _text(req.title, 300),
+                "bestCommunityPriceObservedAt": now,
+            }, merge=True)
+            product_history_id = "capture-" + hashlib.sha256(f"{offer_id}|{now}|{req.price:.2f}".encode("utf-8")).hexdigest()[:28]
+            product_ref.collection("history").document(product_history_id).set({
                 "price": round(req.price, 2),
                 "source": host,
                 "offerId": offer_id,
                 "url": url,
                 "title": _text(req.title, 300),
                 "observedAt": now,
+                "origin": "community-capture",
                 "free_shipping": free_shipping,
                 "shipping_text": shipping_text,
                 "installment_count": installment_count,
