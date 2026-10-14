@@ -84,32 +84,13 @@ function storageClear() {
   });
 }
 
-async function refreshSession(session) {
-  if (!session || !session.refreshToken) throw new Error("Sessão expirada. Entre novamente no Resolvei.");
-  const body = new URLSearchParams();
-  body.set("grant_type", "refresh_token");
-  body.set("refresh_token", session.refreshToken);
-  const response = await fetch("https://securetoken.googleapis.com/v1/token?key=" + encodeURIComponent(FIREBASE_API_KEY), {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: body.toString()
-  });
-  const data = await response.json().catch(function () { return {}; });
-  if (!response.ok || !data.id_token) throw new Error("Sua sessão expirou. Entre novamente no Resolvei.");
-  const fresh = {
-    idToken: data.id_token,
-    refreshToken: data.refresh_token || session.refreshToken,
-    email: data.user_id ? (session.email || "") : (session.email || ""),
-    expiresAt: Date.now() + (Number(data.expires_in || 3600) * 1000)
-  };
-  await storageSet(fresh);
-  return fresh;
-}
-
 async function ensureSession() {
-  let session = await storageGet(SESSION_KEY);
-  if (!session || !session.idToken) throw new Error("Entre na sua conta do Resolvei para comparar preços.");
-  if (!session.expiresAt || session.expiresAt < Date.now() + 120000) session = await refreshSession(session);
+  const session = await storageGet(SESSION_KEY);
+  if (!session || !session.apiToken || !Number.isFinite(Number(session.expiresAt)) || Number(session.expiresAt) <= Date.now()) {
+    await storageClear();
+    activeUser = null;
+    throw new Error("Sua sessão do Resolvei expirou. Entre novamente para continuar.");
+  }
   activeUser = session.email || "";
   return session;
 }
@@ -118,7 +99,7 @@ async function api(path, options) {
   const session = await ensureSession();
   const opts = options || {};
   const headers = Object.assign({}, opts.headers || {}, {
-    "Authorization": "Bearer " + session.idToken
+    "Authorization": "Bearer " + session.apiToken
   });
   if (opts.body && !headers["Content-Type"]) headers["Content-Type"] = "application/json";
   let response;
@@ -140,6 +121,27 @@ async function api(path, options) {
   return payload;
 }
 
+async function createApiSession(firebaseIdToken, email) {
+  const response = await fetch(API_BASE + "/extension/session", {
+    method: "POST",
+    headers: {
+      "Authorization": "Bearer " + firebaseIdToken
+    }
+  });
+  const data = await response.json().catch(function () { return {}; });
+  if (!response.ok || !data.accessToken) {
+    throw new Error(data.detail || "O login foi validado, mas não foi possível iniciar a sessão da extensão.");
+  }
+  const session = {
+    apiToken: data.accessToken,
+    email: String(email || ""),
+    expiresAt: Date.parse(data.expiresAt || "") || (Date.now() + 30 * 24 * 60 * 60 * 1000)
+  };
+  await storageSet(session);
+  activeUser = session.email;
+  return session;
+}
+
 function loginWithEmail(email, password) {
   return fetch("https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=" + encodeURIComponent(FIREBASE_API_KEY), {
     method: "POST",
@@ -159,15 +161,8 @@ function loginWithEmail(email, password) {
       };
       throw new Error(messages[code] || "Não foi possível entrar. Confira suas credenciais e tente novamente.");
     }
-    const session = {
-      idToken: data.idToken,
-      refreshToken: data.refreshToken,
-      email: data.email || email,
-      expiresAt: Date.now() + (Number(data.expiresIn || 3600) * 1000)
-    };
-    await storageSet(session);
-    activeUser = session.email;
-    return session;
+    // Troca o ID token curto do Firebase por uma sessão opaca revogável da extensão.
+    return createApiSession(data.idToken, data.email || email);
   });
 }
 
@@ -645,6 +640,13 @@ function bindUI() {
   document.getElementById("login-google").addEventListener("click", launchGoogleLogin);
 
   document.getElementById("logout").addEventListener("click", async function () {
+    const session = await storageGet(SESSION_KEY);
+    if (session && session.apiToken) {
+      fetch(API_BASE + "/extension/session/revoke", {
+        method: "POST",
+        headers: { "Authorization": "Bearer " + session.apiToken }
+      }).catch(function () {});
+    }
     await storageClear();
     activeUser = null;
     showLogin("Você saiu da conta do Resolvei.", false);
@@ -673,14 +675,12 @@ async function initialize() {
   let session = null;
   try {
     session = await storageGet(SESSION_KEY);
-    if (session && session.idToken) {
+    if (session && session.apiToken && Number(session.expiresAt) > Date.now()) {
       activeUser = session.email || "";
-      if (!session.expiresAt || session.expiresAt < Date.now() + 120000) {
-        session = await refreshSession(session);
-        activeUser = session.email || "";
-      }
       showApp();
     } else {
+      if (session) await storageClear();
+      activeUser = null;
       showLogin("Entre com sua conta para comparar os preços e compartilhar observações.");
     }
   } catch (error) {
