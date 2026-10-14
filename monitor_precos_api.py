@@ -867,31 +867,42 @@ def _refresh_community_product(product_ref, product):
 
 
 @router.post("/admin/refresh-community")
-def refresh_community_price_history(x_price_monitor_cron_key: str | None = Header(default=None, alias="X-Price-Monitor-Cron-Key")):
+def refresh_community_price_history(
+    batch_size: int = Query(default=3, ge=1, le=10),
+    x_price_monitor_cron_key: str | None = Header(default=None, alias="X-Price-Monitor-Cron-Key"),
+):
     expected = os.getenv("PRICE_MONITOR_CRON_KEY", "").strip()
     if not expected or not x_price_monitor_cron_key or not secrets.compare_digest(expected, x_price_monitor_cron_key):
         raise HTTPException(403, "Chave de execução automática ausente ou inválida.")
     if not os.getenv("SERPAPI_KEY", "").strip():
         raise HTTPException(503, "SERPAPI_KEY não está configurada no Render.")
+
     now = _now()
-    docs = list(_db().collection("communityPriceProducts").stream())
-    due = []
-    for doc in docs:
+    collection = _db().collection("communityPriceProducts")
+    now_text = _iso(now)
+    due_by_id = {}
+
+    # Consulta só registros vencidos usando o campo indexado; não lê a base inteira.
+    for doc in collection.where("nextRefreshAt", "<=", now_text).order_by("nextRefreshAt").limit(batch_size).stream():
+        product = doc.to_dict() or {}
+        due_by_id[doc.id] = (str(product.get("nextRefreshAt") or ""), doc.reference, product)
+
+    # Compatibilidade inicial para fichas antigas, criadas antes do agendamento existir.
+    # Mantém essa varredura limitada para proteger a cota gratuita de leituras do Firestore.
+    for doc in collection.limit(100).stream():
+        if doc.id in due_by_id:
+            continue
         product = doc.to_dict() or {}
         next_at = str(product.get("nextRefreshAt") or "")
-        try:
-            target = datetime.fromisoformat(next_at.replace("Z", "+00:00")) if next_at else None
-            if target and target.tzinfo is None:
-                target = target.replace(tzinfo=timezone.utc)
-        except ValueError:
-            target = None
-        if target is None or target <= now:
-            due.append((next_at, doc.reference, product))
-    due.sort(key=lambda item: item[0])
-    batch_size = max(1, min(int(os.getenv("PRICE_MONITOR_REFRESH_BATCH", "25")), 100))
+        if not next_at:
+            due_by_id[doc.id] = ("", doc.reference, product)
+
+    due = sorted(due_by_id.values(), key=lambda item: item[0])
+    batch_size = max(1, min(int(os.getenv("PRICE_MONITOR_REFRESH_BATCH", str(batch_size))), 100))
+    batch = due[:batch_size]
     results = []
     errors = 0
-    for _, ref, product in due[:batch_size]:
+    for _, ref, product in batch:
         try:
             results.append(_refresh_community_product(ref, product))
         except HTTPException as exc:
@@ -911,13 +922,12 @@ def refresh_community_price_history(x_price_monitor_cron_key: str | None = Heade
             }, merge=True)
     return {
         "ok": errors == 0,
-        "totalProducts": len(docs),
-        "dueProducts": len(due),
+        "scannedDueCandidates": len(due),
         "processed": len(results) + errors,
         "offersUpdated": sum(int(item.get("offersUpdated") or 0) for item in results),
         "priceChanges": sum(1 for item in results if item.get("priceChanged")),
         "errors": errors,
-        "remainingDue": max(0, len(due) - batch_size),
+        "remainingDueAtLeast": max(0, len(due) - len(batch)),
         "checkedAt": _iso(),
         "results": results,
     }
