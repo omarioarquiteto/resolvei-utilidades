@@ -16,5 +16,7 @@ jobs:
         run: |
           node --check monitor-precos.js
           node --check extension/monitor-precos/popup.js
+          node --check extension/monitor-precos/login.js
       - name: Validate extension manifest
-        run: python -c "import json; json.load(open('extension/monitor-precos/manifest.json', encoding='utf-8'))"
+        run: |
+          python -c "import json; json.load(open('extension/monitor-precos/manifest.json', encoding='utf-8'))"
