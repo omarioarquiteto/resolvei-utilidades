@@ -148,7 +148,7 @@ const ACTIVE_TOOL_IDS = new Set([
   'gerenciamento-risco','visao-opcoes','analista-bin','consultor-senior','monitor-precos'
 ]);
 for(let i=tools.length-1;i>=0;i--){if(!ACTIVE_TOOL_IDS.has(tools[i].id))tools.splice(i,1);}
-const popular = ['porcentagem','combustivel-viagem','piso','tinta','financiamento','juros-compostos','conversor-arquivos','lista-compras'];
+const popular = ['monitor-precos','porcentagem','combustivel-viagem','piso','tinta','financiamento','juros-compostos','lista-compras'];
 
 const input = (id,label,opts={}) => {
   const type = opts.type || 'number';
