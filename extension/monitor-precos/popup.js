@@ -462,6 +462,32 @@ function mergeOffers(groups) {
   });
 }
 
+function renderCommunityHistory(events) {
+  const panel = document.getElementById("history-panel");
+  const box = document.getElementById("price-history");
+  const count = document.getElementById("history-count");
+  const rows = (events || []).filter(function (item) { return Number(item.price) > 0; }).slice(0, 8);
+  if (!rows.length) {
+    panel.classList.add("hidden");
+    box.innerHTML = "";
+    count.textContent = "";
+    return;
+  }
+  panel.classList.remove("hidden");
+  count.textContent = rows.length + " registro(s)";
+  box.innerHTML = rows.map(function (item) {
+    let when = "Data não informada";
+    try {
+      const date = new Date(item.observedAt);
+      if (!Number.isNaN(date.getTime())) when = date.toLocaleDateString("pt-BR") + " " + date.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+    } catch (_) {}
+    return '<div class="history-row"><div><div class="history-source">' +
+      escapeHtml(item.source || "Loja") + '</div><div class="history-date">' +
+      escapeHtml(when) + '</div></div><strong class="history-price">' +
+      escapeHtml(money(item.price)) + '</strong></div>';
+  }).join("");
+}
+
 function renderOffers(offers) {
   const box = document.getElementById("offers");
   if (!offers || !offers.length) {
@@ -480,7 +506,7 @@ function renderOffers(offers) {
       ? Number(communityData.contributorCount || communityData.product.contributorCount || 0)
       : Number((communityData && communityData.contributorCount) || 0);
     const stores = new Set(offers.map(function (offer) { return shortSource(offer); })).size;
-    document.getElementById("community-count").textContent = stores + " loja(s) · Base comunitária contribui para compartilhar preços; frete e cupons podem alterar o custo final.";
+    document.getElementById("community-count").textContent = stores + " loja(s) · " + count + " colaborador(es) na base deste produto.";
   } else {
     summary.classList.add("hidden");
   }
@@ -506,7 +532,7 @@ function renderOffers(offers) {
     ];
     if (offer.installment_total) detailParts.push('<span class="offer-detail">Total parcelado: ' + escapeHtml(money(offer.installment_total)) + '</span>');
     if (offer.rating) detailParts.push('<span class="offer-detail">★ ' + escapeHtml(offer.rating) + (offer.reviews ? ' (' + escapeHtml(offer.reviews) + ')' : "") + '</span>');
-    const label = offer.community ? "Base da comunidade" : (offer.isCurrent ? "Página aberta agora" : (offer.sourceType === "shopping" ? "Pesquisa de lojas" : "Oferta registrada"));
+    const label = offer.isCurrent ? "Página aberta agora" : (offer.community ? "Base da comunidade" : (offer.sourceType === "shopping" ? "Pesquisa de lojas" : "Oferta registrada"));
     const safeUrl = /^https:\/\//i.test(String(offer.url || "")) ? offer.url : "";
     return '<article class="offer">' + img + '<div class="offer-body">' +
       '<div class="offer-top"><div class="offer-title">' + (index === 0 && priced.length ? '🏷️ ' : '') + escapeHtml(title) + '</div><div class="offer-price">' + escapeHtml(price) + '</div></div>' +
@@ -547,6 +573,14 @@ async function runComparison() {
         return { offers: [], error: error.message, coverageNote: "" };
       })
     ]);
+
+    const matchedProduct = (communityResult.products || []).find(function (item) {
+      return item && item.id === communityData.productKey;
+    }) || (communityResult.products || []).find(function (item) {
+      return item && Number(item.matchScore) >= 0.45;
+    }) || null;
+    communityData.searchMatch = matchedProduct;
+    renderCommunityHistory(matchedProduct ? matchedProduct.history : []);
 
     const fromCommunity = [];
     (communityData.offers || []).forEach(function (offer) {
