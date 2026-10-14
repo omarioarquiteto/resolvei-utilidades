@@ -1,6 +1,6 @@
 """API do Monitor de Preços, isolada das demais ferramentas."""
 from __future__ import annotations
-import asyncio, hashlib, ipaddress, os, re, threading, uuid
+import asyncio, hashlib, ipaddress, os, re, secrets, threading, uuid
 from datetime import datetime, timedelta, timezone
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 from typing import Any
@@ -39,15 +39,14 @@ def _now():
 def _iso(value=None):
     return (value or _now()).isoformat()
 
-def _uid(authorization: str | None) -> str:
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(401, "Entre na sua conta do Resolvei para usar o Monitor de Preços.")
+
+def _firebase_uid_from_token(token: str) -> str:
     try:
         import firebase_admin
         from firebase_admin import auth
         if not firebase_admin._apps:
             raise HTTPException(503, "Firebase Admin não está configurado no servidor.")
-        uid = str(auth.verify_id_token(authorization[7:].strip()).get("uid") or "")
+        uid = str(auth.verify_id_token(token).get("uid") or "")
         if not uid:
             raise HTTPException(401, "Sessão Firebase inválida.")
         return uid
@@ -55,6 +54,33 @@ def _uid(authorization: str | None) -> str:
         raise
     except Exception as exc:
         raise HTTPException(401, "Sessão inválida ou expirada. Entre novamente no Resolvei.") from exc
+
+
+def _uid(authorization: str | None) -> str:
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(401, "Entre na sua conta do Resolvei para usar o Monitor de Preços.")
+    token = authorization[7:].strip()
+    try:
+        return _firebase_uid_from_token(token)
+    except HTTPException as exc:
+        if exc.status_code == 503:
+            raise
+    token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
+    snapshot = _db().collection("priceMonitorExtensionSessions").document(token_hash).get()
+    if not snapshot.exists:
+        raise HTTPException(401, "Sessão inválida ou expirada. Entre novamente no Resolvei.")
+    session = snapshot.to_dict() or {}
+    if not session.get("active", True) or not session.get("uid"):
+        raise HTTPException(401, "Esta sessão da extensão foi encerrada. Entre novamente no Resolvei.")
+    try:
+        expires = datetime.fromisoformat(str(session.get("expiresAt") or "").replace("Z", "+00:00"))
+        if expires.tzinfo is None:
+            expires = expires.replace(tzinfo=timezone.utc)
+    except ValueError:
+        raise HTTPException(401, "A sessão da extensão expirou. Entre novamente.")
+    if expires <= _now():
+        raise HTTPException(401, "A sessão da extensão expirou. Entre novamente.")
+    return str(session["uid"])
 
 def _db():
     try:
@@ -291,6 +317,38 @@ def _refresh_ref(ref, product):
             "title":best["title"],"url":best["url"]})
     ref.update(updates)
     return {"ok":True,"matched":True,"bestOffer":best,"offers":matched[:12],"checkedAt":updates["lastCheckedAt"]}
+
+
+@router.post("/extension/session")
+def create_extension_session(authorization: str | None = Header(default=None)):
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(401, "Entre na sua conta do Resolvei.")
+    # Apenas um ID token Firebase válido pode criar uma sessão duradoura da extensão.
+    uid = _firebase_uid_from_token(authorization[7:].strip())
+    access_token = secrets.token_urlsafe(48)
+    expires = _now() + timedelta(days=30)
+    token_hash = hashlib.sha256(access_token.encode("utf-8")).hexdigest()
+    _db().collection("priceMonitorExtensionSessions").document(token_hash).set({
+        "uid": uid,
+        "active": True,
+        "client": "resolvei-browser-extension",
+        "createdAt": _iso(),
+        "expiresAt": _iso(expires),
+    })
+    return {"accessToken": access_token, "expiresAt": _iso(expires), "expiresInDays": 30}
+
+
+@router.post("/extension/session/revoke")
+def revoke_extension_session(authorization: str | None = Header(default=None)):
+    uid = _uid(authorization)
+    token = authorization[7:].strip() if authorization else ""
+    token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
+    ref = _db().collection("priceMonitorExtensionSessions").document(token_hash)
+    snapshot = ref.get()
+    if snapshot.exists and str((snapshot.to_dict() or {}).get("uid") or "") == uid:
+        ref.update({"active": False, "revokedAt": _iso()})
+    return {"ok": True}
+
 
 @router.get("/status")
 def monitor_status(authorization: str | None = Header(default=None)):
