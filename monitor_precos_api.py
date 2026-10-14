@@ -19,6 +19,7 @@ class ProductCreate(BaseModel):
     title: str = Field(min_length=1, max_length=300)
     url: str = Field(min_length=8, max_length=2048)
     price: float | None = Field(default=None, gt=0, le=100000000)
+    target_price: float | None = Field(default=None, gt=0, le=100000000)
     brand: str = Field(default="", max_length=150)
     model: str = Field(default="", max_length=150)
     ean: str = Field(default="", max_length=32)
@@ -28,6 +29,9 @@ class ProductCreate(BaseModel):
 class PriceObservation(BaseModel):
     price: float = Field(gt=0, le=100000000)
     source: str = Field(default="Preço informado pelo usuário", max_length=100)
+
+class TargetPriceUpdate(BaseModel):
+    target_price: float | None = Field(default=None, gt=0, le=100000000)
 
 def _now():
     return datetime.now(timezone.utc)
@@ -171,6 +175,19 @@ def _shopping(query):
 def _history(ref, event):
     ref.collection("history").document().set({**event, "observedAt":_iso()})
 
+def _target_reached(product, target=None):
+    target = product.get("targetPrice") if target is None else target
+    if target is None:
+        return False
+    for key in ("price", "bestOfferPrice"):
+        try:
+            value = float(product.get(key))
+            if value > 0 and value <= float(target):
+                return True
+        except (TypeError, ValueError):
+            continue
+    return False
+
 def _serialize(snapshot):
     data = snapshot.to_dict() or {}
     data["id"] = snapshot.id
@@ -193,6 +210,12 @@ def _refresh_ref(ref, product):
     previous = product.get("bestOfferPrice")
     updates.update({"offers":matched[:12],"bestOfferPrice":best["price"],
         "bestOfferSource":best["source"],"bestOfferUrl":best["url"],"bestOfferTitle":best["title"]})
+    reached = _target_reached({**product, "bestOfferPrice":best["price"]})
+    updates["targetReached"] = reached
+    if reached and not product.get("targetReached"):
+        updates["targetReachedAt"] = _iso(now)
+    elif not reached:
+        updates["targetReachedAt"] = ""
     if previous is None or abs(float(previous)-float(best["price"])) >= 0.01:
         _history(ref, {"price":best["price"],"kind":"best-offer","source":best["source"],
             "title":best["title"],"url":best["url"]})
@@ -224,6 +247,10 @@ def add_product(req: ProductCreate, authorization: str | None = Header(default=N
             continue
         ref = snapshot.reference
         changes = {"updatedAt":_iso()}
+        if req.target_price is not None:
+            changes["targetPrice"] = req.target_price
+            changes["targetReached"] = _target_reached(existing, req.target_price)
+            changes["targetReachedAt"] = _iso() if changes["targetReached"] else ""
         if req.price is not None and (existing.get("price") is None or abs(float(existing["price"])-req.price) >= 0.01):
             changes["price"] = req.price
             _history(ref, {"price":req.price,"kind":"page-observation","source":req.source,"title":req.title,"url":url})
@@ -236,6 +263,7 @@ def add_product(req: ProductCreate, authorization: str | None = Header(default=N
         raise HTTPException(413, "O limite inicial é de 100 produtos monitorados por conta.")
     now, product_id = _iso(), uuid.uuid4().hex
     data = {"title":_text(req.title),"url":url,"canonicalUrl":canonical,"price":req.price,
+        "targetPrice":req.target_price,"targetReached":False,"targetReachedAt":"",
         "brand":_text(req.brand,150),"model":_text(req.model,150),"ean":_text(req.ean,32),
         "image_url":_text(req.image_url,2048),"source":_text(req.source,80) or (urlparse(url).hostname or "Página do produto"),
         "active":True,"offers":[],"bestOfferPrice":None,"bestOfferSource":"","bestOfferUrl":"",
@@ -245,6 +273,8 @@ def add_product(req: ProductCreate, authorization: str | None = Header(default=N
     ref.set(data)
     if req.price is not None:
         _history(ref, {"price":req.price,"kind":"page-observation","source":data["source"],"title":data["title"],"url":url})
+    if _target_reached(data):
+        ref.update({"targetReached":True,"targetReachedAt":now})
     return {"product":_serialize(ref.get()),"existing":False}
 
 @router.get("/products/{product_id}/history")
@@ -270,7 +300,22 @@ def observe_price(product_id: str, req: PriceObservation, authorization: str | N
     if product.get("price") is None or abs(float(product["price"])-req.price) >= 0.01:
         _history(ref, {"price":req.price,"kind":"page-observation","source":_text(req.source,100),
             "title":product.get("title",""),"url":product.get("url","")})
-    ref.update({"price":req.price,"source":_text(req.source,100),"updatedAt":now,"lastObservedAt":now})
+    reached = _target_reached({**product, "price":req.price})
+    ref.update({"price":req.price,"source":_text(req.source,100),"updatedAt":now,"lastObservedAt":now,
+        "targetReached":reached,"targetReachedAt":now if reached and not product.get("targetReached") else (product.get("targetReachedAt","") if reached else "")})
+    return {"product":_serialize(ref.get())}
+
+@router.post("/products/{product_id}/target")
+def set_target_price(product_id: str, req: TargetPriceUpdate, authorization: str | None = Header(default=None)):
+    ref = _ref(_uid(authorization), product_id)
+    snapshot = ref.get()
+    if not snapshot.exists:
+        raise HTTPException(404, "Produto não encontrado.")
+    product = snapshot.to_dict() or {}
+    reached = _target_reached(product, req.target_price)
+    now = _iso()
+    ref.update({"targetPrice":req.target_price,"targetReached":reached,
+        "targetReachedAt":now if reached else "","updatedAt":now})
     return {"product":_serialize(ref.get())}
 
 @router.post("/products/{product_id}/refresh")
