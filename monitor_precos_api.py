@@ -867,7 +867,10 @@ def _refresh_community_product(product_ref, product):
 
 
 @router.post("/admin/refresh-community")
-def refresh_community_price_history(x_price_monitor_cron_key: str | None = Header(default=None, alias="X-Price-Monitor-Cron-Key")):
+def refresh_community_price_history(
+    batch_size: int = Query(default=3, ge=1, le=10),
+    x_price_monitor_cron_key: str | None = Header(default=None, alias="X-Price-Monitor-Cron-Key"),
+):
     expected = os.getenv("PRICE_MONITOR_CRON_KEY", "").strip()
     if not expected or not x_price_monitor_cron_key or not secrets.compare_digest(expected, x_price_monitor_cron_key):
         raise HTTPException(403, "Chave de execução automática ausente ou inválida.")
@@ -888,7 +891,7 @@ def refresh_community_price_history(x_price_monitor_cron_key: str | None = Heade
         if target is None or target <= now:
             due.append((next_at, doc.reference, product))
     due.sort(key=lambda item: item[0])
-    batch_size = max(1, min(int(os.getenv("PRICE_MONITOR_REFRESH_BATCH", "25")), 100))
+    batch_size = max(1, min(int(os.getenv("PRICE_MONITOR_REFRESH_BATCH", str(batch_size))), 100))
     results = []
     errors = 0
     for _, ref, product in due[:batch_size]:
