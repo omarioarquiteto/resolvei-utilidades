@@ -1558,6 +1558,24 @@ function resolveiFirebaseInit(){
     resolveiAuth=firebase.auth();try{resolveiDb=firebase.firestore();}catch(e){console.warn("Firestore indisponível; autenticação continuará funcionando:",e);resolveiDb=null;}resolveiFirebaseError="";
     resolveiAuth.onAuthStateChanged(user=>{
       resolveiUser=user||null;
+      // Ponte de autenticação opcional e restrita à origem da extensão Resolvei.
+      // Ela só é ativada quando a janela foi aberta com resolveiExtensionOrigin.
+      const extensionOrigin = new URLSearchParams(location.search).get("resolveiExtensionOrigin") || "";
+      if(user && /^chrome-extension:\/\/[a-p]{32}$/.test(extensionOrigin) && !window.__resolveiExtensionAuthSent){
+        window.__resolveiExtensionAuthSent=true;
+        user.getIdToken(true).then(idToken=>{
+          if(window.opener){
+            window.opener.postMessage({
+              type:"resolvei-extension-auth",
+              idToken,
+              refreshToken:user.refreshToken,
+              email:user.email||"",
+              expiresAt:Date.now()+3500000
+            },extensionOrigin);
+            window.close();
+          }
+        }).catch(error=>console.warn("Resolvei extension sign-in bridge:",error));
+      }
       const n=document.getElementById("accountNav");if(n)n.textContent=user?"👤 Minha conta":"👤 Entrar";
       if((location.hash||"").includes("conta")){render();setTimeout(resolveiBindAuth,0);}
     });
