@@ -312,7 +312,7 @@ def set_target_price(product_id: str, req: TargetPriceUpdate, authorization: str
     if not snapshot.exists:
         raise HTTPException(404, "Produto não encontrado.")
     product = snapshot.to_dict() or {}
-    reached = _target_reached(product, req.target_price)
+    reached = _target_reached(product, req.target_price) if req.target_price is not None else False
     now = _iso()
     ref.update({"targetPrice":req.target_price,"targetReached":reached,
         "targetReachedAt":now if reached else "","updatedAt":now})
