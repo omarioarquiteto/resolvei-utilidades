@@ -1,6 +1,6 @@
 """API do Monitor de Preços, isolada das demais ferramentas."""
 from __future__ import annotations
-import asyncio, ipaddress, os, re, threading, uuid
+import asyncio, hashlib, ipaddress, os, re, threading, uuid
 from datetime import datetime, timedelta, timezone
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 from typing import Any
@@ -344,6 +344,245 @@ def delete_product(product_id: str, authorization: str | None = Header(default=N
         event.reference.delete()
     ref.delete()
     return {"ok":True}
+
+
+class CommunityObservation(BaseModel):
+    title: str = Field(min_length=1, max_length=300)
+    url: str = Field(min_length=8, max_length=2048)
+    price: float | None = Field(default=None, gt=0, le=100000000)
+    brand: str = Field(default="", max_length=150)
+    model: str = Field(default="", max_length=150)
+    ean: str = Field(default="", max_length=32)
+    image_url: str = Field(default="", max_length=2048)
+    free_shipping: bool | None = None
+    shipping_text: str = Field(default="", max_length=240)
+    installment_count: int | None = Field(default=None, ge=1, le=48)
+    installment_amount: float | None = Field(default=None, gt=0, le=100000000)
+    installment_total: float | None = Field(default=None, gt=0, le=100000000)
+    installment_interest: bool | None = None
+    installment_text: str = Field(default="", max_length=240)
+    coupons: list[dict[str, str]] = Field(default_factory=list, max_length=10)
+
+
+def _normalized_product_title(value: str) -> str:
+    import unicodedata
+    text = unicodedata.normalize("NFKD", value or "").encode("ascii", "ignore").decode().lower()
+    text = re.sub(r"[^a-z0-9]+", " ", text)
+    return re.sub(r"\s+", " ", text).strip()[:280]
+
+
+def _community_key(req: CommunityObservation) -> str:
+    ean = re.sub(r"\D", "", req.ean or "")
+    if len(ean) in {8, 12, 13, 14}:
+        identity = "ean:" + ean
+    else:
+        title = _normalized_product_title(req.title)
+        brand = _normalized_product_title(req.brand)
+        model = _normalized_product_title(req.model)
+        identity = "product:" + "|".join(part for part in (brand, model, title) if part)
+    return hashlib.sha256(identity.encode("utf-8")).hexdigest()[:40]
+
+
+def _community_offer_id(url: str) -> str:
+    parsed = urlparse(url)
+    identity = (parsed.hostname or "").lower() + "|" + _canonical(url)
+    return hashlib.sha256(identity.encode("utf-8")).hexdigest()[:32]
+
+
+def _clean_coupons(items):
+    cleaned, seen = [], set()
+    for item in items or []:
+        if not isinstance(item, dict):
+            continue
+        code = re.sub(r"[^A-Za-z0-9_-]", "", _text(item.get("code"), 50)).upper()
+        description = _text(item.get("description"), 180)
+        if not code or code in seen or len(code) < 3:
+            continue
+        if code in {"CUPOM", "DESCONTO", "CODIGO", "PROMO", "CUPONS", "OFFICIAL"}:
+            continue
+        seen.add(code)
+        cleaned.append({"code": code, "description": description or "Identificado na página; confira validade e regras."})
+        if len(cleaned) >= 10:
+            break
+    return cleaned
+
+
+def _community_offer_payload(snapshot):
+    data = snapshot.to_dict() or {}
+    data["id"] = snapshot.id
+    return data
+
+
+def _community_offers(product_ref, limit=20):
+    rows = [_community_offer_payload(doc) for doc in product_ref.collection("offers").limit(200).stream()]
+    rows.sort(key=lambda item: (
+        item.get("price") is None,
+        float(item.get("price") or 0),
+        str(item.get("updatedAt") or "")
+    ))
+    return rows[:limit]
+
+
+def _community_history(product_ref, limit=12):
+    events = []
+    for offer_doc in product_ref.collection("offers").limit(100).stream():
+        for event_doc in offer_doc.reference.collection("history").limit(60).stream():
+            event = event_doc.to_dict() or {}
+            event["id"] = event_doc.id
+            events.append(event)
+    events.sort(key=lambda item: str(item.get("observedAt") or ""), reverse=True)
+    return events[:limit]
+
+
+@router.post("/community/observe")
+def observe_community_product(req: CommunityObservation, authorization: str | None = Header(default=None)):
+    uid = _uid(authorization)
+    url = _validate_url(req.url)
+    now_dt, now = _now(), _iso()
+    today = now_dt.date().isoformat()
+    product_key = _community_key(req)
+    product_ref = _db().collection("communityPriceProducts").document(product_key)
+    prior_product = product_ref.get()
+    current_product = prior_product.to_dict() or {}
+    host = (urlparse(url).hostname or "loja").lower()
+    offer_id = _community_offer_id(url)
+    offer_ref = product_ref.collection("offers").document(offer_id)
+    prior_offer = offer_ref.get()
+    old_offer = prior_offer.to_dict() or {}
+    price = req.price if req.price is not None else old_offer.get("price")
+    coupons = _clean_coupons(req.coupons)
+    if not coupons:
+        coupons = old_offer.get("coupons", [])
+    free_shipping = req.free_shipping if req.free_shipping is not None else old_offer.get("free_shipping")
+    shipping_text = _text(req.shipping_text, 240) or _text(old_offer.get("shipping_text"), 240)
+    installment_count = req.installment_count if req.installment_count is not None else old_offer.get("installment_count")
+    installment_amount = req.installment_amount if req.installment_amount is not None else old_offer.get("installment_amount")
+    installment_total = req.installment_total if req.installment_total is not None else old_offer.get("installment_total")
+    installment_interest = req.installment_interest if req.installment_interest is not None else old_offer.get("installment_interest")
+    installment_text = _text(req.installment_text, 240) or _text(old_offer.get("installment_text"), 240)
+    product_data = {
+        "title": _text(req.title, 300),
+        "brand": _text(req.brand, 150) or current_product.get("brand", ""),
+        "model": _text(req.model, 150) or current_product.get("model", ""),
+        "ean": re.sub(r"\D", "", _text(req.ean, 32)) or current_product.get("ean", ""),
+        "image_url": _text(req.image_url, 2048) or current_product.get("image_url", ""),
+        "updatedAt": now,
+        "lastObservedAt": now,
+    }
+    if not prior_product.exists:
+        product_data["createdAt"] = now
+        product_data["contributorCount"] = 0
+        product_data["stores"] = []
+    from google.cloud.firestore_v1 import ArrayUnion, Increment
+    product_data["stores"] = ArrayUnion([host])
+    product_ref.set(product_data, merge=True)
+    offer_data = {
+        "title": _text(req.title, 300),
+        "source": host,
+        "url": url,
+        "price": price,
+        "image_url": _text(req.image_url, 2048) or old_offer.get("image_url", ""),
+        "free_shipping": free_shipping,
+        "shipping_text": shipping_text,
+        "installment_count": installment_count,
+        "installment_amount": installment_amount,
+        "installment_total": installment_total,
+        "installment_interest": installment_interest,
+        "installment_text": installment_text,
+        "coupons": coupons,
+        "updatedAt": now,
+        "lastObservedAt": now,
+    }
+    if req.price is not None:
+        offer_data["priceObservedAt"] = now
+        price_event_id = hashlib.sha256(f"{today}|{req.price:.2f}".encode("utf-8")).hexdigest()[:28]
+        history_ref = offer_ref.collection("history").document(price_event_id)
+        if not history_ref.get().exists:
+            history_ref.set({
+                "price": round(req.price, 2),
+                "source": host,
+                "url": url,
+                "title": _text(req.title, 300),
+                "observedAt": now,
+                "free_shipping": free_shipping,
+                "shipping_text": shipping_text,
+                "installment_count": installment_count,
+                "installment_amount": installment_amount,
+                "installment_total": installment_total,
+                "installment_interest": installment_interest,
+                "coupons": coupons,
+            })
+    if not prior_offer.exists:
+        offer_data["createdAt"] = now
+    offer_ref.set(offer_data, merge=True)
+    contribution_id = hashlib.sha256((uid + "|" + product_key + "|" + today).encode("utf-8")).hexdigest()[:32]
+    contribution_ref = product_ref.collection("contributions").document(contribution_id)
+    if not contribution_ref.get().exists:
+        contribution_ref.set({"date": today, "contributorRef": contribution_id, "createdAt": now})
+        product_ref.set({"contributorCount": Increment(1)}, merge=True)
+    product_snapshot = product_ref.get().to_dict() or {}
+    all_offers = _community_offers(product_ref, limit=30)
+    priced = [item for item in all_offers if isinstance(item.get("price"), (int, float)) and item["price"] > 0]
+    return {
+        "ok": True,
+        "productKey": product_key,
+        "product": {**product_snapshot, "id": product_key},
+        "offers": all_offers,
+        "bestOffer": priced[0] if priced else None,
+        "contributorCount": int(product_snapshot.get("contributorCount") or 0),
+        "communityShared": True,
+    }
+
+
+@router.get("/community/search")
+def search_community_products(
+    q: str = Query(min_length=2, max_length=180),
+    authorization: str | None = Header(default=None),
+):
+    _uid(authorization)
+    query_words = _words(q)
+    matches = []
+    # Firestore não fornece busca textual nativa; limita-se o conjunto lido e ordena-se
+    # localmente. Para uma comunidade maior, este endpoint pode migrar para um índice dedicado.
+    for snapshot in _db().collection("communityPriceProducts").limit(1500).stream():
+        product = snapshot.to_dict() or {}
+        searchable = " ".join([
+            _text(product.get("title"), 300),
+            _text(product.get("brand"), 150),
+            _text(product.get("model"), 150),
+            _text(product.get("ean"), 32),
+        ]).strip()
+        score = _score(q, searchable)
+        if score < 0.25:
+            continue
+        offers = _community_offers(snapshot.reference, limit=20)
+        priced = [item for item in offers if isinstance(item.get("price"), (int, float)) and item["price"] > 0]
+        matches.append({
+            "id": snapshot.id,
+            "title": _text(product.get("title"), 300),
+            "brand": _text(product.get("brand"), 150),
+            "model": _text(product.get("model"), 150),
+            "ean": _text(product.get("ean"), 32),
+            "image_url": _text(product.get("image_url"), 2048),
+            "contributorCount": int(product.get("contributorCount") or 0),
+            "stores": product.get("stores") or [],
+            "matchScore": score,
+            "offers": offers,
+            "bestOffer": priced[0] if priced else None,
+            "history": _community_history(snapshot.reference, limit=10),
+            "updatedAt": product.get("updatedAt", ""),
+        })
+    matches.sort(key=lambda item: (
+        item.get("matchScore", 0) < 0.4,
+        -float(item.get("matchScore") or 0),
+        item.get("bestOffer") is None,
+        float((item.get("bestOffer") or {}).get("price") or 0),
+    ))
+    return {
+        "query": q,
+        "products": matches[:6],
+        "coverageNote": "Base comunitária: preços e condições registrados pelos usuários do Resolvei. Frete, parcelas e cupons podem mudar e precisam ser confirmados na loja.",
+    }
 
 async def _scheduler_loop():
     while True:
