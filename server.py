@@ -82,6 +82,8 @@ from financiamento_api import router as financiamento_router
 from consultor_senior_auth import router as consultor_senior_auth_router
 from consultor_senior_api import router as consultor_senior_router
 from documents_api import router as documents_router
+from trade_pro_auth import router as trade_pro_auth_router
+from trade_pro_api import router as trade_pro_router
 app.include_router(consultor_senior_auth_router)
 app.include_router(analista_bin_router)
 app.include_router(financiamento_router)
