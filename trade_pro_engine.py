@@ -126,7 +126,6 @@ def analyze(rows: list[dict[str, Any]], timeframe: str) -> dict[str, Any]:
     volume = frame["volume"]
     ema20 = _ema(close, 20)
     ema50 = _ema(close, 50)
-    ema200 = _ema(close, 200)
     macd = _ema(close, 12) - _ema(close, 26)
     macd_signal = _ema(macd, 9)
     macd_hist = macd - macd_signal
@@ -151,7 +150,6 @@ def analyze(rows: list[dict[str, Any]], timeframe: str) -> dict[str, Any]:
 
     ema20_now = float(ema20.iloc[-1])
     ema50_now = float(ema50.iloc[-1])
-    ema200_now = float(ema200.iloc[-1]) if np.isfinite(ema200.iloc[-1]) else float("nan")
     ema50_past = float(ema50.iloc[-4]) if len(ema50) >= 4 and np.isfinite(ema50.iloc[-4]) else ema50_now
 
     prior_high = float(frame["high"].iloc[-21:-1].max())
@@ -210,7 +208,7 @@ def analyze(rows: list[dict[str, Any]], timeframe: str) -> dict[str, Any]:
     elif bear_trend:
         regime = "BAIXISTA"
         candidate = "VENDA"
-    elif adx_value < 18 and (atr_ratio < 0.90 or (squeeze_level > 0 and width_now <= squeeze_level)):
+    elif adx_value < 18 and (atr_ratio < 0.90 or (len(prior_widths) >= 15 and width_now <= squeeze_level)):
         regime = "CONSOLIDAÇÃO / ESTABILIZAÇÃO"
         candidate = None
     else:
