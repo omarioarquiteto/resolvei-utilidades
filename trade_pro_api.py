@@ -108,12 +108,6 @@ async def _load_assets(item: dict[str, Any]) -> dict[str, Any]:
     return data
 
 
-@router.get("/session")
-async def session(x_iq_session: str | None = Header(default=None)) -> dict[str, Any]:
-    item = _get_session(x_iq_session)
-    return {"ok": True, "connected": True, "email": item.get("email")}
-
-
 @router.get("/assets")
 async def assets(x_iq_session: str | None = Header(default=None)) -> dict[str, Any]:
     return await _load_assets(_get_session(x_iq_session))
