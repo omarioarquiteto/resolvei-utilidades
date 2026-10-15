@@ -89,6 +89,8 @@ app.include_router(analista_bin_router)
 app.include_router(financiamento_router)
 app.include_router(consultor_senior_router)
 app.include_router(documents_router)
+app.include_router(trade_pro_auth_router)
+app.include_router(trade_pro_router)
 
 from monitor_precos_api import router as monitor_precos_router, start_price_monitor_scheduler
 app.include_router(monitor_precos_router)
