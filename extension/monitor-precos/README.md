@@ -46,3 +46,11 @@ A captura é iniciada somente quando você clica no ícone da extensão. O recon
 - A pesquisa externa não cobre todas as lojas da internet e pode exibir variações de modelo. Confira a descrição, capacidade, cor e versão antes de comparar.
 - Cupons identificados na página ou na comunidade podem estar expirados ou sujeitos a regras.
 - A extensão ainda não está publicada na Chrome Web Store nem no Microsoft Edge Add-ons.
+
+
+## Carrinho de compras e base administrativa
+
+- Na extensão, o botão **Monitorar** salva o produto na lista pessoal monitorada e também o adiciona ao carrinho da conta Resolvei.
+- A ferramenta Monitor de Preços exibe os itens do carrinho, o total estimado e o histórico do total. O total usa o menor valor conhecido por produto (preço observado na página ou melhor oferta registrada); itens sem preço conhecido são contabilizados separadamente.
+- A base completa de produtos comunitários só é disponibilizada a administradores autorizados no backend. Para habilitar o painel privado, configure no ambiente do serviço Render a variável `PRICE_MONITOR_ADMIN_EMAILS` com o e-mail exato da conta Resolvei autorizada. Para mais de um administrador, separe os e-mails por vírgula. Sem essa variável, a base completa permanece bloqueada.
+- O controle de acesso à base administrativa é validado no servidor; ocultar o painel no navegador não é usado como mecanismo de segurança.
