@@ -119,7 +119,7 @@
   }));
   document.addEventListener("keydown", event => {
     if (event.key === "/" && !$("#gameStage").hidden && activeGame) return;
-    if (event.key === "/" && !$("#gameStage").hidden === false && !["INPUT","TEXTAREA"].includes(document.activeElement.tagName)) {
+    if (event.key === "/" && $("#gameStage").hidden && !["INPUT","TEXTAREA"].includes(document.activeElement.tagName)) {
       event.preventDefault(); $("#gameSearch").focus();
     }
     if (event.key === "Escape" && activeGame) closeGame();
@@ -161,6 +161,7 @@
       board = solution.map(row => row.slice());
       const blankCount = {easy:34, medium:44, hard:53}[$("#sudokuDifficulty", mount).value] || 44;
       shuffle(Array.from({length:81}, (_,i)=>i)).slice(0, blankCount).forEach(index => board[Math.floor(index/9)][index%9] = 0);
+      setPuzzleGiven();
       selected = [0,0]; wrongCells = new Set(); errors = 0; seconds = 0;
       $("#sudokuErrors", mount).textContent = "0";
       statusEl.textContent = "Novo desafio iniciado. Boa sorte!";
@@ -251,7 +252,6 @@
     addKeyHandler(handler);
     cleanupJobs.push(() => { if (timerId) clearInterval(timerId); });
     newPuzzle();
-    setPuzzleGiven();
     renderBoard();
   }
 
