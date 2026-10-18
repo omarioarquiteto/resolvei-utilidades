@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#191632">
+  <meta name="description" content="Resolvei Games: jogos de lógica, estratégia, memória e palavras para desafiar a mente.">
+  <title>Resolvei 🎮 Games — Treine a mente jogando</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/games.css?v=20261018-1">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js" defer></script>
+  <script src="/games.js?v=20261018-1" defer></script>
+</head>
+<body class="games-page">
+  <header class="games-header">
+    <a class="games-brand" href="/"><span class="brand-name">Resolvei</span><span class="brand-controller" aria-label="controle de videogame">🎮</span><span class="brand-games">Games</span></a>
+    <div class="header-actions">
+      <span class="local-note"><span class="status-dot"></span> Estatísticas locais neste dispositivo</span>
+      <a class="back-resolvei" href="/">← Voltar ao Resolvei</a>
+    </div>
+  </header>
+
+  <main class="games-main">
+    <section class="games-hero" id="heroSection">
+      <div class="hero-copy">
+        <div class="eyebrow"><span>✦</span> SUA PAUSA PODE TER PROPÓSITO</div>
+        <h1>Jogue um pouco.<br><span>Pense diferente.</span></h1>
+        <p>Desafios de lógica, estratégia, memória e palavras. Escolha um jogo, encontre seu ritmo e divirta-se aprendendo.</p>
+        <a class="hero-cta" href="#catalogSection">Escolher um jogo <span>↓</span></a>
+        <div class="hero-mini-stats">
+          <div><strong id="gamesPlayed">0</strong><span>partidas iniciadas</span></div>
+          <div class="mini-stat-divider"></div>
+          <div><strong>8</strong><span>jogos para explorar</span></div>
+        </div>
+      </div>
+      <div class="hero-art" aria-hidden="true">
+        <div class="orbit orbit-one"></div><div class="orbit orbit-two"></div>
+        <div class="float-tile tile-purple">♟</div>
+        <div class="float-tile tile-orange">▦</div>
+        <div class="float-tile tile-green">Σ</div>
+        <div class="float-tile tile-pink">?</div>
+        <div class="brain-bubble">🧠</div>
+        <div class="art-caption">MENTE EM<br>MODO JOGO</div>
+      </div>
+    </section>
+
+    <section class="catalog-section" id="catalogSection">
+      <div class="section-heading">
+        <div><div class="eyebrow section-eyebrow">DESCUBRA SEU PRÓXIMO DESAFIO</div><h2>Qual vai ser a missão?</h2><p>Jogos rápidos para encaixar na sua rotina.</p></div>
+        <div class="catalog-count"><strong id="visibleCount">8</strong><span>jogos</span></div>
+      </div>
+      <div class="catalog-tools">
+        <label class="game-search"><span aria-hidden="true">⌕</span><input id="gameSearch" type="search" placeholder="Buscar jogo..." aria-label="Buscar jogo"><kbd>/</kbd></label>
+        <div class="filter-list" id="gameFilters" aria-label="Filtrar jogos por categoria">
+          <button class="filter-chip active" type="button" data-filter="todos">Todos</button>
+          <button class="filter-chip" type="button" data-filter="logica">Lógica</button>
+          <button class="filter-chip" type="button" data-filter="estrategia">Estratégia</button>
+          <button class="filter-chip" type="button" data-filter="memoria">Memória</button>
+          <button class="filter-chip" type="button" data-filter="palavras">Palavras</button>
+          <button class="filter-chip" type="button" data-filter="agilidade">Agilidade</button>
+        </div>
+      </div>
+      <div class="games-grid" id="gamesGrid"></div>
+      <div class="no-games" id="noGames" hidden>Nenhum jogo encontrado. Experimente outra busca ou categoria.</div>
+    </section>
+
+    <section class="up-next-section">
+      <div class="up-next-icon">✨</div>
+      <div class="up-next-copy"><span class="eyebrow">PRÓXIMAS MISSÕES</span><h2>Mais desafios a caminho</h2><p>O Resolvei Games pode crescer com novos jogos de lógica e estratégia.</p></div>
+      <div class="up-next-list"><span>Picross / Nonograma</span><span>Campo minado</span><span>Torre de Hanói</span><span>Kakuro</span><span>Mastermind</span><span>Desafio de cálculo mental</span></div>
+    </section>
+  </main>
+
+  <section class="game-stage" id="gameStage" hidden aria-live="polite">
+    <div class="stage-topbar">
+      <button class="stage-back" id="stageBack" type="button">← Todos os jogos</button>
+      <div class="stage-brand">Resolvei <span>🎮</span> Games</div>
+    </div>
+    <div class="stage-heading"><div><div class="eyebrow" id="stageCategory">DESAFIO</div><h1 id="stageTitle">Jogo</h1><p id="stageDescription"></p></div><div class="stage-controls" id="stageControls"></div></div>
+    <div class="game-mount" id="gameMount"></div>
+    <p class="stage-footnote">🎯 Jogue no seu ritmo. Os jogos são atividades recreativas; os resultados e recordes ficam somente neste navegador.</p>
+  </section>
+
+  <footer class="games-footer">
+    <a class="footer-games-brand" href="/">Resolvei <span>🎮</span> Games</a>
+    <span>Uma pausa divertida para pensar, testar e descobrir.</span>
+    <a href="/">Ir para as ferramentas do Resolvei →</a>
+  </footer>
+</body>
+</html>
