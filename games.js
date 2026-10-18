@@ -27,9 +27,12 @@
     {id:"2048", title:"2048", icon:"🧩", category:"logica", label:"Lógica", difficulty:"Progressivo", time:"3–10 min", desc:"Junte blocos iguais, pense alguns movimentos à frente e alcance 2048.", color:"#e7e4ff", glow:"#d4ceff"},
     {id:"memory", title:"Jogo da memória", icon:"🧠", category:"memoria", label:"Memória", difficulty:"Iniciante", time:"2–5 min", desc:"Encontre os pares e tente completar o tabuleiro com menos tentativas.", color:"#fff0bd", glow:"#ffe69b"},
     {id:"simon", title:"Sequência luminosa", icon:"✨", category:"memoria", label:"Memória", difficulty:"Ritmo crescente", time:"1–5 min", desc:"Observe a sequência de cores e repita-a na ordem certa.", color:"#d7e9ff", glow:"#c4ddff"},
-    {id:"wordsearch", title:"Caça-palavras", icon:"🔎", category:"palavras", label:"Palavras", difficulty:"Iniciante", time:"3–7 min", desc:"Localize palavras escondidas na horizontal, vertical ou diagonal.", color:"#dbf7dc", glow:"#c1efc5"}
+    {id:"wordsearch", title:"Caça-palavras", icon:"🔎", category:"palavras", label:"Palavras", difficulty:"Iniciante", time:"3–7 min", desc:"Localize palavras escondidas na horizontal, vertical ou diagonal.", color:"#dbf7dc", glow:"#c1efc5"},
+    {id:"supertux", title:"SuperTux", icon:"🐧", category:"plataforma", label:"Plataforma 2D", difficulty:"Exploração", time:"Livre", desc:"Corra, salte, descubra segredos e enfrente inimigos nesta aventura inspirada nos clássicos de plataforma.", externalUrl:"https://play.supertux.org/", color:"#d9f6dc", glow:"#bfecc5"},
+    {id:"space-invaders", title:"Invasores espaciais", icon:"👾", category:"arcade", label:"Arcade", difficulty:"Velocidade crescente", time:"Livre", desc:"Defenda seu planeta, desvie dos ataques e tente superar sua pontuação neste arcade espacial.", embedUrl:"/game-space-invaders.html", color:"#dceaff", glow:"#c4d8ff"},
+    {id:"war-territorial", title:"Conquista Mundial (estilo WAR)", icon:"🌍", category:"estrategia", label:"Estratégia", difficulty:"Avançado", time:"20–60 min", desc:"Conquiste territórios, reforce fronteiras e enfrente até cinco adversários de IA em um tabuleiro 3D.", embedUrl:"/game-conquista-mundial.html", color:"#ffe2d5", glow:"#ffc8b4"}
   ];
-  const categoryNames = {logica:"Lógica", estrategia:"Estratégia", memoria:"Memória", palavras:"Palavras", agilidade:"Agilidade"};
+  const categoryNames = {logica:"Lógica", estrategia:"Estratégia", memoria:"Memória", palavras:"Palavras", agilidade:"Agilidade", plataforma:"Plataforma", arcade:"Arcade"};
   let activeFilter = "todos";
   let activeGame = "";
   let cleanupJobs = [];
@@ -72,6 +75,13 @@
   function openGame(id) {
     const game = gameCatalog.find(item => item.id === id);
     if (!game) return;
+    if (game.externalUrl) {
+      const played = Number(safeGet("resolveiGamesPlayed", "0")) + 1;
+      safeSet("resolveiGamesPlayed", played);
+      updatePlayedCount();
+      window.open(game.externalUrl, "_blank", "noopener,noreferrer");
+      return;
+    }
     cleanRuntime();
     activeGame = id;
     $("#heroSection").hidden = true;
@@ -96,7 +106,17 @@
     if (id === "memory") initMemory(mount);
     if (id === "simon") initSimon(mount);
     if (id === "wordsearch") initWordsearch(mount);
+    if (game.embedUrl) initEmbeddedGame(mount, game.embedUrl, game.title);
     window.scrollTo({top:0, behavior:"smooth"});
+  }
+
+  function initEmbeddedGame(mount, src, title) {
+    mount.innerHTML =
+      '<div class="embedded-game-shell">' +
+        '<div class="embedded-game-toolbar"><span>🎮 <strong>' + escapeHtml(title) + '</strong></span>' +
+        '<a class="game-btn" href="' + src + '" target="_blank" rel="noopener noreferrer">Abrir em tela separada ↗</a></div>' +
+        '<iframe class="embedded-game-frame" src="' + src + '" title="' + escapeHtml(title) + '" allow="fullscreen; autoplay" allowfullscreen></iframe>' +
+      '</div>';
   }
   function closeGame() {
     cleanRuntime();
