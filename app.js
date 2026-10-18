@@ -1,4 +1,6 @@
 let resolveiAuth=null,resolveiDb=null,resolveiUser=null,resolveiFirebaseError="";
+let resolveiAccountToolFavorites=null,resolveiHomeToolOrder=[],resolveiPrefsUid=null;
+let resolveiPrefsLoading=false,resolveiPrefsPromise=Promise.resolve(),resolveiHomePrefsError="";
 
 const CATS = {
   dinheiro: { name:'Dinheiro', icon:'💰', desc:'Contas, juros, descontos e planejamento.' },
@@ -1293,23 +1295,158 @@ function convert(value,from,to,map){const base=value*map[from];return base/map[t
 function formatHours(h){const total=Math.round(h*60),hh=Math.floor(total/60),mm=total%60;return `${hh}h ${String(mm).padStart(2,'0')}min`;}
 function formatMinutes(min){return `${Math.floor(min/60)}h ${String(min%60).padStart(2,'0')}min`;}
 
-function saveState(){ localStorage.setItem('resolvei_favs',JSON.stringify(getFavs())); }
-function getFavs(){try{return JSON.parse(localStorage.getItem('resolvei_favs')||'[]')}catch{return[]}}
+function readLocalFavs(){try{const value=JSON.parse(localStorage.getItem('resolvei_favs')||'[]');return Array.isArray(value)?value:[]}catch{return[]}}
+function readLocalHomeOrder(){try{const value=JSON.parse(localStorage.getItem('resolvei_home_tool_order')||'[]');return Array.isArray(value)?value:[]}catch{return[]}}
+function normalizeToolIds(ids){
+  if(!Array.isArray(ids))return[];
+  const seen=new Set(),valid=[];
+  ids.forEach(id=>{if(typeof id==='string'&&tools.some(t=>t.id===id)&&!seen.has(id)){seen.add(id);valid.push(id);}});
+  return valid;
+}
+function saveState(){localStorage.setItem('resolvei_favs',JSON.stringify(readLocalFavs()));}
+function getFavs(){
+  if(resolveiUser&&resolveiDb){
+    if(resolveiPrefsUid!==resolveiUser.uid||!Array.isArray(resolveiAccountToolFavorites))return[];
+    return resolveiAccountToolFavorites.slice();
+  }
+  return normalizeToolIds(readLocalFavs());
+}
 function isFav(id){return getFavs().includes(id)}
-function toggleFav(id){const f=getFavs();const i=f.indexOf(id);if(i>=0)f.splice(i,1);else f.push(id);localStorage.setItem('resolvei_favs',JSON.stringify(f));updateFavCount();render();}
+async function resolveiPersistToolPreferences(userId,fields){
+  if(!resolveiDb||!userId)return;
+  await resolveiDb.collection('users').doc(userId).set(fields,{merge:true});
+}
+async function toggleFav(id){
+  const userAtClick=resolveiUser;
+  if(userAtClick&&resolveiDb&&(resolveiPrefsLoading||resolveiPrefsUid!==userAtClick.uid)){
+    try{await resolveiPrefsPromise;}catch(e){}
+    if(!resolveiUser||resolveiUser.uid!==userAtClick.uid)return;
+  }
+  const f=getFavs(),i=f.indexOf(id);
+  if(i>=0)f.splice(i,1);else f.push(id);
+  if(userAtClick&&resolveiDb&&resolveiPrefsUid===userAtClick.uid){
+    resolveiAccountToolFavorites=normalizeToolIds(f);
+    let order=normalizeToolIds(resolveiHomeToolOrder).filter(toolId=>resolveiAccountToolFavorites.includes(toolId));
+    resolveiAccountToolFavorites.forEach(toolId=>{if(!order.includes(toolId))order.push(toolId);});
+    resolveiHomeToolOrder=order;
+    resolveiHomePrefsError='';
+    updateFavCount();render();
+    try{
+      await resolveiPersistToolPreferences(userAtClick.uid,{
+        homepageToolFavorites:resolveiAccountToolFavorites,
+        homepageToolOrder:resolveiHomeToolOrder
+      });
+    }catch(e){
+      console.warn('Não foi possível sincronizar os favoritos da página inicial:',e);
+      resolveiHomePrefsError='Não foi possível sincronizar seus favoritos com a conta. Confira a conexão e tente novamente.';
+      if(!resolveiCurrentAppRoute()||resolveiCurrentAppRoute()==='favoritos')render();
+    }
+  }else{
+    localStorage.setItem('resolvei_favs',JSON.stringify(f));
+    updateFavCount();render();
+  }
+}
 function updateFavCount(){const el=document.getElementById('favCount');if(el)el.textContent=getFavs().filter(id=>tools.some(t=>t.id===id)).length}
-
+function homeFavoriteTools(){
+  const favorites=normalizeToolIds(getFavs());
+  const savedOrder=(resolveiUser&&resolveiDb&&resolveiPrefsUid===resolveiUser.uid)?resolveiHomeToolOrder:readLocalHomeOrder();
+  const order=normalizeToolIds(savedOrder).filter(id=>favorites.includes(id));
+  favorites.forEach(id=>{if(!order.includes(id))order.push(id);});
+  if(resolveiUser&&resolveiDb&&resolveiPrefsUid===resolveiUser.uid)resolveiHomeToolOrder=order;
+  return order.map(id=>tools.find(t=>t.id===id)).filter(Boolean);
+}
+async function persistHomeToolOrder(order){
+  const favorites=normalizeToolIds(getFavs());
+  const nextOrder=normalizeToolIds(order).filter(id=>favorites.includes(id));
+  favorites.forEach(id=>{if(!nextOrder.includes(id))nextOrder.push(id);});
+  resolveiHomeToolOrder=nextOrder;
+  resolveiHomePrefsError='';
+  if(resolveiUser&&resolveiDb&&resolveiPrefsUid===resolveiUser.uid){
+    const uid=resolveiUser.uid;
+    render();
+    try{await resolveiPersistToolPreferences(uid,{homepageToolOrder:nextOrder});}
+    catch(e){
+      console.warn('Não foi possível salvar a ordem dos favoritos:',e);
+      localStorage.setItem('resolvei_home_tool_order',JSON.stringify(nextOrder));
+      resolveiHomePrefsError='A ordem dos cards não pôde ser sincronizada. Ela foi mantida neste navegador.';
+      if(!resolveiCurrentAppRoute())render();
+    }
+  }else{
+    localStorage.setItem('resolvei_home_tool_order',JSON.stringify(nextOrder));
+    render();
+  }
+}
 function card(t){return `<article class="card tool-card"><button class="fav ${isFav(t.id)?'active':''}" data-fav="${t.id}" aria-label="Favoritar">${isFav(t.id)?'★':'☆'}</button><a href="#/ferramenta/${t.id}"><div class="tool-icon">${t.icon}</div><h3>${t.title}</h3><p>${t.desc}</p></a></article>`}
+function homeFavoriteCard(t){
+  return card(t).replace('<article class="card tool-card">','<article class="card tool-card home-tool-card" draggable="true" data-home-tool="'+esc(t.id)+'">');
+}
+function bindHomeFavoriteDrag(){
+  const grid=document.getElementById('homeFavoritesGrid');
+  if(!grid||grid.dataset.dragBound==='1')return;
+  grid.dataset.dragBound='1';
+  let draggedId='';
+  const clearDragState=()=>{
+    grid.querySelectorAll('[data-home-tool]').forEach(el=>el.classList.remove('is-dragging','drag-over'));
+    draggedId='';
+  };
+  grid.addEventListener('dragstart',e=>{
+    const item=e.target.closest?.('[data-home-tool]');
+    if(!item)return;
+    draggedId=item.dataset.homeTool;
+    if(e.dataTransfer){e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',draggedId);}
+    item.classList.add('is-dragging');
+  });
+  grid.addEventListener('dragover',e=>{
+    const target=e.target.closest?.('[data-home-tool]');
+    if(!target||!draggedId||target.dataset.homeTool===draggedId)return;
+    e.preventDefault();
+    grid.querySelectorAll('[data-home-tool]').forEach(el=>el.classList.remove('drag-over'));
+    target.classList.add('drag-over');
+    if(e.dataTransfer)e.dataTransfer.dropEffect='move';
+  });
+  grid.addEventListener('dragleave',e=>{
+    const target=e.target.closest?.('[data-home-tool]');
+    if(target&&!target.contains(e.relatedTarget))target.classList.remove('drag-over');
+  });
+  grid.addEventListener('drop',e=>{
+    e.preventDefault();
+    const target=e.target.closest?.('[data-home-tool]');
+    const source=draggedId||(e.dataTransfer?.getData('text/plain')||'');
+    clearDragState();
+    if(!source||!target||source===target.dataset.homeTool)return;
+    const order=Array.from(grid.querySelectorAll('[data-home-tool]')).map(el=>el.dataset.homeTool);
+    const sourceIndex=order.indexOf(source),targetIndex=order.indexOf(target.dataset.homeTool);
+    if(sourceIndex<0||targetIndex<0)return;
+    order.splice(sourceIndex,1);
+    const insertAt=Math.max(0,targetIndex-(sourceIndex<targetIndex?1:0));
+    order.splice(insertAt,0,source);
+    persistHomeToolOrder(order);
+  });
+  grid.addEventListener('dragend',clearDragState);
+}
 function categoryCard([id,c]){const count=tools.filter(t=>t.cat===id).length;return `<a class="card category-card" href="#/categoria/${id}"><div class="tool-icon">${c.icon}</div><h3>${c.name}</h3><p>${c.desc}</p><span class="chip">${count} ferramentas</span></a>`}
 function home(){
-  const p=popular.map(id=>tools.find(t=>t.id===id)).filter(Boolean);
-  return `<section class="hero"><div class="brand" style="justify-content:center;margin-bottom:22px"><span class="brand-mark">✓</span><span>Resolvei</span></div><h1>Pequenas ferramentas para resolver grandes dúvidas.</h1><p>Calcule, compare, converta e planeje coisas do dia a dia sem cadastro e sem complicação.</p><div class="search-box"><span class="search-icon">⌕</span><input id="globalSearch" autocomplete="off" placeholder="Ex.: quanto vou gastar de gasolina numa viagem de 800 km?"></div><div class="quick-tags">${['porcentagem','tinta','combustível','piso','idade','churrasco'].map(x=>`<button class="tag" data-search="${x}">${x}</button>`).join('')}</div></section>
-  <div class="kpi-row"><div class="card kpi"><strong>${tools.length}+</strong><span>ferramentas</span></div><div class="card kpi"><strong>${Object.keys(CATS).length}</strong><span>categorias</span></div><div class="card kpi"><strong>0</strong><span>cadastro obrigatório</span></div></div>
-  <div class="section-head"><div><h2>Mais usadas</h2><p>Atalhos para resolver as dúvidas mais comuns.</p></div><a class="btn" href="#/ferramentas">Ver todas</a></div><div class="grid">${p.map(card).join('')}</div>
-  <div class="section-head"><div><h2>Categorias</h2><p>Encontre ferramentas por assunto.</p></div></div><div class="category-grid">${Object.entries(CATS).map(categoryCard).join('')}</div>`;
+  const quickTags=['porcentagem','tinta','combustível','piso','idade','churrasco']
+    .map(x=>'<button class="tag" data-search="'+esc(x)+'">'+esc(x)+'</button>').join('');
+  const hero='<section class="hero"><div class="brand" style="justify-content:center;margin-bottom:22px"><span class="brand-mark">✓</span><span>Resolvei</span></div><h1>Seu canivete suíço online</h1><p>Pesquise e acesse rapidamente as ferramentas que facilitam seu dia a dia.</p><div class="search-box"><input id="globalSearch" autocomplete="off" placeholder="Ex.: quanto vou gastar de gasolina numa viagem de 800 km?"><button id="globalSearchSubmit" class="search-submit" type="button" aria-label="Pesquisar ferramenta" title="Pesquisar"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-4-4"></path></svg></button></div><div class="quick-tags">'+quickTags+'</div></section>';
+  let favoritesSection='';
+  if(resolveiUser){
+    if(resolveiDb&&(resolveiPrefsLoading||resolveiPrefsUid!==resolveiUser.uid)){
+      favoritesSection='<section class="home-favorites-section"><div class="section-head"><div><h2>Minhas ferramentas</h2><p>Carregando seus favoritos...</p></div></div><div class="card empty">Carregando suas ferramentas favoritas...</div></section>';
+    }else{
+      const favorites=homeFavoriteTools();
+      const notice=resolveiHomePrefsError?'<div class="notice home-prefs-notice">'+esc(resolveiHomePrefsError)+'</div>':'';
+      const content=favorites.length
+        ?'<div id="homeFavoritesGrid" class="grid">'+favorites.map(homeFavoriteCard).join('')+'</div>'
+        :'<div class="card empty home-favorites-empty"><strong>Você ainda não adicionou ferramentas favoritas.</strong><p>Abra o catálogo e toque na estrela das ferramentas que deseja manter na página inicial.</p><a class="btn" href="#/ferramentas">Explorar todas as ferramentas</a></div>';
+      favoritesSection='<section class="home-favorites-section"><div class="section-head"><div><h2>Minhas ferramentas</h2><p>Arraste os cards para organizar na ordem que preferir.</p></div><a class="btn" href="#/ferramentas">Adicionar ferramentas</a></div>'+notice+content+'</section>';
+    }
+  }
+  const categories='<div class="section-head"><div><h2>Categorias</h2><p>Encontre ferramentas por assunto.</p></div></div><div class="category-grid">'+Object.entries(CATS).map(categoryCard).join('')+'</div>';
+  return hero+favoritesSection+categories;
 }
 function toolsPage(list=tools,title='Todas as ferramentas',sub='Escolha uma ferramenta ou pesquise pelo que você precisa.'){
-  return `<div class="section-head"><div><h1 style="margin:0;letter-spacing:-.04em">${esc(title)}</h1><p>${esc(sub)}</p></div></div><div class="search-box" style="max-width:none;margin-bottom:20px"><span class="search-icon">⌕</span><input id="listSearch" placeholder="Buscar entre as ferramentas..."></div><div id="toolGrid" class="grid">${list.map(card).join('')}</div>`;
+  return `<div class="section-head"><div><h1 style="margin:0;letter-spacing:-.04em">${esc(title)}</h1><p>${esc(sub)}</p></div></div><div class="search-box" style="max-width:none;margin-bottom:20px"><input id="listSearch" autocomplete="off" placeholder="Buscar entre as ferramentas..."><button id="listSearchSubmit" class="search-submit" type="button" aria-label="Pesquisar ferramenta" title="Pesquisar"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-4-4"></path></svg></button></div><div id="toolGrid" class="grid">${list.map(card).join('')}</div>`;
 }
 function categoriesPage(){return `<div class="section-head"><div><h1 style="margin:0;letter-spacing:-.04em">Categorias</h1><p>Explore o Resolvei por assunto.</p></div></div><div class="category-grid">${Object.entries(CATS).map(categoryCard).join('')}</div>`}
 function toolPage(id){
@@ -1418,9 +1555,35 @@ function bind(){
   const rid=location.pathname.match(/ferramenta\/([^/]+)/)?.[1] || location.hash.match(/ferramenta\/([^?]+)/)?.[1];
   resolveiBindAccountSections();
   document.querySelectorAll('[data-fav]').forEach(b=>b.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();toggleFav(b.dataset.fav)}));
-  const gs=document.getElementById('globalSearch'); if(gs){gs.addEventListener('keydown',e=>{if(e.key==='Enter'){const q=gs.value.trim(); if(q){location.hash='#/ferramentas?q='+encodeURIComponent(q)}}});}
+  const gs=document.getElementById('globalSearch');
+  const submitGlobalSearch=()=>{const q=gs?.value?.trim()||'';location.hash=q?'#/ferramentas?q='+encodeURIComponent(q):'#/ferramentas';};
+  if(gs)gs.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();submitGlobalSearch();}});
+  document.getElementById('globalSearchSubmit')?.addEventListener('click',submitGlobalSearch);
   document.querySelectorAll('[data-search]').forEach(b=>b.addEventListener('click',()=>{location.hash='#/ferramentas?q='+encodeURIComponent(b.dataset.search)}));
-  const ls=document.getElementById('listSearch'); if(ls){const q=new URLSearchParams((location.search||'').replace(/^\?/,'') || location.hash.split('?')[1] || '').get('q')||'';ls.value=q; const grid=document.getElementById('toolGrid'); if(q)grid.innerHTML=smartSearch(q).replace(/^<div class="notice">/, '<div class="notice">'); ls.addEventListener('input',()=>{const r=smartSearch(ls.value);grid.innerHTML=r;document.querySelectorAll('[data-fav]').forEach(b=>b.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();toggleFav(b.dataset.fav)}));});}
+  bindHomeFavoriteDrag();
+  const ls=document.getElementById('listSearch');
+  if(ls){
+    const q=new URLSearchParams((location.search||'').replace(/^\?/,'')||location.hash.split('?')[1]||'').get('q')||'';
+    ls.value=q;
+    const grid=document.getElementById('toolGrid');
+    if(q&&grid)grid.innerHTML=smartSearch(q);
+    ls.addEventListener('input',()=>{
+      const result=smartSearch(ls.value);
+      if(grid)grid.innerHTML=result;
+      if(grid)grid.querySelectorAll('[data-fav]').forEach(b=>b.addEventListener('click',e=>{e.preventDefault();e.stopPropagation();toggleFav(b.dataset.fav);}));
+    });
+    ls.addEventListener('keydown',e=>{
+      if(e.key==='Enter'){
+        e.preventDefault();
+        const query=ls.value.trim();
+        location.hash=query?'#/ferramentas?q='+encodeURIComponent(query):'#/ferramentas';
+      }
+    });
+  }
+  document.getElementById('listSearchSubmit')?.addEventListener('click',()=>{
+    const query=ls?.value?.trim()||'';
+    location.hash=query?'#/ferramentas?q='+encodeURIComponent(query):'#/ferramentas';
+  });
   if(rid==='financiamento'){
     const startFin=()=>window.resolveiFinanciamentoInit&&window.resolveiFinanciamentoInit();
     if(window.resolveiFinanciamentoInit)startFin();
@@ -1553,6 +1716,69 @@ function resolveiAuthMessage(error){
   return map[code]||error?.message||"Não foi possível concluir a autenticação.";
 }
 function resolveiShowAuthError(message){const m=document.getElementById("authMsg");if(m){m.hidden=false;m.textContent=message;}}
+function resolveiCurrentAppRoute(){
+  let route=location.pathname.replace(/^\/+|\/+$/g,'');
+  if(!route||route==='index.html')route=(location.hash||'').replace(/^#\/?/,'');
+  return route.split('?')[0];
+}
+async function resolveiLoadHomeToolPreferences(user){
+  if(!user){
+    resolveiPrefsUid=null;resolveiAccountToolFavorites=null;resolveiHomeToolOrder=[];
+    resolveiPrefsLoading=false;resolveiHomePrefsError='';
+    return;
+  }
+  const uid=user.uid;
+  resolveiPrefsLoading=true;
+  if(!resolveiDb){
+    resolveiPrefsUid=uid;
+    resolveiAccountToolFavorites=normalizeToolIds(readLocalFavs());
+    resolveiHomeToolOrder=normalizeToolIds(readLocalHomeOrder());
+    resolveiPrefsLoading=false;
+    return;
+  }
+  try{
+    const ref=resolveiDb.collection('users').doc(uid);
+    const snapshot=await ref.get();
+    if(!resolveiUser||resolveiUser.uid!==uid)return;
+    const data=snapshot.exists?(snapshot.data()||{}):{};
+    const favorites=Array.isArray(data.homepageToolFavorites)
+      ?normalizeToolIds(data.homepageToolFavorites)
+      :normalizeToolIds(readLocalFavs());
+    let order=Array.isArray(data.homepageToolOrder)
+      ?normalizeToolIds(data.homepageToolOrder)
+      :normalizeToolIds(readLocalHomeOrder());
+    order=order.filter(id=>favorites.includes(id));
+    favorites.forEach(id=>{if(!order.includes(id))order.push(id);});
+    resolveiPrefsUid=uid;
+    resolveiAccountToolFavorites=favorites;
+    resolveiHomeToolOrder=order;
+    const update={};
+    if(!Array.isArray(data.homepageToolFavorites)||JSON.stringify(data.homepageToolFavorites)!==JSON.stringify(favorites))update.homepageToolFavorites=favorites;
+    if(!Array.isArray(data.homepageToolOrder)||JSON.stringify(data.homepageToolOrder)!==JSON.stringify(order))update.homepageToolOrder=order;
+    if(Object.keys(update).length){
+      try{await ref.set(update,{merge:true});}
+      catch(e){
+        console.warn('Preferências carregadas, mas a gravação inicial não foi concluída:',e);
+        resolveiHomePrefsError='Seus favoritos foram carregados, mas não foi possível sincronizar todas as preferências.';
+      }
+    }
+  }catch(e){
+    if(resolveiUser&&resolveiUser.uid===uid){
+      console.warn('Não foi possível carregar os favoritos da conta:',e);
+      resolveiPrefsUid=uid;
+      resolveiAccountToolFavorites=normalizeToolIds(readLocalFavs());
+      resolveiHomeToolOrder=normalizeToolIds(readLocalHomeOrder());
+      resolveiHomePrefsError='Não foi possível carregar os favoritos da conta. Exibindo os dados deste navegador.';
+    }
+  }finally{
+    if(resolveiUser&&resolveiUser.uid===uid){
+      resolveiPrefsLoading=false;
+      updateFavCount();
+      const route=resolveiCurrentAppRoute();
+      if(!route||route==='favoritos')render();
+    }
+  }
+}
 function resolveiFirebaseInit(){
   try{
     if(!window.firebase)throw new Error("O SDK do Firebase não foi carregado.");
@@ -1560,6 +1786,11 @@ function resolveiFirebaseInit(){
     resolveiAuth=firebase.auth();try{resolveiDb=firebase.firestore();}catch(e){console.warn("Firestore indisponível; autenticação continuará funcionando:",e);resolveiDb=null;}resolveiFirebaseError="";
     resolveiAuth.onAuthStateChanged(user=>{
       resolveiUser=user||null;
+      resolveiPrefsLoading=!!(resolveiUser&&resolveiDb);
+      resolveiPrefsPromise=resolveiLoadHomeToolPreferences(resolveiUser);
+      updateFavCount();
+      const preferenceRoute=resolveiCurrentAppRoute();
+      if(!preferenceRoute||preferenceRoute==='favoritos')render();
       // Ponte de autenticação opcional e restrita à origem da extensão Resolvei.
       // Ela só é ativada quando a janela foi aberta com resolveiExtensionOrigin.
       const extensionOrigin = new URLSearchParams(location.search).get("resolveiExtensionOrigin") || "";
