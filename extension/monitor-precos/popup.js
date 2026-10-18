@@ -440,6 +440,62 @@ function normalizeUrlKey(value) {
   }
 }
 
+async function updateMonitorButtonState() {
+  const button = document.getElementById("monitor-product");
+  if (!button) return;
+  if (!currentProduct || !activeUser) {
+    button.disabled = true;
+    button.textContent = "＋ Monitorar";
+    return;
+  }
+  try {
+    const cart = await api("/cart");
+    const key = normalizeUrlKey(currentProduct.url);
+    const found = (cart.items || []).some(function (item) {
+      return normalizeUrlKey(item.url) === key;
+    });
+    button.textContent = found ? "✓ Já no carrinho" : "＋ Monitorar";
+    button.classList.toggle("added", found);
+    button.disabled = false;
+  } catch (_) {
+    button.textContent = "＋ Monitorar";
+    button.disabled = false;
+  }
+}
+
+async function monitorCurrentProduct() {
+  const button = document.getElementById("monitor-product");
+  if (!currentProduct || !button) {
+    setState("Abra uma página de produto antes de monitorar.", "error");
+    return;
+  }
+  button.disabled = true;
+  button.textContent = "Adicionando ao carrinho…";
+  try {
+    await api("/cart/products", {
+      method: "POST",
+      body: JSON.stringify({
+        title: currentProduct.title,
+        url: currentProduct.url,
+        price: currentProduct.price,
+        brand: currentProduct.brand || "",
+        model: currentProduct.model || "",
+        ean: currentProduct.ean || "",
+        image_url: currentProduct.image_url || "",
+        source: currentProduct.source || "Extensão Resolvei"
+      })
+    });
+    button.textContent = "✓ No carrinho · monitorando";
+    button.classList.add("added");
+    setState("Produto adicionado ao seu carrinho no Resolvei. O monitoramento continuará ativo.", "success");
+  } catch (error) {
+    button.textContent = "＋ Monitorar";
+    setState(error.message || "Não foi possível adicionar o produto ao carrinho.", "error");
+  } finally {
+    button.disabled = false;
+  }
+}
+
 function mergeOffers(groups) {
   const byKey = new Map();
   (groups || []).forEach(function (group) {
@@ -770,7 +826,10 @@ function bindUI() {
       await loginWithEmail(email, password);
       showApp();
       setState("Login concluído. Identificando a página do produto…", "success");
-      if (currentProduct) await runComparison();
+      if (currentProduct) {
+        await updateMonitorButtonState();
+        await runComparison();
+      }
     } catch (error) {
       showLogin(error.message || "Não foi possível entrar.", true);
     } finally {
@@ -797,6 +856,10 @@ function bindUI() {
 
   document.getElementById("compare-again").addEventListener("click", function () {
     runComparison().catch(function () {});
+  });
+
+  document.getElementById("monitor-product").addEventListener("click", function () {
+    monitorCurrentProduct().catch(function () {});
   });
 
   document.getElementById("history-panel").addEventListener("click", function (event) {
@@ -842,6 +905,7 @@ async function initialize() {
     currentProduct = capture.product;
     renderProduct(currentProduct);
     if (activeUser) {
+      await updateMonitorButtonState();
       await runComparison();
     } else {
       setState("Produto identificado. Entre na conta para comparar lojas e registrar os dados na base comunitária.");
