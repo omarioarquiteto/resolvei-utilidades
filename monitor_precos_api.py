@@ -82,6 +82,35 @@ def _uid(authorization: str | None) -> str:
         raise HTTPException(401, "A sessão da extensão expirou. Entre novamente.")
     return str(session["uid"])
 
+def _require_admin(authorization: str | None) -> str:
+    """Permite acesso à base completa somente a e-mails explicitamente autorizados."""
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(401, "Entre na sua conta do Resolvei.")
+    token = authorization[7:].strip()
+    allowed_emails = {
+        value.strip().lower()
+        for value in os.getenv("PRICE_MONITOR_ADMIN_EMAILS", "").split(",")
+        if value.strip()
+    }
+    if not allowed_emails:
+        raise HTTPException(403, "Área administrativa indisponível para esta conta.")
+    try:
+        import firebase_admin
+        from firebase_admin import auth
+        if not firebase_admin._apps:
+            raise HTTPException(503, "Firebase Admin não está configurado no servidor.")
+        claims = auth.verify_id_token(token)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        # Tokens opacos da extensão não dão acesso à área administrativa.
+        raise HTTPException(401, "Entre novamente no Resolvei para acessar esta área.") from exc
+    email = str(claims.get("email") or "").strip().lower()
+    if not email or email not in allowed_emails:
+        raise HTTPException(403, "Você não tem permissão para consultar a base completa.")
+    return str(claims.get("uid") or "")
+
+
 def _db():
     try:
         import firebase_admin
@@ -146,6 +175,88 @@ def _price(value):
         return round(n, 2) if 0 < n < 100000000 else None
     except ValueError:
         return None
+
+def _cart_current_price(product: dict[str, Any]):
+    """Menor valor atual conhecido: preço da página ou melhor oferta encontrada."""
+    candidates = [
+        value for value in (_price(product.get("price")), _price(product.get("bestOfferPrice")))
+        if value is not None
+    ]
+    return min(candidates) if candidates else None
+
+
+def _cart_history(uid: str):
+    return _db().collection("users").document(uid).collection("priceMonitorCartHistory")
+
+
+def _record_cart_snapshot(uid: str, source: str = "price-check"):
+    """Registra checkpoints diários e alterações reais no total do carrinho."""
+    now = _now()
+    items = []
+    for snapshot in _products(uid).stream():
+        product = snapshot.to_dict() or {}
+        if not product.get("inCart"):
+            continue
+        page_price = _price(product.get("price"))
+        best_price = _price(product.get("bestOfferPrice"))
+        price = _cart_current_price(product)
+        items.append({
+            "productId": snapshot.id,
+            "title": _text(product.get("title"), 300),
+            "url": _text(product.get("url"), 2048),
+            "image_url": _text(product.get("image_url"), 2048),
+            "price": price,
+            "pagePrice": page_price,
+            "bestOfferPrice": best_price,
+            "priceSource": "Menor oferta conhecida" if best_price is not None and price == best_price else "Preço observado na página",
+        })
+    items.sort(key=lambda item: (item.get("title") or "").casefold())
+    priced = [item for item in items if item.get("price") is not None]
+    total = round(sum(float(item["price"]) for item in priced), 2)
+    history_ref = _cart_history(uid)
+    try:
+        from google.cloud.firestore_v1 import Query
+        latest_docs = list(history_ref.order_by("observedAt", direction=Query.DESCENDING).limit(1).stream())
+    except Exception:
+        latest_docs = sorted(
+            list(history_ref.stream()),
+            key=lambda doc: str((doc.to_dict() or {}).get("observedAt") or ""),
+            reverse=True,
+        )[:1]
+    latest = (latest_docs[0].to_dict() or {}) if latest_docs else None
+    # Não cria um primeiro ponto artificial para carrinhos ainda vazios.
+    if not items and latest is None:
+        return None
+    item_ids = sorted(item["productId"] for item in items)
+    latest_ids = sorted(str(item.get("productId") or "") for item in (latest or {}).get("items", []))
+    try:
+        latest_total = round(float((latest or {}).get("total") or 0), 2)
+    except (TypeError, ValueError):
+        latest_total = 0.0
+    changed = (
+        latest is None
+        or abs(latest_total - total) >= 0.01
+        or int((latest or {}).get("productCount") or 0) != len(items)
+        or int((latest or {}).get("pricedProductCount") or 0) != len(priced)
+        or latest_ids != item_ids
+    )
+    latest_at = str((latest or {}).get("observedAt") or "")
+    daily_checkpoint_due = not latest_at or latest_at[:10] != now.date().isoformat()
+    if not changed and not daily_checkpoint_due:
+        return None
+    event_id = f"{int(now.timestamp() * 1000)}-{uuid.uuid4().hex[:8]}"
+    snapshot_data = {
+        "total": total,
+        "productCount": len(items),
+        "pricedProductCount": len(priced),
+        "unpricedProductCount": len(items) - len(priced),
+        "items": items,
+        "source": _text(source, 40),
+        "observedAt": _iso(now),
+    }
+    history_ref.document(event_id).set(snapshot_data)
+    return snapshot_data
+
 
 def _words(value):
     import unicodedata
@@ -316,6 +427,11 @@ def _refresh_ref(ref, product):
         _history(ref, {"price":best["price"],"kind":"best-offer","source":best["source"],
             "title":best["title"],"url":best["url"]})
     ref.update(updates)
+    if product.get("inCart") and ref.parent.id == "priceMonitorProducts":
+        try:
+            _record_cart_snapshot(ref.parent.parent.id, "price-check")
+        except Exception:
+            pass
     return {"ok":True,"matched":True,"bestOffer":best,"offers":matched[:12],"checkedAt":updates["lastCheckedAt"]}
 
 
@@ -364,6 +480,72 @@ def list_products(authorization: str | None = Header(default=None)):
     products.sort(key=lambda p:str(p.get("updatedAt") or p.get("createdAt") or ""), reverse=True)
     return {"products":products}
 
+
+def _cart_response(uid: str):
+    docs = list(_products(uid).stream())
+    items = []
+    for doc in docs:
+        product = doc.to_dict() or {}
+        if not product.get("inCart"):
+            continue
+        item = _serialize(doc)
+        item["cartPrice"] = _cart_current_price(product)
+        item["cartPriceSource"] = "Menor oferta conhecida" if _price(product.get("bestOfferPrice")) is not None and item["cartPrice"] == _price(product.get("bestOfferPrice")) else "Preço observado na página"
+        items.append(item)
+    items.sort(key=lambda item: str(item.get("title") or "").casefold())
+    priced_count = sum(1 for item in items if item.get("cartPrice") is not None)
+    total = round(sum(float(item["cartPrice"]) for item in items if item.get("cartPrice") is not None), 2)
+    history_docs = list(_cart_history(uid).stream())
+    history = [_serialize(doc) for doc in history_docs]
+    history.sort(key=lambda item: str(item.get("observedAt") or ""))
+    history = history[-365:]
+    return {
+        "items": items,
+        "total": total,
+        "productCount": len(items),
+        "pricedProductCount": priced_count,
+        "unpricedProductCount": len(items) - priced_count,
+        "history": history,
+    }
+
+
+@router.get("/cart")
+def get_cart(authorization: str | None = Header(default=None)):
+    uid = _uid(authorization)
+    _record_cart_snapshot(uid, "cart-view")
+    return _cart_response(uid)
+
+
+@router.post("/cart/products")
+def add_cart_product(req: ProductCreate, authorization: str | None = Header(default=None)):
+    uid = _uid(authorization)
+    result = add_product(req, authorization)
+    product_id = str((result.get("product") or {}).get("id") or "")
+    if not product_id:
+        raise HTTPException(500, "Não foi possível identificar o produto monitorado.")
+    ref = _ref(uid, product_id)
+    current = ref.get().to_dict() or {}
+    now = _iso()
+    updates = {"inCart": True, "updatedAt": now}
+    if not current.get("inCart"):
+        updates["addedToCartAt"] = now
+    ref.set(updates, merge=True)
+    _record_cart_snapshot(uid, "cart-change")
+    return {"ok": True, "existing": bool(result.get("existing")), "product": _serialize(ref.get()), "cart": _cart_response(uid)}
+
+
+@router.delete("/cart/products/{product_id}")
+def remove_cart_product(product_id: str, authorization: str | None = Header(default=None)):
+    uid = _uid(authorization)
+    ref = _ref(uid, product_id)
+    snapshot = ref.get()
+    if not snapshot.exists:
+        raise HTTPException(404, "Produto não encontrado.")
+    ref.set({"inCart": False, "removedFromCartAt": _iso(), "updatedAt": _iso()}, merge=True)
+    _record_cart_snapshot(uid, "cart-change")
+    return {"ok": True, "cart": _cart_response(uid)}
+
+
 @router.post("/products")
 def add_product(req: ProductCreate, authorization: str | None = Header(default=None)):
     uid, url = _uid(authorization), _validate_url(req.url)
@@ -394,7 +576,7 @@ def add_product(req: ProductCreate, authorization: str | None = Header(default=N
         "targetPrice":req.target_price,"targetReached":False,"targetReachedAt":"",
         "brand":_text(req.brand,150),"model":_text(req.model,150),"ean":_text(req.ean,32),
         "image_url":_text(req.image_url,2048),"source":_text(req.source,80) or (urlparse(url).hostname or "Página do produto"),
-        "active":True,"offers":[],"bestOfferPrice":None,"bestOfferSource":"","bestOfferUrl":"",
+        "active":True,"inCart":False,"addedToCartAt":"","offers":[],"bestOfferPrice":None,"bestOfferSource":"","bestOfferUrl":"",
         "createdAt":now,"updatedAt":now,"lastCheckedAt":"",
         "nextRefreshAt":_iso(_now()+timedelta(hours=REFRESH_HOURS)),"lastRefreshError":""}
     ref = collection.document(product_id)
@@ -420,7 +602,8 @@ def product_history(product_id: str, authorization: str | None = Header(default=
 
 @router.post("/products/{product_id}/observe")
 def observe_price(product_id: str, req: PriceObservation, authorization: str | None = Header(default=None)):
-    ref = _ref(_uid(authorization), product_id)
+    uid = _uid(authorization)
+    ref = _ref(uid, product_id)
     snapshot = ref.get()
     if not snapshot.exists:
         raise HTTPException(404, "Produto não encontrado.")
@@ -431,6 +614,7 @@ def observe_price(product_id: str, req: PriceObservation, authorization: str | N
     reached = _target_reached({**product, "price":req.price})
     ref.update({"price":req.price,"source":_text(req.source,100),"updatedAt":now,"lastObservedAt":now,
         "targetReached":reached,"targetReachedAt":now if reached and not product.get("targetReached") else (product.get("targetReachedAt","") if reached else "")})
+    _record_cart_snapshot(uid, "price-observation")
     return {"product":_serialize(ref.get())}
 
 @router.post("/products/{product_id}/target")
@@ -465,12 +649,14 @@ def compare_offers(q: str = Query(min_length=2, max_length=180), authorization: 
 
 @router.delete("/products/{product_id}")
 def delete_product(product_id: str, authorization: str | None = Header(default=None)):
-    ref = _ref(_uid(authorization), product_id)
+    uid = _uid(authorization)
+    ref = _ref(uid, product_id)
     if not ref.get().exists:
         raise HTTPException(404, "Produto não encontrado.")
     for event in ref.collection("history").stream():
         event.reference.delete()
     ref.delete()
+    _record_cart_snapshot(uid, "product-removed")
     return {"ok":True}
 
 
@@ -992,6 +1178,94 @@ def search_community_products(
         "query": q,
         "products": selected,
         "coverageNote": "Base comunitária: preços e condições registrados pelos usuários do Resolvei. Frete, parcelas e cupons podem mudar e precisam ser confirmados na loja.",
+    }
+
+
+@router.get("/admin/community-products")
+def admin_list_community_products(
+    q: str = Query(default="", max_length=180),
+    limit: int = Query(default=100, ge=1, le=250),
+    authorization: str | None = Header(default=None),
+):
+    _require_admin(authorization)
+    collection = _db().collection("communityPriceProducts")
+    query_text = _text(q, 180)
+    if query_text:
+        tokens = sorted(_words(query_text), key=lambda token: (-len(token), token))[:6]
+        candidates = {}
+        for token in tokens:
+            for snapshot in collection.where("searchTokens", "array_contains", token).limit(120).stream():
+                candidates[snapshot.id] = snapshot
+        if not candidates:
+            # Compatibilidade com registros antigos sem tokens de pesquisa.
+            for snapshot in collection.limit(500).stream():
+                candidates[snapshot.id] = snapshot
+        matched = []
+        for snapshot in candidates.values():
+            product = snapshot.to_dict() or {}
+            searchable = " ".join(str(product.get(key) or "") for key in ("title", "brand", "model", "ean"))
+            if _score(query_text, searchable) >= 0.2:
+                matched.append(snapshot)
+        matched.sort(key=lambda snapshot: str((snapshot.to_dict() or {}).get("updatedAt") or ""), reverse=True)
+        selected = matched[:limit]
+    else:
+        selected = list(collection.order_by("updatedAt", direction=__import__("google.cloud.firestore_v1", fromlist=["Query"]).Query.DESCENDING).limit(limit).stream())
+    products = []
+    for snapshot in selected:
+        product = snapshot.to_dict() or {}
+        products.append({
+            "id": snapshot.id,
+            "title": _text(product.get("title"), 300),
+            "brand": _text(product.get("brand"), 150),
+            "model": _text(product.get("model"), 150),
+            "ean": _text(product.get("ean"), 32),
+            "image_url": _text(product.get("image_url"), 2048),
+            "bestCommunityPrice": _price(product.get("bestCommunityPrice")),
+            "bestCommunityOfferTitle": _text(product.get("bestCommunityOfferTitle"), 300),
+            "bestCommunityOfferSource": _text(product.get("bestCommunityOfferSource"), 100),
+            "bestCommunityOfferUrl": _text(product.get("bestCommunityOfferUrl"), 2048),
+            "bestCommunityPriceObservedAt": product.get("bestCommunityPriceObservedAt", ""),
+            "contributorCount": int(product.get("contributorCount") or 0),
+            "updatedAt": product.get("updatedAt", ""),
+            "lastCommunityRefreshAt": product.get("lastCommunityRefreshAt", ""),
+            "lastCommunityRefreshError": _text(product.get("lastCommunityRefreshError"), 240),
+        })
+    return {"ok": True, "query": query_text, "count": len(products), "products": products}
+
+
+@router.get("/admin/community-products/{product_id}")
+def admin_get_community_product(
+    product_id: str,
+    authorization: str | None = Header(default=None),
+):
+    _require_admin(authorization)
+    ref = _db().collection("communityPriceProducts").document(product_id)
+    snapshot = ref.get()
+    if not snapshot.exists:
+        raise HTTPException(404, "Produto comunitário não encontrado.")
+    raw = snapshot.to_dict() or {}
+    product = {
+        "id": snapshot.id,
+        "title": _text(raw.get("title"), 300),
+        "brand": _text(raw.get("brand"), 150),
+        "model": _text(raw.get("model"), 150),
+        "ean": _text(raw.get("ean"), 32),
+        "image_url": _text(raw.get("image_url"), 2048),
+        "bestCommunityPrice": _price(raw.get("bestCommunityPrice")),
+        "bestCommunityOfferTitle": _text(raw.get("bestCommunityOfferTitle"), 300),
+        "bestCommunityOfferSource": _text(raw.get("bestCommunityOfferSource"), 100),
+        "bestCommunityOfferUrl": _text(raw.get("bestCommunityOfferUrl"), 2048),
+        "bestCommunityPriceObservedAt": raw.get("bestCommunityPriceObservedAt", ""),
+        "contributorCount": int(raw.get("contributorCount") or 0),
+        "updatedAt": raw.get("updatedAt", ""),
+        "lastCommunityRefreshAt": raw.get("lastCommunityRefreshAt", ""),
+        "lastCommunityRefreshError": _text(raw.get("lastCommunityRefreshError"), 240),
+    }
+    return {
+        "ok": True,
+        "product": product,
+        "offers": _community_offers(ref, limit=100),
+        "history": _community_history(ref, limit=365, days=365),
     }
 
 
