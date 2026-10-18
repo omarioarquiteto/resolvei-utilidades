@@ -738,7 +738,7 @@ function addFortifyButtons(panel) {
   }
   const btnCancel = document.createElement('button');
   btnCancel.className = 'action-btn';
-  btnCancel.textContent = 'Cancel';
+  btnCancel.textContent = 'Cancelar';
   btnCancel.onclick = () => { G.selectedFrom = -1; G.selectedTo = -1; clearAllHighlights(); updateUI(); };
   panel.appendChild(btnCancel);
 }
@@ -951,7 +951,7 @@ async function aiInitialPlacement() {
     t.armies = 1;
     G._armiesPlaced[p]++;
     updateTerritoryVisual(pick);
-    addLog(`${G.players[p].name} claimed ${t.name}`);
+    addLog(`${G.players[p].name} conquistou ${t.name}`);
   } else {
     const owned = G.territories.map((t, i) => ({ ...t, idx: i })).filter(t => t.owner === p);
     const borders = owned.filter(t => t.adj.some(j => G.territories[j].owner !== p));
@@ -1424,9 +1424,9 @@ async function aiAttack(p) {
       G.phase = 'gameover';
       const vo = document.getElementById('victoryOverlay');
       vo.classList.add('visible');
-      document.getElementById('victoryText').textContent = alive[0].name + ' Wins!';
+      document.getElementById('victoryText').textContent = alive[0].name + ' venceu!';
       document.getElementById('victoryText').style.color = PLAYER_COLORS[G.players.indexOf(alive[0])].hex;
-      document.getElementById('victorySub').textContent = 'Global domination achieved!';
+      document.getElementById('victorySub').textContent = 'Dominação mundial alcançada!';
       updateUI();
       return;
     }
@@ -1618,16 +1618,16 @@ async function executeLLMMove(p, move) {
       }
       fromT.armies -= attLoss;
       toT.armies -= defLoss;
-      addLog(`${G.players[p].name} attacks ${toT.name}: ${attDice.join(',')} vs ${defDice.join(',')}`);
+      addLog(`${G.players[p].name} atacou ${toT.name}: dados ${attDice.join(',')} contra ${defDice.join(',')}`);
       if (toT.armies <= 0) {
         toT.owner = p;
         toT.armies = Math.max(1, attCount - attLoss);
         fromT.armies -= (attCount - attLoss);
         if (fromT.armies < 1) fromT.armies = 1;
-        addLog(`${G.players[p].name} conquered ${toT.name}!`);
+        addLog(`${G.players[p].name} conquistou ${toT.name}!`);
         if (!G.territories.some(t => t.owner === defOwner)) {
           G.players[defOwner].alive = false;
-          addLog(`${G.players[defOwner].name} eliminated!`);
+          addLog(`${G.players[defOwner].name} foi eliminado!`);
         }
       }
       updateTerritoryVisual(G.territories.indexOf(fromT));
