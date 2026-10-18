@@ -278,3 +278,10 @@ body.games-page {
   .sudoku-grid { width:100%; }
   .sudoku-cell { font-size:12px; }
 }
+
+
+.embedded-game-shell { display:flex; flex-direction:column; gap:12px; }
+.embedded-game-toolbar { display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; color:#6451d1; font-size:12px; }
+.embedded-game-toolbar .game-btn { text-decoration:none; }
+.embedded-game-frame { display:block; width:100%; height:min(78vh,850px); min-height:600px; border:1px solid #d9d1f8; border-radius:14px; background:#101024; }
+@media (max-width:720px) { .embedded-game-frame { height:75vh; min-height:520px; } }
