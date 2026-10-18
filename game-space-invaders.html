@@ -38,11 +38,11 @@ body{display:flex;flex-direction:column;align-items:center;gap:10px;padding:12px
 (function(){
 "use strict";
 const canvas=document.getElementById("game"),ctx=canvas.getContext("2d"),W=960,H=540;
-const el=id=>document.getElementById(id);let active=false,paused=false,ended=false,last=0,tick=0,score=0,best=Number(localStorage.getItem("stellarDefenseBest")||0),lives=3,wave=1,shield=100,kills=0,spawnClock=0,boss=null,shake=0,keys={},touch={},stars=[],enemies=[],shots=[],foeShots=[],particles=[],pickups=[],player;
+const el=id=>document.getElementById(id);let active=false,paused=false,ended=false,last=0,tick=0,score=0,best=Number(localStorage.getItem("stellarDefenseBest")||0),lives=3,wave=1,shield=100,kills=0,bossesDefeated=0,spawnClock=0,boss=null,shake=0,keys={},touch={},stars=[],enemies=[],shots=[],foeShots=[],particles=[],pickups=[],player;
 el("best").textContent=String(best).padStart(6,"0");
 for(let i=0;i<180;i++)stars.push({x:Math.random()*W,y:Math.random()*H,z:Math.random()*3+0.3,size:Math.random()*1.8+.3,phase:Math.random()*7});
 function reset(){
- score=0;lives=3;wave=1;shield=100;kills=0;spawnClock=0;boss=null;shake=0;enemies=[];shots=[];foeShots=[];particles=[];pickups=[];player={x:W*.5,y:H*.77,vx:0,vy:0,cool:0,boost:0,inv:0,weapon:1};updateHud();
+ score=0;lives=3;wave=1;shield=100;kills=0;bossesDefeated=0;spawnClock=0;boss=null;shake=0;enemies=[];shots=[];foeShots=[];particles=[];pickups=[];player={x:W*.5,y:H*.77,vx:0,vy:0,cool:0,boost:0,inv:0,weapon:1};updateHud();
 }
 function updateHud(){el("score").textContent=String(score).padStart(6,"0");el("wave").textContent=String(wave).padStart(2,"0");el("shield").textContent=Math.max(0,Math.round(shield))+"%";el("lives").textContent=Array.from({length:3},(_,i)=>i<lives?"♥":"♡").join(" ");el("best").textContent=String(best).padStart(6,"0");}
 function rand(a,b){return a+Math.random()*(b-a);}
@@ -124,7 +124,7 @@ function update(dt){
  // player shots collide with enemies and boss
  shots.forEach(s=>{
   enemies.forEach(e=>{if(e.dead)return;if(Math.hypot(s.x-e.x,s.y-e.y)<(e.type==="heavy"?30:19)){e.hp-=s.damage;s.dead=true;burst(s.x,s.y,s.color,5,2.5);if(e.hp<=0){e.dead=true;kills++;score+=e.type==="heavy"?250:e.type==="interceptor"?140:100;burst(e.x,e.y,e.type==="heavy"?"#ffa7d2":"#66f9ff",22,4);if(Math.random()<.13)pickups.push({x:e.x,y:e.y,kind:Math.random()<.5?"shield":"weapon",vy:1.4,dead:false});updateHud();}}});
-  if(boss&&Math.hypot(s.x-boss.x,s.y-boss.y)<65){boss.hp-=s.damage*1.15;s.dead=true;burst(s.x,s.y,"#ff95d0",4,2);if(boss.hp<=0){score+=2200;burst(boss.x,boss.y,"#a8faff",110,7);boss=null;updateHud();}}
+  if(boss&&Math.hypot(s.x-boss.x,s.y-boss.y)<65){boss.hp-=s.damage*1.15;s.dead=true;burst(s.x,s.y,"#ff95d0",4,2);if(boss.hp<=0){score+=2200;burst(boss.x,boss.y,"#a8faff",110,7);boss=null;bossesDefeated++;if(bossesDefeated>=3){finish(true);}updateHud();}}
  });
  shots=shots.filter(s=>s.life>0&&s.y>-30&&!s.dead);foeShots=foeShots.filter(s=>!s.dead&&s.life>0&&s.y<H+20&&s.x>-20&&s.x<W+20);
  pickups.forEach(p=>{p.y+=p.vy*mul;p.x+=Math.sin(tick*.006+p.y)*.25;if(Math.hypot(p.x-player.x,p.y-player.y)<24){p.dead=true;if(p.kind==="shield")shield=Math.min(100,shield+25);else player.weapon=Math.min(3,player.weapon+1);score+=50;burst(p.x,p.y,p.kind==="shield"?"#7cf8ff":"#c0a0ff",15,3);updateHud();}});
