@@ -161,7 +161,7 @@ body.games-page {
 .chess-turn { font-size:13px; font-weight:900; padding:12px; border-radius:12px; background:white; border:1px solid #e8e1fc; margin-bottom:10px; }
 .move-list { max-height:220px; overflow:auto; padding:10px 12px; border-radius:12px; background:white; border:1px solid #e8e1fc; color:#6e668e; font-size:11px; line-height:1.8; }
 .crossword-layout { display:grid; grid-template-columns:minmax(220px,340px) minmax(240px,1fr); gap:30px; justify-content:center; align-items:start; }
-.crossword-grid { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:3px; width:min(100%,350px); aspect-ratio:1; background:#4c3a87; border:4px solid #4c3a87; border-radius:8px; overflow:hidden; }
+.crossword-grid { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); grid-template-rows:repeat(5,minmax(0,1fr)); gap:3px; width:min(100%,350px); aspect-ratio:1; background:#4c3a87; border:4px solid #4c3a87; border-radius:8px; overflow:hidden; }
 .cross-cell { background:white; min-width:0; min-height:0; position:relative; display:grid; place-items:center; }
 .cross-cell.block { background:#3a2d68; }
 .cross-cell input { border:0; outline:0; width:100%; height:100%; min-width:0; min-height:0; text-align:center; text-transform:uppercase; background:transparent; font-weight:900; font-size:clamp(16px,2.8vw,26px); color:#5e48ca; padding:0; }
