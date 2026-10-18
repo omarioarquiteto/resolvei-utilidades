@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>RISK — Global Domination</title>
+<title>Conquista Mundial — Resolvei Games</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{overflow:hidden;background:#0a0a1a;font-family:'Segoe UI',system-ui,-apple-system,sans-serif;color:#e0e0e0;user-select:none}
@@ -70,7 +70,9 @@ canvas{display:block}
 /* Setup modal */
 #setupModal{position:fixed;inset:0;background:rgba(5,5,20,.92);z-index:100;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(12px)}
 #setupModal.hidden{display:none}
-.modal-box{background:linear-gradient(135deg,#0d1225,#141830);border:1px solid rgba(100,140,255,.2);border-radius:16px;padding:36px 40px;width:440px;max-width:90vw}
+.modal-box{background:linear-gradient(135deg,#0d1225,#141830);border:1px solid rgba(100,140,255,.2);border-radius:16px;padding:28px 32px;width:520px;max-width:92vw;max-height:92vh;overflow-y:auto}
+.rule-guide{display:grid;gap:6px;text-align:left;margin:0 0 20px;padding:12px 14px;border-radius:10px;background:rgba(75,115,195,.1);border:1px solid rgba(100,140,255,.17);color:#aebedf;font-size:11px;line-height:1.45}
+.rule-guide strong{color:#9fc2ff;font-size:12px;margin-bottom:2px}.rule-guide b{color:#c0d4ff}
 .modal-box h1{font-size:28px;font-weight:700;letter-spacing:6px;color:#8ab4ff;text-align:center;margin-bottom:4px;text-shadow:0 0 30px rgba(100,140,255,.3)}
 .modal-box .subtitle{text-align:center;color:#6680aa;font-size:13px;margin-bottom:28px}
 .form-group{margin-bottom:18px}
@@ -98,8 +100,8 @@ canvas{display:block}
 <body>
 
 <div id="topBar">
-  <div class="title">R I S K</div>
-  <div class="phase-info" id="phaseInfo">Setup</div>
+  <div class="title">CONQUISTA MUNDIAL</div>
+  <div class="phase-info" id="phaseInfo">Preparando partida</div>
   <div class="turn-info" id="turnInfo" style="display:none"></div>
 </div>
 
@@ -107,7 +109,7 @@ canvas{display:block}
 
 <div id="infoPanel">
   <div class="info-card" id="territoryInfo" style="display:none">
-    <h3>Territory</h3>
+    <h3>Território</h3>
     <div class="territory-name" id="infoName"></div>
     <div class="detail" id="infoContinent"></div>
     <div class="detail" id="infoOwner"></div>
@@ -118,7 +120,7 @@ canvas{display:block}
     <div class="detail" id="infoConnections" style="margin-top:8px;font-size:11px"></div>
   </div>
   <div class="info-card">
-    <h3>Reinforcements</h3>
+    <h3>Reforços</h3>
     <div class="detail" id="reinforceInfo">—</div>
   </div>
 </div>
@@ -129,11 +131,11 @@ canvas{display:block}
 
 <div id="dicePanel">
   <div class="dice-group" id="attackerDice">
-    <div class="label" style="color:#ff8888">Attacker</div>
+    <div class="label" style="color:#ff8888">Atacante</div>
     <div class="dice-row"></div>
   </div>
   <div class="dice-group" id="defenderDice">
-    <div class="label" style="color:#8888ff">Defender</div>
+    <div class="label" style="color:#8888ff">Defensor</div>
     <div class="dice-row"></div>
   </div>
 </div>
@@ -150,55 +152,61 @@ canvas{display:block}
 <div id="setupModal">
   <div class="modal-box">
     <h1>R I S K</h1>
-    <div class="subtitle">Global Domination</div>
+    <div class="subtitle">Estratégia territorial · Pense antes de atacar</div>
+    <div class="rule-guide">
+      <strong>Como jogar</strong>
+      <span><b>1.</b> Escolha seus territórios e posicione os exércitos iniciais.</span>
+      <span><b>2.</b> Na fase de reforços, clique em um território seu para adicionar tropas.</span>
+      <span><b>3.</b> Na fase de ataque, selecione seu território e depois um inimigo vizinho.</span>
+      <span><b>4.</b> Ao terminar, mova tropas entre territórios conectados ou encerre o turno.</span>
+    </div>
     <div class="form-group">
-      <label>Your Name</label>
-      <input id="playerName" type="text" value="Commander" placeholder="Enter your name">
+      <label for="playerName">Seu nome</label>
+      <input id="playerName" type="text" value="Comandante" placeholder="Digite seu nome">
     </div>
     <div class="form-row">
       <div class="form-group">
-        <label>Opponents</label>
+        <label for="numOpponents">Número de adversários</label>
         <select id="numOpponents">
-          <option value="1">1 Opponent</option>
-          <option value="2">2 Opponents</option>
-          <option value="3" selected>3 Opponents</option>
-          <option value="4">4 Opponents</option>
-          <option value="5">5 Opponents</option>
+          <option value="1">1 adversário</option>
+          <option value="2">2 adversários</option>
+          <option value="3" selected>3 adversários</option>
+          <option value="4">4 adversários</option>
+          <option value="5">5 adversários</option>
         </select>
       </div>
       <div class="form-group">
-        <label>Difficulty</label>
+        <label for="difficulty">Dificuldade</label>
         <select id="difficulty">
-          <option value="easy">Easy</option>
+          <option value="easy">Fácil</option>
           <option value="normal" selected>Normal</option>
-          <option value="hard">Hard</option>
+          <option value="hard">Difícil</option>
         </select>
       </div>
     </div>
     <div class="form-group">
-      <label>AI Engine</label>
+      <label for="aiEngine">Inteligência dos adversários</label>
       <select id="aiEngine">
-        <option value="heuristic" selected>Built-in AI (no server needed)</option>
-        <option value="llm">LLM Server (OpenAI-compatible)</option>
+        <option value="heuristic" selected>IA integrada (recomendado)</option>
       </select>
     </div>
     <div id="llmConfig" style="display:none">
       <div class="form-group">
-        <label>API Endpoint</label>
+        <label for="llmEndpoint">Endereço do servidor de IA</label>
         <input id="llmEndpoint" type="text" value="http://localhost:11434/v1/chat/completions" placeholder="http://localhost:11434/v1/chat/completions">
       </div>
       <div class="form-row">
         <div class="form-group">
-          <label>Model</label>
+          <label for="llmModel">Modelo de IA</label>
           <input id="llmModel" type="text" value="llama3" placeholder="llama3">
         </div>
         <div class="form-group">
-          <label>API Key (optional)</label>
+          <label for="llmApiKey">Chave de API (opcional)</label>
           <input id="llmApiKey" type="password" placeholder="sk-...">
         </div>
       </div>
     </div>
-    <button class="start-btn" id="startBtn">START GAME</button>
+    <button class="start-btn" id="startBtn">COMEÇAR PARTIDA</button>
   </div>
 </div>
 
@@ -224,17 +232,27 @@ const CONTINENTS = {
 };
 
 // [name, continent, x, z, [adjacent indices]]
+const CONTINENT_LABELS = {
+  'North America': 'América do Norte',
+  'South America': 'América do Sul',
+  'Europe': 'Europa',
+  'Africa': 'África',
+  'Asia': 'Ásia',
+  'Oceania': 'Oceania'
+};
+const continentPt = name => CONTINENT_LABELS[name] || name;
+
 const TERRITORY_DEFS = [
   // NORTH AMERICA (0-8)
-  ['Alaska',            'North America', -15.5, -5.5, [1,3,30]],
-  ['Northwest Territory','North America', -12,  -5.5, [0,2,3,4]],
-  ['Greenland',         'North America', -7,   -6.5, [1,4,5,13]],
+  ['Alasca',            'North America', -15.5, -5.5, [1,3,30]],
+  ['Território do Noroeste','North America', -12,  -5.5, [0,2,3,4]],
+  ['Groenlândia',         'North America', -7,   -6.5, [1,4,5,13]],
   ['Alberta',           'North America', -13,  -3.5, [0,1,4,6]],
-  ['Ontario',           'North America', -10,  -3.5, [1,2,3,5,6,7]],
+  ['Ontário',           'North America', -10,  -3.5, [1,2,3,5,6,7]],
   ['Quebec',            'North America', -7.5, -3.5, [2,4,7]],
-  ['Western US',        'North America', -13,  -1,   [3,4,7,8]],
-  ['Eastern US',        'North America', -9.5, -1,   [4,5,6,8]],
-  ['Central America',   'North America', -11,   1.5, [6,7,9]],
+  ['EUA Ocidentais',        'North America', -13,  -1,   [3,4,7,8]],
+  ['EUA Orientais',        'North America', -9.5, -1,   [4,5,6,8]],
+  ['América Central',   'North America', -11,   1.5, [6,7,9]],
   // SOUTH AMERICA (9-12)
   ['Venezuela',         'South America', -9,    3,   [8,10,11]],
   ['Peru',              'South America', -8,    5,   [9,11,12]],
@@ -242,35 +260,35 @@ const TERRITORY_DEFS = [
   ['Argentina',         'South America', -7,    7,   [10,11]],
   // EUROPE (13-19)
   ['Iceland',           'Europe',        -2.5, -5.5, [2,14,15]],
-  ['Great Britain',     'Europe',        -1,   -3.5, [13,15,16,17]],
+  ['Grã-Bretanha',     'Europe',        -1,   -3.5, [13,15,16,17]],
   ['Scandinavia',       'Europe',         1.5, -5.5, [13,14,17,18,19]],
-  ['Western Europe',    'Europe',         0,   -1,   [14,17,18,19,20]],
-  ['Northern Europe',   'Europe',         4,   -3,   [14,15,16,18,19]],
-  ['Southern Europe',   'Europe',         2.5, -1,   [15,16,17,19,20,21]],
+  ['Europa Ocidental',    'Europe',         0,   -1,   [14,17,18,19,20]],
+  ['Europa Setentrional',   'Europe',         4,   -3,   [14,15,16,18,19]],
+  ['Europa Meridional',   'Europe',         2.5, -1,   [15,16,17,19,20,21]],
   ['Russia',            'Europe',         8,   -4.5, [15,16,17,18,20,26,27,31]],
   // AFRICA (20-25)
-  ['North Africa',      'Africa',         0.5,  1.5, [11,16,18,19,21,22,23]],
+  ['Norte da África',      'Africa',         0.5,  1.5, [11,16,18,19,21,22,23]],
   ['Egypt',             'Africa',         3,    1.5, [18,20,22,31]],
-  ['East Africa',       'Africa',         4.5,  3.5, [20,21,23,24,25,31]],
+  ['África Oriental',       'Africa',         4.5,  3.5, [20,21,23,24,25,31]],
   ['Congo',             'Africa',         2,    4.5, [20,22,24]],
-  ['South Africa',      'Africa',         2.5,  7,   [22,23,25]],
+  ['África do Sul',      'Africa',         2.5,  7,   [22,23,25]],
   ['Madagascar',        'Africa',         5.5,  6.5, [22,24]],
   // ASIA (26-35)
-  ['Ural',              'Asia',           8,   -2,   [19,27,28]],
+  ['Urais',              'Asia',           8,   -2,   [19,27,28]],
   ['Afghanistan',       'Asia',          10,   -1.5, [19,26,28,31,32,33]],
   ['Siberia',           'Asia',          12,   -4.5, [26,27,29,30,33]],
   ['Yakutsk',           'Asia',          14.5, -5.5, [28,30,33]],
   ['Kamchatka',         'Asia',          17,   -5.5, [0,28,29,34]],
-  ['Middle East',       'Asia',           6,    1,   [19,21,22,27,32]],
+  ['Oriente Médio',       'Asia',           6,    1,   [19,21,22,27,32]],
   ['India',             'Asia',           9,    1.5, [27,31,35]],
   ['China',             'Asia',          13,   -1.5, [27,28,29,35]],
   ['Japan',             'Asia',          17.5, -2,   [30]],
-  ['Southeast Asia',    'Asia',          13,    1.5, [32,33,36]],
+  ['Sudeste Asiático',    'Asia',          13,    1.5, [32,33,36]],
   // OCEANIA (36-41)
   ['Indonesia',         'Oceania',       12,    3.5, [35,37,38]],
-  ['New Guinea',        'Oceania',       16,    3.5, [36,38,39]],
-  ['Western Australia', 'Oceania',       12,    6,   [36,37,39,40]],
-  ['Eastern Australia', 'Oceania',       16,    6,   [37,38,40,41]],
+  ['Nova Guiné',        'Oceania',       16,    3.5, [36,38,39]],
+  ['Austrália Ocidental', 'Oceania',       12,    6,   [36,37,39,40]],
+  ['Austrália Oriental', 'Oceania',       16,    6,   [37,38,40,41]],
   ['Perth',             'Oceania',       11,    7.5, [38,39,41]],
   ['Queensland',        'Oceania',       15,    7.5, [39,40]],
 ];
@@ -408,8 +426,8 @@ function onMouseMove(e) {
       hoveredTerritory = idx;
       const t = G.territories[idx];
       tooltip.querySelector('.tt-name').textContent = t.name;
-      const ownerName = t.owner >= 0 ? G.players[t.owner].name : 'Unclaimed';
-      tooltip.querySelector('.tt-detail').textContent = `${t.continent} · ${ownerName} · ${t.armies} armies`;
+      const ownerName = t.owner >= 0 ? G.players[t.owner].name : 'Sem controle';
+      tooltip.querySelector('.tt-detail').textContent = `${continentPt(t.continent)} · ${ownerName} · ${t.armies} exércitos`;
       tooltip.style.display = 'block';
     }
     tooltip.style.left = (e.clientX + 14) + 'px';
@@ -596,16 +614,16 @@ function updateUI() {
 
 function updateTopBar() {
   const phaseNames = {
-    setup: 'Setting Up', place: 'Initial Placement',
-    reinforce: 'Reinforce Phase', attack: 'Attack Phase',
-    fortify: 'Fortify Phase', gameover: 'Game Over'
+    setup: 'Preparando partida', place: 'Distribuição inicial',
+    reinforce: 'Fase de reforços', attack: 'Fase de ataque',
+    fortify: 'Fase de movimentação', gameover: 'Fim de jogo'
   };
   document.getElementById('phaseInfo').textContent = phaseNames[G.phase] || G.phase;
   const ti = document.getElementById('turnInfo');
   if (G.phase !== 'setup' && G.phase !== 'gameover') {
     const p = G.players[G.currentPlayer];
     ti.style.display = 'block';
-    ti.textContent = p.name + "'s Turn";
+    ti.textContent = "Vez de " + p.name;
     ti.style.borderColor = PLAYER_COLORS[G.currentPlayer].hex;
     ti.style.color = PLAYER_COLORS[G.currentPlayer].hex;
   } else {
@@ -623,11 +641,11 @@ function updatePlayerPanel() {
     const card = document.createElement('div');
     card.className = 'player-card' + (i === G.currentPlayer && G.phase !== 'setup' ? ' active' : '') + (!p.alive ? ' eliminated' : '');
     card.innerHTML = `
-      <div class="name"><span class="dot" style="background:${PLAYER_COLORS[i].hex}"></span>${p.name}${p.isHuman ? ' (You)' : ' (AI)'}</div>
+      <div class="name"><span class="dot" style="background:${PLAYER_COLORS[i].hex}"></span>${p.name}${p.isHuman ? ' (Você)' : ' (IA)'}</div>
       <div class="stats">
         <span>⬡ ${terrCount}</span>
         <span>⚔ ${totalArmies}</span>
-        ${!p.alive ? '<span style="color:#ff6666">Eliminated</span>' : ''}
+        ${!p.alive ? '<span style="color:#ff6666">Eliminado</span>' : ''}
       </div>`;
     panel.appendChild(card);
   }
@@ -639,29 +657,29 @@ function updateActionButtons() {
   // Clear buttons (keep hint)
   while (panel.children.length > 1) panel.removeChild(panel.lastChild);
   if (G.phase === 'gameover' || G.phase === 'setup') { hint.textContent = ''; return; }
-  if (!G.players[G.currentPlayer].isHuman) { hint.textContent = 'AI is thinking...'; return; }
+  if (!G.players[G.currentPlayer].isHuman) { hint.textContent = 'A IA está pensando...'; return; }
 
   if (G.phase === 'place' || G.phase === 'reinforce') {
-    hint.textContent = `Click a territory you own to place armies (${G.mustPlace} remaining)`;
+    hint.textContent = `Clique em um território seu para posicionar exércitos (${G.mustPlace} restantes)`;
   } else if (G.phase === 'attack') {
     if (G.selectedFrom < 0) {
-      hint.textContent = 'Click your territory to attack from (or end attack phase)';
+      hint.textContent = 'Clique no seu território de origem para atacar ou encerre a fase de ataque';
     } else if (G.selectedTo < 0) {
-      hint.textContent = `Click adjacent enemy territory to attack (from ${G.territories[G.selectedFrom].name})`;
+      hint.textContent = `Clique em um território inimigo vizinho para atacar a partir de ${G.territories[G.selectedFrom].name}`;
     } else {
-      hint.textContent = 'Choose number of attacking armies, then roll';
+      hint.textContent = 'Escolha quantos exércitos enviar e role os dados';
       addAttackButtons(panel);
     }
   } else if (G.phase === 'fortify') {
     if (!G.fortifiedThisTurn && G.selectedFrom < 0) {
-      hint.textContent = 'Click a territory to move armies from (or skip)';
+      hint.textContent = 'Escolha de qual território mover exércitos ou pule esta etapa';
     } else if (!G.fortifiedThisTurn && G.selectedTo < 0) {
-      hint.textContent = `Click a connected friendly territory to move to (from ${G.territories[G.selectedFrom].name})`;
+      hint.textContent = `Escolha um território seu conectado para receber tropas de ${G.territories[G.selectedFrom].name}`;
     } else if (!G.fortifiedThisTurn && G.selectedFrom >= 0 && G.selectedTo >= 0) {
-      hint.textContent = 'Choose how many armies to move';
+      hint.textContent = 'Escolha quantos exércitos mover';
       addFortifyButtons(panel);
     } else {
-      hint.textContent = 'Fortification complete';
+      hint.textContent = 'Movimentação concluída';
     }
   }
 
@@ -669,14 +687,14 @@ function updateActionButtons() {
   if (G.phase === 'attack') {
     const btn = document.createElement('button');
     btn.className = 'action-btn primary';
-    btn.textContent = 'End Attack';
+    btn.textContent = 'Encerrar ataques';
     btn.onclick = () => endAttackPhase();
     panel.appendChild(btn);
   }
   if (G.phase === 'fortify') {
     const btn = document.createElement('button');
     btn.className = 'action-btn primary';
-    btn.textContent = G.fortifiedThisTurn ? 'End Turn' : 'Skip Fortify';
+    btn.textContent = G.fortifiedThisTurn ? 'Encerrar turno' : 'Pular movimentação';
     btn.onclick = () => endFortifyPhase();
     panel.appendChild(btn);
   }
@@ -692,13 +710,13 @@ function addAttackButtons(panel) {
   for (const n of counts) {
     const btn = document.createElement('button');
     btn.className = 'action-btn danger';
-    btn.textContent = n === maxAttack && maxAttack > 3 ? `Attack with ${n} (all)` : `Attack with ${n}`;
+    btn.textContent = n === maxAttack && maxAttack > 3 ? `Atacar com ${n} (todos)` : `Atacar com ${n}`;
     btn.onclick = () => executeAttack(n);
     panel.appendChild(btn);
   }
   const btnCancel = document.createElement('button');
   btnCancel.className = 'action-btn';
-  btnCancel.textContent = 'Cancel';
+  btnCancel.textContent = 'Cancelar';
   btnCancel.onclick = () => { G.selectedFrom = -1; G.selectedTo = -1; clearAllHighlights(); updateUI(); };
   panel.appendChild(btnCancel);
 }
@@ -708,13 +726,13 @@ function addFortifyButtons(panel) {
   const maxMove = from.armies - 1;
   const btn = document.createElement('button');
   btn.className = 'action-btn primary';
-  btn.textContent = `Move ${maxMove} armies`;
+  btn.textContent = `Mover ${maxMove} exércitos`;
   btn.onclick = () => executeFortify(maxMove);
   panel.appendChild(btn);
   if (maxMove > 1) {
     const btn2 = document.createElement('button');
     btn2.className = 'action-btn';
-    btn2.textContent = `Move ${Math.floor(maxMove / 2)}`;
+    btn2.textContent = `Mover ${Math.floor(maxMove / 2)} exércitos`;
     btn2.onclick = () => executeFortify(Math.floor(maxMove / 2));
     panel.appendChild(btn2);
   }
@@ -728,7 +746,7 @@ function addFortifyButtons(panel) {
 function updateReinforceInfo() {
   const el = document.getElementById('reinforceInfo');
   if (G.phase === 'reinforce' || G.phase === 'place') {
-    el.textContent = `${G.mustPlace} armies to place`;
+    el.textContent = `${G.mustPlace} exércitos para posicionar`;
     el.style.color = '#88ccff';
   } else {
     el.textContent = '—';
@@ -741,11 +759,11 @@ function showTerritoryInfo(idx) {
   const panel = document.getElementById('territoryInfo');
   panel.style.display = 'block';
   document.getElementById('infoName').textContent = t.name;
-  document.getElementById('infoContinent').textContent = t.continent + ' (bonus: +' + CONTINENTS[t.continent].bonus + ')';
-  document.getElementById('infoOwner').textContent = t.owner >= 0 ? 'Owner: ' + G.players[t.owner].name : 'Unclaimed';
+  document.getElementById('infoContinent').textContent = continentPt(t.continent) + ' (bônus: +' + CONTINENTS[t.continent].bonus + ')';
+  document.getElementById('infoOwner').textContent = t.owner >= 0 ? 'Controlado por: ' + G.players[t.owner].name : 'Sem controle';
   document.getElementById('infoArmies').textContent = t.armies;
   const adjNames = t.adj.map(j => G.territories[j].name).join(', ');
-  document.getElementById('infoConnections').textContent = 'Adjacent: ' + adjNames;
+  document.getElementById('infoConnections').textContent = 'Fronteiras: ' + adjNames;
 }
 
 function addLog(msg) {
@@ -824,7 +842,7 @@ function startGame(config) {
   G._armiesPlaced = new Array(numPlayers).fill(0);
   G.mustPlace = 1;
 
-  addLog('Game started! Click a territory to claim it.');
+  addLog('Partida iniciada! Clique em um território livre para conquistá-lo.');
   updateUI();
 
   // If first player is AI, auto-play
@@ -867,7 +885,7 @@ function handlePlacementClick(idx) {
     t.armies = 1;
     G._armiesPlaced[p]++;
     updateTerritoryVisual(idx);
-    addLog(`${G.players[p].name} claimed ${t.name}`);
+    addLog(`${G.players[p].name} conquistou ${t.name}`);
     advancePlacement();
   } else {
     if (t.owner !== p) return;
@@ -876,7 +894,7 @@ function handlePlacementClick(idx) {
     t.armies += place;
     G.mustPlace = 0;
     updateTerritoryVisual(idx);
-    addLog(`${G.players[p].name} placed ${place} armies on ${t.name}`);
+    addLog(`${G.players[p].name} posicionou ${place} exércitos em ${t.name}`);
     advancePlacement();
   }
 }
@@ -889,7 +907,7 @@ function advancePlacement() {
   if (G._placementPhase === 'claim') {
     if (allClaimed) {
       G._placementPhase = 'reinforce';
-      addLog('All territories claimed! Placing remaining armies...');
+      addLog('Todos os territórios foram ocupados! Distribuindo os exércitos restantes...');
       const onBoard = G.territories.filter(t => t.owner === next).reduce((s, t) => s + t.armies, 0);
       G.mustPlace = G._initialArmiesPerPlayer - onBoard;
       if (G.mustPlace <= 0) { G.currentPlayer = next; advancePlacement(); return; }
@@ -946,7 +964,7 @@ async function aiInitialPlacement() {
     }
     G.mustPlace = 0;
     for (const t of pool) updateTerritoryVisual(t.idx);
-    addLog(`${G.players[p].name} placed reinforcements`);
+    addLog(`${G.players[p].name} posicionou reforços`);
   }
 
   G.processing = false;
@@ -978,7 +996,7 @@ function startMainGame() {
   G.currentPlayer = 0;
   G.turnNumber = 1;
   G.placementQueue = 0;
-  addLog('— Main game begins! —');
+  addLog('— Começa a partida principal! —');
   startTurn();
 }
 
@@ -1002,7 +1020,7 @@ function startTurn() {
   G.fortifiedThisTurn = false;
   G.conqueredThisTurn = false;
 
-  addLog(`${G.players[p].name}'s turn (${reinforce} reinforcements)`);
+  addLog(`Vez de ${G.players[p].name} (${reinforce} reforços)`);
   updateUI();
 
   if (!G.players[p].isHuman) {
@@ -1029,9 +1047,9 @@ function nextTurn() {
     const winner = alivePlayers[0];
     const vo = document.getElementById('victoryOverlay');
     vo.classList.add('visible');
-    document.getElementById('victoryText').textContent = winner.name + ' Wins!';
+    document.getElementById('victoryText').textContent = winner.name + ' venceu!';
     document.getElementById('victoryText').style.color = PLAYER_COLORS[G.players.indexOf(winner)].hex;
-    document.getElementById('victorySub').textContent = 'Global domination achieved in ' + G.turnNumber + ' turns';
+    document.getElementById('victorySub').textContent = 'Dominação mundial alcançada em ' + G.turnNumber + ' turnos';
     updateUI();
     return;
   }
@@ -1049,7 +1067,7 @@ function handleReinforceClick(idx) {
   updateTerritoryVisual(idx);
   if (G.mustPlace <= 0) {
     G.phase = 'attack';
-    addLog(`${G.players[p].name} finished reinforcing`);
+    addLog(`${G.players[p].name} terminou de posicionar reforços`);
   }
   updateUI();
 }
@@ -1119,7 +1137,7 @@ async function executeAttack(numArmies) {
   fromT.armies -= attLoss;
   toT.armies -= defLoss;
 
-  addLog(`${G.players[fromT.owner].name} attacks ${toT.name}: ${attDice.join(',')} vs ${defDice.join(',')} → A:-${attLoss} D:-${defLoss}`);
+  addLog(`${G.players[fromT.owner].name} atacou ${toT.name}: dados ${attDice.join(',')} contra ${defDice.join(',')} → atacante: -${attLoss}, defensor: -${defLoss}`);
 
   // Check if territory conquered
   if (toT.armies <= 0) {
@@ -1128,13 +1146,13 @@ async function executeAttack(numArmies) {
     fromT.armies -= (attCount - attLoss);
     if (fromT.armies < 1) fromT.armies = 1;
     G.conqueredThisTurn = true;
-    addLog(`${G.players[toT.owner].name} conquered ${toT.name}!`);
+    addLog(`${G.players[toT.owner].name} conquistou ${toT.name}!`);
 
     // Check if defender eliminated
     const defTerritories = G.territories.filter(t => t.owner === defOwner);
     if (defTerritories.length === 0) {
       G.players[defOwner].alive = false;
-      addLog(`${G.players[defOwner].name} has been eliminated!`);
+      addLog(`${G.players[defOwner].name} foi eliminado!`);
     }
   }
 
@@ -1164,9 +1182,9 @@ async function executeAttack(numArmies) {
     G.phase = 'gameover';
     const vo = document.getElementById('victoryOverlay');
     vo.classList.add('visible');
-    document.getElementById('victoryText').textContent = alive[0].name + ' Wins!';
+    document.getElementById('victoryText').textContent = alive[0].name + ' venceu!';
     document.getElementById('victoryText').style.color = PLAYER_COLORS[G.players.indexOf(alive[0])].hex;
-    document.getElementById('victorySub').textContent = 'Global domination achieved!';
+    document.getElementById('victorySub').textContent = 'Dominação mundial alcançada!';
     updateUI();
   }
 }
@@ -1237,7 +1255,7 @@ function executeFortify(count) {
   from.armies -= actual;
   to.armies += actual;
   G.fortifiedThisTurn = true;
-  addLog(`${G.players[from.owner].name} moved ${actual} armies from ${from.name} to ${to.name}`);
+  addLog(`${G.players[from.owner].name} moveu ${actual} exércitos de ${from.name} para ${to.name}`);
   updateTerritoryVisual(G.selectedFrom);
   updateTerritoryVisual(G.selectedTo);
   G.selectedFrom = -1;
@@ -1266,7 +1284,7 @@ async function aiTurn() {
       await aiTurnLLM(p);
       usedLLM = true;
     } catch (e) {
-      addLog(`LLM error: ${e.message}. Falling back to heuristic.`);
+      addLog(`Erro no servidor de IA: ${e.message}. A IA integrada continuará a partida.`);
     }
   }
 
@@ -1320,7 +1338,7 @@ async function aiReinforce(p) {
   }
   G.phase = 'attack';
   updateUI();
-  addLog(`${G.players[p].name} reinforced`);
+  addLog(`${G.players[p].name} recebeu reforços`);
   await sleep(300);
 }
 
@@ -1379,7 +1397,7 @@ async function aiAttack(p) {
     fromT.armies -= attLoss;
     toT.armies -= defLoss;
 
-    addLog(`${G.players[p].name} attacks ${toT.name}: ${attDice.join(',')} vs ${defDice.join(',')}`);
+    addLog(`${G.players[p].name} atacou ${toT.name}: dados ${attDice.join(',')} contra ${defDice.join(',')}`);
 
     if (toT.armies <= 0) {
       toT.owner = p;
@@ -1387,11 +1405,11 @@ async function aiAttack(p) {
       toT.armies = moveIn;
       fromT.armies -= moveIn;
       if (fromT.armies < 1) fromT.armies = 1;
-      addLog(`${G.players[p].name} conquered ${toT.name}!`);
+      addLog(`${G.players[p].name} conquistou ${toT.name}!`);
       const defTerr = G.territories.filter(t => t.owner === defOwner);
       if (defTerr.length === 0) {
         G.players[defOwner].alive = false;
-        addLog(`${G.players[defOwner].name} eliminated!`);
+        addLog(`${G.players[defOwner].name} foi eliminado!`);
       }
     }
 
@@ -1444,7 +1462,7 @@ async function aiFortify(p) {
     if (moveCount > 0) {
       G.territories[bestTo].armies += moveCount;
       G.territories[bestFrom].armies = 1;
-      addLog(`${G.players[p].name} fortified ${G.territories[bestTo].name} (+${moveCount})`);
+      addLog(`${G.players[p].name} reforçou ${G.territories[bestTo].name} (+${moveCount})`);
       updateTerritoryVisual(bestFrom);
       updateTerritoryVisual(bestTo);
     }
@@ -1457,7 +1475,7 @@ async function aiFortify(p) {
 // ============================================================
 async function aiTurnLLM(p) {
   // Phase 1: Reinforce
-  addLog(`${G.players[p].name} is thinking (LLM)...`);
+  addLog(`${G.players[p].name} está planejando a jogada...`);
   const reinforceMove = await callLLM(p, 'reinforce');
   await executeLLMMove(p, reinforceMove);
   await sleep(300);
@@ -1573,7 +1591,7 @@ async function executeLLMMove(p, move) {
       updateTerritoryVisual(G.territories.indexOf(pick));
     }
     G.phase = 'attack';
-    addLog(`${G.players[p].name} reinforced (LLM)`);
+    addLog(`${G.players[p].name} recebeu reforços`);
     updateUI();
     await sleep(300);
   }
@@ -1626,7 +1644,7 @@ async function executeLLMMove(p, move) {
         const count = Math.min(move.count || fromT.armies - 1, fromT.armies - 1);
         fromT.armies -= count;
         toT.armies += count;
-        addLog(`${G.players[p].name} fortified ${toT.name} (+${count})`);
+        addLog(`${G.players[p].name} reforçou ${toT.name} (+${count})`);
         updateTerritoryVisual(G.territories.indexOf(fromT));
         updateTerritoryVisual(G.territories.indexOf(toT));
       }
