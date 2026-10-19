@@ -1,0 +1,784 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#ebe5d8" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="Palavras Cruzadas" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <link rel="icon" href="./icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" sizes="192x192" href="./icon-192.png" />
+  <title>Palavras Cruzadas Diretas — Edição Clássica de Livreto</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Courier+Prime:ital,wght@0,700;1,400;1,700&family=Inter:wght@400;500;600;700;800&family=Roboto+Condensed:wght@600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --paper-bg:#f3efe6; --grid-border:#181818; --clue-bg:#dcdcdc; --clue-bg-hover:#cfcfcf;
+      --clue-bg-active:#fde68a; --cell-bg:#fff; --cell-word-highlight:#fff8d6; --cell-cursor-highlight:#ffdd67;
+      --pen-color:#112a60; --pencil-color:#57534e; --clue-font-scale:1;
+    }
+    * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; user-select:none; -webkit-user-select:none; }
+    html { min-height:100%; background:var(--paper-bg); }
+    body {
+      background-color:var(--paper-bg);
+      background-image:radial-gradient(rgba(0,0,0,.03) 1px,transparent 0),linear-gradient(to bottom,rgba(255,255,255,.4),rgba(0,0,0,.02));
+      background-size:24px 24px,100% 100%; font-family:Inter,-apple-system,BlinkMacSystemFont,sans-serif;
+      color:#1c1917; margin:0; padding:0; overflow-x:hidden; min-height:100vh;
+    }
+    button { touch-action:manipulation; }
+    .crossword-board-wrapper {
+      width:100%; max-width:530px; margin:0 auto; background:#181818; border:2.5px solid #111;
+      box-shadow:0 8px 24px rgba(0,0,0,.14),0 2px 6px rgba(0,0,0,.08); aspect-ratio:10/12; position:relative;
+    }
+    .crossword-grid { display:grid; grid-template-columns:repeat(10,minmax(0,1fr)); grid-template-rows:repeat(12,minmax(0,1fr)); width:100%; height:100%; gap:1px; background:#222; }
+    .cw-cell { position:relative; width:100%; height:100%; overflow:hidden; display:flex; align-items:center; justify-content:center; min-width:0; min-height:0; }
+    .cw-clue-cell {
+      background:var(--clue-bg); font-family:'Roboto Condensed','Arial Narrow',sans-serif; font-weight:700; color:#111;
+      text-align:center; line-height:1.02; letter-spacing:-.02em; cursor:pointer; display:flex; flex-direction:column;
+      justify-content:center; align-items:center; padding:1px; transition:background-color .15s ease,box-shadow .15s ease;
+    }
+    .cw-clue-text {
+      font-size:clamp(6.5px,1.75vw,10.5px); width:100%; height:100%; display:flex; align-items:center;
+      justify-content:center; text-align:center; white-space:pre-line; padding:1px; transition:background-color .15s ease;
+    }
+    @media (min-width:540px) { .cw-clue-text { font-size:10.3px; } }
+    .cw-clue-text:hover { background:var(--clue-bg-hover); }
+    .cw-clue-text.active-clue { background:var(--clue-bg-active); box-shadow:inset 0 0 0 1.8px #b45309; color:#000; }
+    .cw-clue-text.completed-clue { color:#57534e; text-decoration:line-through; text-decoration-color:rgba(22,101,52,.55); background:#d3d8d2; }
+    .cw-clue-divider { width:90%; height:1px; background:#222; flex-shrink:0; }
+    .cw-letter-cell { background:var(--cell-bg); cursor:pointer; position:relative; transition:background-color .1s ease; }
+    .cw-letter-cell.in-active-word { background:var(--cell-word-highlight); }
+    .cw-letter-cell.is-cursor { background:var(--cell-cursor-highlight); box-shadow:inset 0 0 0 2px #d97706; z-index:2; }
+    .cw-letter-cell.cell-error { background:#fee2e2!important; color:#b91c1c!important; }
+    .cw-letter-cell.cell-verified { background:#ecfdf5; }
+    .cw-letter-char { font-family:Inter,sans-serif; font-size:clamp(14px,4.1vw,24px); font-weight:800; line-height:1; text-transform:uppercase; z-index:3; pointer-events:none; transform:translateY(1px); }
+    .cw-letter-char.mode-pen { color:var(--pen-color); }
+    .cw-letter-char.mode-pencil { font-family:'Courier Prime',monospace; font-style:italic; font-weight:700; color:var(--pencil-color); }
+    .cw-arrow-svg { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; z-index:1; }
+    @keyframes lupaPulse { 0%{transform:scale(.97);box-shadow:0 0 0 0 rgba(217,119,6,.45)} 60%{transform:scale(1.01);box-shadow:0 0 0 8px rgba(217,119,6,0)} 100%{transform:scale(1);box-shadow:0 0 0 0 rgba(217,119,6,0)} }
+    .lupa-highlight-anim { animation:lupaPulse .4s cubic-bezier(.16,1,.3,1); }
+    .vk-key { touch-action:manipulation; user-select:none; transition:transform .06s ease,background-color .1s ease; }
+    .vk-key:active { transform:translateY(2px) scale(.96); }
+    .no-scrollbar::-webkit-scrollbar { display:none; }
+    .no-scrollbar { -ms-overflow-style:none; scrollbar-width:none; }
+    #super-lupa-modal,#dialog-modal { overscroll-behavior:contain; }
+    body.playing-fullscreen { position:fixed; inset:0; z-index:9999; overflow:auto; width:100%; height:100%; height:100dvh; }
+    body.playing-fullscreen header,body.playing-fullscreen footer#virtual-keyboard-container { position:relative; }
+    @media (max-width:639px) {
+      .crossword-board-wrapper { width:min(100%,530px); }
+      .cw-letter-char { font-size:clamp(13px,4vw,22px); }
+      #virtual-keyboard-container { padding-bottom:max(8px,env(safe-area-inset-bottom)); }
+    }
+    @media (prefers-reduced-motion:reduce) { *,*::before,*::after { animation-duration:.01ms!important; transition-duration:.01ms!important; } }
+  
+    /* Layout otimizado para smartphone: a grade é a área principal do jogo. */
+    @media (max-width: 767px) {
+      html, body { width:100%; height:100%; height:100dvh; min-height:0; overflow:hidden; }
+      body { display:flex; flex-direction:column; }
+      body > header { flex:0 0 auto; padding:6px 7px; }
+      body > header > div { flex-wrap:wrap; gap:5px; }
+      body > header > div > div:first-child { min-width:0; gap:6px; }
+      body > header > div > div:first-child > div:first-child { display:none; }
+      body > header > div > div:first-child > div:nth-child(2) > div { display:none; }
+      body > header h1 { font-size:11px; line-height:1.15; letter-spacing:.15px; }
+      body > header > div > div:last-child { gap:4px; }
+      #btn-toggle-pencil { padding:5px 7px; font-size:10px; }
+      #btn-font-dec, #btn-font-inc { padding:5px 7px; }
+      #btn-help-menu { padding:5px 7px; }
+      main {
+        flex:1 1 auto; min-height:0; width:100%; max-width:none; margin:0;
+        padding:3px 0 2px; gap:0; align-items:stretch; justify-content:center; overflow:hidden;
+      }
+      #lupa-panel { display:none !important; }
+      main > section:last-child {
+        order:0; flex:1 1 auto; min-height:0; width:100%; justify-content:center;
+        gap:0; overflow:hidden;
+      }
+      #board-wrapper {
+        width:min(100vw, 530px); max-width:100vw; height:auto; max-height:100%;
+        aspect-ratio:10 / 12; flex:0 1 auto;
+      }
+      #board-wrapper + div { width:100%; margin-top:2px; padding:0 6px; font-size:9px; }
+      #board-wrapper + div > span:first-child { display:none; }
+      #words-counter { margin-left:auto; }
+      #virtual-keyboard-container {
+        position:relative; bottom:auto; flex:0 0 auto; padding:5px 5px max(5px, env(safe-area-inset-bottom));
+      }
+      #virtual-keyboard-container > div { gap:4px; }
+      #virtual-keyboard-container .grid { gap:3px; }
+      #virtual-keyboard-container .grid.px-2 { padding-left:8px; padding-right:8px; }
+      .vk-key { height:clamp(30px, 5.2vh, 40px); min-height:30px; border-radius:5px; }
+      #super-lupa-modal { align-items:center; padding:12px; }
+      #super-lupa-modal > div {
+        width:100%; max-width:420px; padding:16px; border-width:3px;
+        max-height:calc(100dvh - 24px); overflow-y:auto;
+      }
+      #modal-lupa-text { font-size:clamp(22px, 6vw, 30px); overflow-wrap:anywhere; }
+      #modal-lupa-boxes { gap:4px; }
+      #modal-lupa-boxes button { width:clamp(25px, 8vw, 34px); height:clamp(30px, 9vw, 38px); }
+      #dialog-modal { padding:12px; }
+    }
+    @media (max-width: 767px) and (orientation: landscape) {
+      main > section:last-child { justify-content:center; }
+      #board-wrapper {
+        width:auto; height:calc(100dvh - 160px); max-width:100%; max-height:100%;
+        aspect-ratio:10 / 12;
+      }
+      #virtual-keyboard-container { padding-top:3px; padding-bottom:max(3px, env(safe-area-inset-bottom)); }
+      .vk-key { height:clamp(25px, 7vh, 33px); min-height:25px; }
+    }
+
+  </style>
+</head>
+<body class="min-h-screen flex flex-col justify-between">
+  <header class="w-full border-b border-stone-300 bg-[#ebe5d8] px-3 py-2 shadow-sm">
+    <div class="max-w-5xl mx-auto flex flex-wrap items-center justify-between gap-2">
+      <div class="flex items-center gap-2.5">
+        <div class="w-8 h-8 rounded bg-stone-900 text-amber-100 flex items-center justify-center font-extrabold text-sm tracking-tighter shadow-inner border border-stone-700">PC</div>
+        <div>
+          <div class="flex items-center gap-2">
+            <span class="text-[10px] font-bold uppercase tracking-widest px-1.5 py-0.5 rounded bg-stone-800 text-amber-200">Edição Clássica</span>
+            <span id="progress-badge" class="text-[11px] font-bold text-stone-600">0% concluído</span>
+          </div>
+          <h1 class="text-sm sm:text-base font-extrabold tracking-tight text-stone-900 leading-tight">PALAVRAS CRUZADAS DIRETAS</h1>
+        </div>
+      </div>
+      <div class="flex items-center gap-1.5 sm:gap-2">
+        <div class="hidden sm:flex items-center gap-1 px-2.5 py-1 rounded bg-stone-200/80 border border-stone-300 text-xs font-mono font-bold text-stone-700" title="Tempo de resolução">
+          <svg class="w-3.5 h-3.5 text-stone-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+          <span id="timer-display">00:00</span>
+        </div>
+        <button id="btn-toggle-pencil" type="button" class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-bold border transition-all shadow-sm bg-blue-900 text-white border-blue-950" title="Alternar entre Caneta (definitivo) e Lápis (rascunho)">
+          <span id="ink-icon">✒️</span><span id="ink-label">Caneta</span>
+        </button>
+        <div class="flex items-center rounded-md border border-stone-300 bg-stone-100 overflow-hidden shadow-sm" title="Ajustar tamanho da letra na Lupa de Leitura">
+          <button id="btn-font-dec" type="button" class="px-2 py-1 text-xs font-extrabold text-stone-700 hover:bg-stone-200">A-</button>
+          <div class="w-px h-4 bg-stone-300"></div>
+          <button id="btn-font-inc" type="button" class="px-2 py-1 text-xs font-extrabold text-stone-900 hover:bg-stone-200">A+</button>
+        </div>
+        <div class="relative">
+          <button id="btn-help-menu" type="button" class="flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs font-bold bg-amber-100 hover:bg-amber-200 text-amber-950 border border-amber-300 shadow-sm transition">
+            <span>Opções</span><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M19 9l-7 7-7-7"/></svg>
+          </button>
+          <div id="help-dropdown" class="hidden absolute right-0 mt-1.5 w-52 rounded-lg bg-white shadow-xl border border-stone-300 py-1.5 z-50 text-xs font-semibold text-stone-800">
+            <button id="act-reveal-letter" type="button" class="w-full px-3.5 py-2 text-left hover:bg-amber-50 flex items-center gap-2"><span>💡</span> Revelar letra atual</button>
+            <button id="act-reveal-word" type="button" class="w-full px-3.5 py-2 text-left hover:bg-amber-50 flex items-center gap-2"><span>📖</span> Revelar palavra inteira</button>
+            <button id="act-check-errors" type="button" class="w-full px-3.5 py-2 text-left hover:bg-amber-50 flex items-center gap-2"><span>✔️</span> Verificar letras na grade</button>
+            <div class="my-1 border-t border-stone-200"></div>
+            <button id="act-toggle-lupa-modal" type="button" class="w-full px-3.5 py-2 text-left hover:bg-amber-50 flex items-center justify-between"><span class="flex items-center gap-2"><span>🔍</span> Super Lupa ao clicar</span><span id="lupa-popup-status" class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800">ATIVO</span></button>
+            <div class="my-1 border-t border-stone-200"></div>
+            <button id="act-clear-board" type="button" class="w-full px-3.5 py-2 text-left hover:bg-red-50 text-red-700 flex items-center gap-2"><span>🗑️</span> Limpar livreto</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main class="flex-1 w-full max-w-5xl mx-auto px-2 sm:px-4 py-2 sm:py-4 flex flex-col lg:flex-row items-center lg:items-start justify-center gap-3 lg:gap-6">
+    <section id="lupa-panel" class="w-full max-w-[530px] lg:max-w-[360px] lg:sticky lg:top-4 order-1 lg:order-2">
+      <div id="lupa-card" class="rounded-xl bg-[#fffdf7] border-2 border-stone-800 shadow-md p-3 sm:p-4 transition-all">
+        <div class="flex items-center justify-between gap-2 pb-2 mb-2 border-b border-stone-200">
+          <div class="flex items-center gap-1.5 flex-wrap">
+            <span class="inline-flex items-center gap-1 text-[11px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded bg-amber-400 text-stone-950 border border-amber-500"><span>🔍</span> Dica Ampliada</span>
+            <span id="lupa-dir-badge" class="text-[11px] font-extrabold uppercase px-2 py-0.5 rounded bg-stone-800 text-white">→ HORIZONTAL</span>
+            <span id="lupa-len-badge" class="text-[11px] font-bold text-stone-600 bg-stone-200/80 px-2 py-0.5 rounded">9 LETRAS</span>
+          </div>
+          <div class="flex items-center gap-1 shrink-0">
+            <button id="btn-prev-clue" type="button" class="w-7 h-7 rounded-md bg-stone-200 hover:bg-stone-300 text-stone-800 flex items-center justify-center font-bold text-xs transition" title="Dica anterior">◀</button>
+            <button id="btn-next-clue" type="button" class="w-7 h-7 rounded-md bg-stone-200 hover:bg-stone-300 text-stone-800 flex items-center justify-center font-bold text-xs transition" title="Próxima dica">▶</button>
+          </div>
+        </div>
+        <div class="py-1.5 sm:py-2.5 flex items-center justify-between gap-2">
+          <p id="lupa-clue-text" class="font-extrabold text-stone-900 leading-snug tracking-tight transition-all select-text" style="font-size:calc(1.35rem * var(--clue-font-scale));">Toque em qualquer dica cinza ou casa da grade para ampliar aqui.</p>
+          <button id="btn-expand-super-lupa" type="button" class="shrink-0 p-2 rounded-lg bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 text-xs font-bold flex flex-col items-center justify-center" title="Abrir Super Lupa em tela cheia"><span class="text-base leading-none">🔍+</span><span class="text-[9px] mt-0.5">Ampliar</span></button>
+        </div>
+        <div class="mt-2 pt-2 border-t border-stone-200">
+          <div class="flex items-center justify-between text-[11px] text-stone-500 font-semibold mb-1.5 gap-2">
+            <span>Preenchimento da palavra selecionada:</span>
+            <button id="btn-switch-crossing" type="button" class="text-amber-800 hover:underline font-bold flex items-center gap-0.5 whitespace-nowrap"><span>⇄ Alternar cruzamento</span></button>
+          </div>
+          <div id="lupa-word-boxes" class="flex items-center gap-1 overflow-x-auto no-scrollbar py-1"></div>
+        </div>
+        <div class="hidden lg:block mt-4 pt-3 border-t border-stone-200 text-xs text-stone-600 space-y-1.5">
+          <p class="font-bold text-stone-800">Como jogar no estilo livreto:</p>
+          <ul class="list-disc list-inside space-y-1 text-[11px] leading-relaxed">
+            <li><strong>Clique na frase-dica cinza</strong> para lê-la em tamanho grande e ir direto para a palavra.</li>
+            <li><strong>Clique duas vezes numa letra</strong> para alternar entre a palavra Horizontal e a Vertical.</li>
+            <li>Use o modo <strong>Lápis</strong> para anotar palpites e <strong>Caneta</strong> para respostas firmes.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="w-full flex flex-col items-center order-2 lg:order-1">
+      <div class="crossword-board-wrapper" id="board-wrapper">
+        <div id="crossword-grid" class="crossword-grid" role="grid" aria-label="Grade de Palavras Cruzadas 10 por 12"></div>
+      </div>
+      <div class="w-full max-w-[530px] flex items-center justify-between text-[11px] text-stone-600 mt-1.5 px-1 gap-2">
+        <span>💡 Toque na dica cinza para ampliá-la</span>
+        <span id="words-counter" class="font-bold text-stone-800 whitespace-nowrap">0 / 35 palavras</span>
+      </div>
+    </section>
+  </main>
+
+  <footer id="virtual-keyboard-container" class="w-full bg-[#e5dec9] border-t border-stone-300 px-1.5 py-2 shadow-inner sticky bottom-0 z-30">
+    <div class="max-w-xl mx-auto flex flex-col gap-1.5">
+      <div class="grid grid-cols-10 gap-1">
+        <button type="button" data-key="Q" class="vk-key h-10 sm:h-11 rounded-md bg-white hover:bg-stone-50 active:bg-amber-200 border border-b-2 border-stone-400 font-extrabold text-sm sm:text-base text-stone-900 shadow-sm">Q</button>
+        <button type="button" data-key="W" class="vk-key h-10 sm:h-11 rounded-md bg-white hover:bg-stone-50 active:bg-amber-200 border border-b-2 border-stone-400 font-extrabold text-sm sm:text-base text-stone-900 shadow-sm">W</button>
+        <button type="button" data-key="E" class="vk-key h-10 sm:h-11 rounded-md bg-white hover:bg-stone-50 active:bg-amber-200 border border-b-2 border-stone-400 font-extrabold text-sm sm:text-base text-stone-900 shadow-sm">E</button>
+        <button type="button" data-key="R" class="vk-key h-10 sm:h-11 rounded-md bg-white hover:bg-stone-50 active:bg-amber-200 border border-b-2 border-stone-400 font-extrabold text-sm sm:text-base text-stone-900 shadow-sm">R</button>
+        <button type="button" data-key="T" class="vk-key h-10 sm:h-11 rounded-md bg-white hover:bg-stone-50 active:bg-amber-200 border border-b-2 border-stone-400 font-extrabold text-sm sm:text-base text-stone-900 shadow-sm">T</button>
+        <button type="button" data-key="Y" class="vk-key h-10 sm:h-11 rounded-md bg-white hover:bg-stone-50 active:bg-amber-200 border border-b-2 border-stone-400 font-extrabold text-sm sm:text-base text-stone-900 shadow-sm">Y</button>
+        <button type="button" data-key="U" class="vk-key h-10 sm:h-11 rounded-md bg-white hover:bg-stone-50 active:bg-amber-200 border border-b-2 border-stone-400 font-extrabold text-sm sm:text-base text-stone-900 shadow-sm">U</button>
+        <button type="button" data-key="I" class="vk-key h-10 sm:h-11 rounded-md bg-white hover:bg-stone-50 active:bg-amber-200 border border-b-2 border-stone-400 font-extrabold text-sm sm:text-base text-stone-900 shadow-sm">I</button>
+        <button type="button" data-key="O" class="vk-key h-10 sm:h-11 rounded-md bg-white hover:bg-stone-50 active:bg-amber-200 border border-b-2 border-stone-400 font-extrabold text-sm sm:text-base text-stone-900 shadow-sm">O</button>
+        <button type="button" data-key="P" class="vk-key h-10 sm:h-11 rounded-md bg-white hover:bg-stone-50 active:bg-amber-200 border border-b-2 border-stone-400 font-extrabold text-sm sm:text-base text-stone-900 shadow-sm">P</button>
+      </div>
+      <div class="grid grid-cols-10 gap-1 px-2">
+        <button type="button" data-key="A" class="vk-key h-10 sm:h-11 rounded-md bg-white hover:bg-stone-50 active:bg-amber-200 border border-b-2 border-stone-400 font-extrabold text-sm sm:text-base text-stone-900 shadow-sm">A</button>
+        <button type="button" data-key="S" class="vk-key h-10 sm:h-11 rounded-md bg-white hover:bg-stone-50 active:bg-amber-200 border border-b-2 border-stone-400 font-extrabold text-sm sm:text-base text-stone-900 shadow-sm">S</button>
+        <button type="button" data-key="D" class="vk-key h-10 sm:h-11 rounded-md bg-white hover:bg-stone-50 active:bg-amber-200 border border-b-2 border-stone-400 font-extrabold text-sm sm:text-base text-stone-900 shadow-sm">D</button>
+        <button type="button" data-key="F" class="vk-key h-10 sm:h-11 rounded-md bg-white hover:bg-stone-50 active:bg-amber-200 border border-b-2 border-stone-400 font-extrabold text-sm sm:text-base text-stone-900 shadow-sm">F</button>
+        <button type="button" data-key="G" class="vk-key h-10 sm:h-11 rounded-md bg-white hover:bg-stone-50 active:bg-amber-200 border border-b-2 border-stone-400 font-extrabold text-sm sm:text-base text-stone-900 shadow-sm">G</button>
+        <button type="button" data-key="H" class="vk-key h-10 sm:h-11 rounded-md bg-white hover:bg-stone-50 active:bg-amber-200 border border-b-2 border-stone-400 font-extrabold text-sm sm:text-base text-stone-900 shadow-sm">H</button>
+        <button type="button" data-key="J" class="vk-key h-10 sm:h-11 rounded-md bg-white hover:bg-stone-50 active:bg-amber-200 border border-b-2 border-stone-400 font-extrabold text-sm sm:text-base text-stone-900 shadow-sm">J</button>
+        <button type="button" data-key="K" class="vk-key h-10 sm:h-11 rounded-md bg-white hover:bg-stone-50 active:bg-amber-200 border border-b-2 border-stone-400 font-extrabold text-sm sm:text-base text-stone-900 shadow-sm">K</button>
+        <button type="button" data-key="L" class="vk-key h-10 sm:h-11 rounded-md bg-white hover:bg-stone-50 active:bg-amber-200 border border-b-2 border-stone-400 font-extrabold text-sm sm:text-base text-stone-900 shadow-sm">L</button>
+        <button type="button" data-key="DIR" class="vk-key h-10 sm:h-11 rounded-md bg-amber-100 hover:bg-amber-200 active:bg-amber-300 border border-b-2 border-amber-400 font-extrabold text-xs text-amber-950 shadow-sm flex items-center justify-center" title="Alternar Horizontal/Vertical">⇄</button>
+      </div>
+      <div class="grid grid-cols-10 gap-1">
+        <button type="button" data-key="LUPA" class="vk-key col-span-1 h-10 sm:h-11 rounded-md bg-stone-800 hover:bg-stone-700 text-amber-200 border border-b-2 border-stone-950 font-bold text-xs shadow-sm flex items-center justify-center" title="Ver Dica em Tela Cheia">🔍</button>
+        <button type="button" data-key="Z" class="vk-key h-10 sm:h-11 rounded-md bg-white hover:bg-stone-50 active:bg-amber-200 border border-b-2 border-stone-400 font-extrabold text-sm sm:text-base text-stone-900 shadow-sm">Z</button>
+        <button type="button" data-key="X" class="vk-key h-10 sm:h-11 rounded-md bg-white hover:bg-stone-50 active:bg-amber-200 border border-b-2 border-stone-400 font-extrabold text-sm sm:text-base text-stone-900 shadow-sm">X</button>
+        <button type="button" data-key="C" class="vk-key h-10 sm:h-11 rounded-md bg-white hover:bg-stone-50 active:bg-amber-200 border border-b-2 border-stone-400 font-extrabold text-sm sm:text-base text-stone-900 shadow-sm">C</button>
+        <button type="button" data-key="V" class="vk-key h-10 sm:h-11 rounded-md bg-white hover:bg-stone-50 active:bg-amber-200 border border-b-2 border-stone-400 font-extrabold text-sm sm:text-base text-stone-900 shadow-sm">V</button>
+        <button type="button" data-key="B" class="vk-key h-10 sm:h-11 rounded-md bg-white hover:bg-stone-50 active:bg-amber-200 border border-b-2 border-stone-400 font-extrabold text-sm sm:text-base text-stone-900 shadow-sm">B</button>
+        <button type="button" data-key="N" class="vk-key h-10 sm:h-11 rounded-md bg-white hover:bg-stone-50 active:bg-amber-200 border border-b-2 border-stone-400 font-extrabold text-sm sm:text-base text-stone-900 shadow-sm">N</button>
+        <button type="button" data-key="M" class="vk-key h-10 sm:h-11 rounded-md bg-white hover:bg-stone-50 active:bg-amber-200 border border-b-2 border-stone-400 font-extrabold text-sm sm:text-base text-stone-900 shadow-sm">M</button>
+        <button type="button" data-key="BACKSPACE" class="vk-key col-span-2 h-10 sm:h-11 rounded-md bg-stone-300 hover:bg-stone-400 active:bg-stone-500 border border-b-2 border-stone-500 font-extrabold text-xs sm:text-sm text-stone-900 shadow-sm flex items-center justify-center gap-1"><span>⌫</span><span class="hidden sm:inline">Apagar</span></button>
+      </div>
+    </div>
+  </footer>
+
+  <div id="super-lupa-modal" class="hidden fixed inset-0 z-50 bg-black/55 backdrop-blur-[2px] flex items-center justify-center p-4">
+    <div class="w-full max-w-md rounded-2xl bg-[#fffdf7] border-4 border-stone-900 shadow-2xl p-5 sm:p-6">
+      <div class="flex items-center justify-between border-b-2 border-stone-200 pb-3 mb-4">
+        <div class="flex items-center gap-2">
+          <span class="px-2.5 py-1 rounded-md bg-amber-400 text-stone-950 font-extrabold text-xs uppercase tracking-wider">🔍 Lupa de Dica</span>
+          <span id="modal-lupa-dir" class="px-2.5 py-1 rounded-md bg-stone-800 text-white font-bold text-xs uppercase">HORIZONTAL</span>
+        </div>
+        <button id="btn-close-super-lupa" type="button" class="w-8 h-8 rounded-full bg-stone-200 hover:bg-stone-300 text-stone-800 font-extrabold flex items-center justify-center text-base" aria-label="Fechar">✕</button>
+      </div>
+      <div class="py-4 px-3 rounded-xl bg-amber-50/90 border border-amber-200 text-center mb-4">
+        <p id="modal-lupa-text" class="text-2xl sm:text-3xl font-extrabold text-stone-900 leading-snug">A camada muscular do coração</p>
+        <p id="modal-lupa-meta" class="text-xs font-bold uppercase tracking-widest text-amber-900 mt-2">Resposta com 9 letras</p>
+      </div>
+      <div id="modal-lupa-boxes" class="flex items-center justify-center gap-1.5 flex-wrap mb-5"></div>
+      <div class="flex items-center justify-between gap-2">
+        <button id="modal-btn-reveal-letter" type="button" class="px-3.5 py-2.5 rounded-xl bg-stone-200 hover:bg-stone-300 text-stone-800 font-bold text-xs sm:text-sm transition">💡 Dica de Letra</button>
+        <button id="modal-btn-fill-now" type="button" class="flex-1 py-2.5 px-4 rounded-xl bg-stone-900 hover:bg-stone-800 text-amber-200 font-extrabold text-sm sm:text-base shadow-md transition">Voltar à Grade ✍️</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="dialog-modal" class="hidden fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
+    <div class="w-full max-w-sm rounded-2xl bg-[#fffdf7] border-2 border-stone-800 shadow-2xl p-5 text-center">
+      <div id="dialog-icon" class="text-4xl mb-2">🏆</div>
+      <h2 id="dialog-title" class="text-lg font-extrabold text-stone-900 mb-1">Parabéns!</h2>
+      <p id="dialog-message" class="text-sm text-stone-600 mb-5 leading-relaxed"></p>
+      <div id="dialog-actions" class="flex items-center justify-center gap-2"></div>
+    </div>
+  </div>
+
+  <script>
+    const ROWS = 12;
+    const COLS = 10;
+    const SOLUTION_GRID = [
+      [null,'S',null,'H',null,null,null,null,'F',null],
+      [null,'M','I','O','C','A','R','D','I','O'],
+      [null,'A','G','R','A','C','I','A','R',null],
+      [null,'S','U','A','R',null,'O','L','M','O'],
+      [null,'H','A','S','T','E',null,'M','A','L'],
+      [null,null,'L',null,'A','S','M','A',null,'E'],
+      ['B','O','D','A',null,'P','A','T','I','O'],
+      [null,'P','A','R','C','E','L','A','R',null],
+      [null,'I','D','I','O','T','A',null,'R','E'],
+      [null,'N','E','S','S','A',null,'T','E','R'],
+      [null,'A',null,'C','E','R','C','E','A','R'],
+      ['A','R','D','O','R',null,'N','U','L','O']
+    ];
+    const CLUES_DATA = [
+      {id:1,clueRow:0,clueCol:0,part:'single',gridLabel:'(Ingl.)\nA cortada,\nno tênis',fullClue:'(Ingl.) A cortada, no tênis',dir:'V',startRow:0,startCol:1,arrow:'from-left-down',answer:'SMASH'},
+      {id:2,clueRow:0,clueCol:2,part:'top',gridLabel:'São 24\nnum dia',fullClue:'São 24 num dia',dir:'V',startRow:0,startCol:3,arrow:'from-left-down',answer:'HORAS'},
+      {id:3,clueRow:0,clueCol:2,part:'bottom',gridLabel:'Paridade',fullClue:'Paridade',dir:'V',startRow:1,startCol:2,arrow:'down',answer:'IGUALDADE'},
+      {id:4,clueRow:0,clueCol:4,part:'single',gridLabel:'Cardápio',fullClue:'Cardápio',dir:'V',startRow:1,startCol:4,arrow:'down',answer:'CARTA'},
+      {id:5,clueRow:0,clueCol:5,part:'single',gridLabel:'Sigla\ndo\nAcre',fullClue:'Sigla do Acre',dir:'V',startRow:1,startCol:5,arrow:'down',answer:'AC'},
+      {id:6,clueRow:0,clueCol:6,part:'single',gridLabel:'Curso\nhídrico',fullClue:'Curso hídrico',dir:'V',startRow:1,startCol:6,arrow:'down',answer:'RIO'},
+      {id:7,clueRow:0,clueCol:7,part:'single',gridLabel:'Uma raça\nde cães',fullClue:'Uma raça de cães',dir:'V',startRow:1,startCol:7,arrow:'down',answer:'DALMATA'},
+      {id:8,clueRow:0,clueCol:9,part:'single',gridLabel:'Assi-\nnatura',fullClue:'Assinatura',dir:'V',startRow:0,startCol:8,arrow:'from-right-down',answer:'FIRMA'},
+      {id:9,clueRow:1,clueCol:0,part:'single',gridLabel:'A camada\nmuscular\ndo coração',fullClue:'A camada muscular do coração',dir:'H',startRow:1,startCol:1,arrow:'right',answer:'MIOCARDIO'},
+      {id:10,clueRow:2,clueCol:0,part:'single',gridLabel:'Atribuir\ntítulo por\nmérito',fullClue:'Atribuir título por mérito',dir:'H',startRow:2,startCol:1,arrow:'right',answer:'AGRACIAR'},
+      {id:11,clueRow:2,clueCol:9,part:'single',gridLabel:'Lubri-\nficante',fullClue:'Lubrificante',dir:'V',startRow:3,startCol:9,arrow:'down',answer:'OLEO'},
+      {id:12,clueRow:3,clueCol:0,part:'single',gridLabel:'Transpirar',fullClue:'Transpirar',dir:'H',startRow:3,startCol:1,arrow:'right',answer:'SUAR'},
+      {id:13,clueRow:3,clueCol:5,part:'top',gridLabel:'Árvore de\nmarcenaria',fullClue:'Árvore de marcenaria',dir:'H',startRow:3,startCol:6,arrow:'right',answer:'OLMO'},
+      {id:14,clueRow:3,clueCol:5,part:'bottom',gridLabel:'Enfiar',fullClue:'Enfiar',dir:'V',startRow:4,startCol:5,arrow:'down',answer:'ESPETAR'},
+      {id:15,clueRow:4,clueCol:0,part:'single',gridLabel:'Pau de\nbandeira',fullClue:'Pau de bandeira',dir:'H',startRow:4,startCol:1,arrow:'right',answer:'HASTE'},
+      {id:16,clueRow:4,clueCol:6,part:'top',gridLabel:'Doença',fullClue:'Doença',dir:'H',startRow:4,startCol:7,arrow:'right',answer:'MAL'},
+      {id:17,clueRow:4,clueCol:6,part:'bottom',gridLabel:'(Pop.)\nCri-cri',fullClue:'(Pop.) Cri-cri',dir:'V',startRow:5,startCol:6,arrow:'down',answer:'MALA'},
+      {id:18,clueRow:5,clueCol:0,part:'single',gridLabel:'Celebração\nde\ncasamento',fullClue:'Celebração de casamento',dir:'H',startRow:6,startCol:0,arrow:'from-top-right',answer:'BODA'},
+      {id:19,clueRow:5,clueCol:1,part:'single',gridLabel:'Dar o seu\npalpite',fullClue:'Dar o seu palpite',dir:'V',startRow:6,startCol:1,arrow:'down',answer:'OPINAR'},
+      {id:20,clueRow:5,clueCol:3,part:'top',gridLabel:'Doença\nrespiratória',fullClue:'Doença respiratória',dir:'H',startRow:5,startCol:4,arrow:'right',answer:'ASMA'},
+      {id:21,clueRow:5,clueCol:3,part:'bottom',gridLabel:'Arredio',fullClue:'Arredio',dir:'V',startRow:6,startCol:3,arrow:'down',answer:'ARISCO'},
+      {id:22,clueRow:5,clueCol:8,part:'single',gridLabel:'Fictício',fullClue:'Fictício',dir:'V',startRow:6,startCol:8,arrow:'down',answer:'IRREAL'},
+      {id:23,clueRow:6,clueCol:4,part:'top',gridLabel:'Grande\nsaguão',fullClue:'Grande saguão',dir:'H',startRow:6,startCol:5,arrow:'right',answer:'PATIO'},
+      {id:24,clueRow:6,clueCol:4,part:'bottom',gridLabel:'Costurar',fullClue:'Costurar',dir:'V',startRow:7,startCol:4,arrow:'down',answer:'COSER'},
+      {id:25,clueRow:7,clueCol:0,part:'single',gridLabel:'Pagar em\nprestações',fullClue:'Pagar em prestações',dir:'H',startRow:7,startCol:1,arrow:'right',answer:'PARCELAR'},
+      {id:26,clueRow:7,clueCol:9,part:'single',gridLabel:'Desacerto',fullClue:'Desacerto',dir:'V',startRow:8,startCol:9,arrow:'down',answer:'ERRO'},
+      {id:27,clueRow:8,clueCol:0,part:'single',gridLabel:'Tolo',fullClue:'Tolo',dir:'H',startRow:8,startCol:1,arrow:'right',answer:'IDIOTA'},
+      {id:28,clueRow:8,clueCol:7,part:'top',gridLabel:'(Mús.)\nA nota D',fullClue:'(Mús.) A nota D',dir:'H',startRow:8,startCol:8,arrow:'right',answer:'RE'},
+      {id:29,clueRow:8,clueCol:7,part:'bottom',gridLabel:'Feito por ti',fullClue:'Feito por ti',dir:'V',startRow:9,startCol:7,arrow:'down',answer:'TEU'},
+      {id:30,clueRow:9,clueCol:0,part:'single',gridLabel:'Pronome\ndemons-\ntrativo\nfeminino',fullClue:'Pronome demonstrativo feminino',dir:'H',startRow:9,startCol:1,arrow:'right',answer:'NESSA'},
+      {id:31,clueRow:9,clueCol:6,part:'top',gridLabel:'Sofrer de',fullClue:'Sofrer de',dir:'H',startRow:9,startCol:7,arrow:'right',answer:'TER'},
+      {id:32,clueRow:9,clueCol:6,part:'bottom',gridLabel:'(Quím.) O\ncianogênio',fullClue:'(Quím.) O cianogênio',dir:'V',startRow:10,startCol:6,arrow:'down',answer:'CN'},
+      {id:33,clueRow:10,clueCol:0,part:'single',gridLabel:'Entusi-\nasmo',fullClue:'Entusiasmo',dir:'H',startRow:11,startCol:0,arrow:'from-top-right',answer:'ARDOR'},
+      {id:34,clueRow:10,clueCol:2,part:'single',gridLabel:'(Fig.)\nLimitar,\nrestringir',fullClue:'(Fig.) Limitar, restringir',dir:'H',startRow:10,startCol:3,arrow:'right',answer:'CERCEAR'},
+      {id:35,clueRow:11,clueCol:5,part:'single',gridLabel:'Que não\ntem valor',fullClue:'Que não tem valor',dir:'H',startRow:11,startCol:6,arrow:'right',answer:'NULO'}
+    ];
+
+    const STORAGE_KEY = 'cruzadas_diretas_classica_v1';
+    CLUES_DATA.forEach(function(clue) {
+      clue.cells = [];
+      for (let i = 0; i < clue.answer.length; i++) {
+        clue.cells.push({r:clue.dir === 'V' ? clue.startRow + i : clue.startRow,c:clue.dir === 'H' ? clue.startCol + i : clue.startCol});
+      }
+    });
+    let userGrid = Array.from({length:ROWS},function(){return Array.from({length:COLS},function(){return {char:'',pencil:false,error:false};});});
+    let activeClueId = 9;
+    let cursorPos = {r:1,c:1};
+    let isPencilMode = false;
+    let clueFontScale = 1;
+    let openSuperLupaOnClueTap = true;
+    let elapsedSeconds = 0;
+    let timerInterval = null;
+    let isGameCompleted = false;
+    let savedCursorPos = null;
+
+    function getClueById(id) { return CLUES_DATA.find(function(c){return c.id === id;}); }
+    function getCluesAtCell(r,c) { return CLUES_DATA.filter(function(cl){return cl.cells.some(function(p){return p.r === r && p.c === c;});}); }
+    function isWordComplete(clue) { return clue.cells.every(function(p){return userGrid[p.r][p.c].char !== '';}); }
+    function isWordCorrect(clue) { return clue.cells.every(function(p,i){return userGrid[p.r][p.c].char === clue.answer[i];}); }
+    function gridValueAt(r,c) { return SOLUTION_GRID[r] && SOLUTION_GRID[r][c] !== undefined ? SOLUTION_GRID[r][c] : null; }
+
+    function createArrowSVG(types) {
+      let paths = '';
+      types.forEach(function(type) {
+        if (type === 'right') paths += '<line x1="0" y1="22" x2="11" y2="22" stroke="#555" stroke-width="3.2"/><polygon points="9,14 20,22 9,30" fill="#555"/>';
+        else if (type === 'down') paths += '<line x1="50" y1="0" x2="50" y2="11" stroke="#555" stroke-width="3.2"/><polygon points="42,9 50,20 58,9" fill="#555"/>';
+        else if (type === 'from-left-down') paths += '<polyline points="0,12 16,12 16,19" fill="none" stroke="#555" stroke-width="3.2" stroke-linejoin="round"/><polygon points="8,17 16,28 24,17" fill="#555"/>';
+        else if (type === 'from-right-down') paths += '<polyline points="100,12 84,12 84,19" fill="none" stroke="#555" stroke-width="3.2" stroke-linejoin="round"/><polygon points="76,17 84,28 92,17" fill="#555"/>';
+        else if (type === 'from-top-right') paths += '<polyline points="14,0 14,16 21,16" fill="none" stroke="#555" stroke-width="3.2" stroke-linejoin="round"/><polygon points="19,8 30,16 19,24" fill="#555"/>';
+      });
+      return '<svg class="cw-arrow-svg" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">' + paths + '</svg>';
+    }
+
+    function buildGridDOM() {
+      const gridEl = document.getElementById('crossword-grid');
+      gridEl.innerHTML = '';
+      for (let r = 0; r < ROWS; r++) {
+        for (let c = 0; c < COLS; c++) {
+          const isLetterCell = SOLUTION_GRID[r][c] !== null;
+          const cellEl = document.createElement('div');
+          cellEl.dataset.r = r;
+          cellEl.dataset.c = c;
+          if (!isLetterCell) {
+            const cellClues = CLUES_DATA.filter(function(cl){return cl.clueRow === r && cl.clueCol === c;});
+            cellEl.className = 'cw-cell cw-clue-cell';
+            if (cellClues.length === 1) {
+              appendClueText(cellEl,cellClues[0]);
+            } else if (cellClues.length === 2) {
+              const topClue = cellClues.find(function(cl){return cl.part === 'top';}) || cellClues[0];
+              const bottomClue = cellClues.find(function(cl){return cl.part === 'bottom';}) || cellClues[1];
+              appendClueText(cellEl,topClue);
+              const divider = document.createElement('div');
+              divider.className = 'cw-clue-divider';
+              cellEl.appendChild(divider);
+              appendClueText(cellEl,bottomClue);
+            } else {
+              cellEl.setAttribute('aria-hidden','true');
+            }
+          } else {
+            cellEl.className = 'cw-cell cw-letter-cell';
+            cellEl.id = 'cell-' + r + '-' + c;
+            const startingClues = CLUES_DATA.filter(function(cl){return cl.startRow === r && cl.startCol === c;});
+            if (startingClues.length) cellEl.insertAdjacentHTML('beforeend',createArrowSVG(startingClues.map(function(cl){return cl.arrow;})));
+            const charSpan = document.createElement('span');
+            charSpan.className = 'cw-letter-char mode-pen';
+            charSpan.id = 'char-' + r + '-' + c;
+            cellEl.appendChild(charSpan);
+            cellEl.setAttribute('role','gridcell');
+            cellEl.setAttribute('aria-label','Casa ' + (r + 1) + ', ' + (c + 1));
+            cellEl.addEventListener('click',function(){onLetterCellClick(r,c);});
+          }
+          gridEl.appendChild(cellEl);
+        }
+      }
+    }
+    function appendClueText(cellEl,clue) {
+      const textDiv = document.createElement('div');
+      textDiv.className = 'cw-clue-text';
+      textDiv.id = 'clue-box-' + clue.id;
+      textDiv.textContent = clue.gridLabel;
+      textDiv.title = 'Clique para ampliar: ' + clue.fullClue;
+      textDiv.setAttribute('role','button');
+      textDiv.setAttribute('aria-label','Dica ' + clue.id + ': ' + clue.fullClue);
+      textDiv.addEventListener('click',function(e){e.stopPropagation();onCluePhraseClick(clue.id);});
+      cellEl.appendChild(textDiv);
+    }
+
+    function onCluePhraseClick(clueId) {
+      const clue = getClueById(clueId);
+      if (!clue) return;
+      activeClueId = clueId;
+      const firstEmpty = clue.cells.find(function(p){return userGrid[p.r][p.c].char === '';});
+      cursorPos = firstEmpty ? {r:firstEmpty.r,c:firstEmpty.c} : {r:clue.cells[0].r,c:clue.cells[0].c};
+      saveProgress();
+      updateUI(true);
+      // No smartphone, a frase-dica sempre abre o card; no desktop, respeita a opção do jogador.
+      if (window.matchMedia('(max-width: 767px)').matches || openSuperLupaOnClueTap) openSuperLupaModal();
+    }
+    function onLetterCellClick(r,c) {
+      const available = getCluesAtCell(r,c);
+      if (!available.length) return;
+      if (cursorPos.r === r && cursorPos.c === c && available.length > 1) {
+        const other = available.find(function(cl){return cl.id !== activeClueId;}) || available[0];
+        activeClueId = other.id;
+      } else {
+        cursorPos = {r:r,c:c};
+        if (!available.some(function(cl){return cl.id === activeClueId;})) activeClueId = available[0].id;
+      }
+      saveProgress();
+      updateUI(false);
+    }
+    function switchCrossingDirection() {
+      const available = getCluesAtCell(cursorPos.r,cursorPos.c);
+      if (available.length > 1) {
+        const other = available.find(function(cl){return cl.id !== activeClueId;});
+        if (other) { activeClueId = other.id; saveProgress(); updateUI(true); }
+      }
+    }
+    function inputLetter(letter) {
+      if (isGameCompleted) return;
+      const r = cursorPos.r, c = cursorPos.c;
+      if (gridValueAt(r,c) === null) return;
+      userGrid[r][c] = {char:String(letter).toUpperCase(),pencil:isPencilMode,error:false};
+      saveProgress();
+      advanceCursorAfterInput();
+      updateUI(false);
+      checkVictoryCondition();
+    }
+    function advanceCursorAfterInput() {
+      const clue = getClueById(activeClueId);
+      if (!clue) return;
+      const idx = clue.cells.findIndex(function(p){return p.r === cursorPos.r && p.c === cursorPos.c;});
+      if (idx < 0) return;
+      for (let i = idx + 1; i < clue.cells.length; i++) {
+        const p = clue.cells[i];
+        if (userGrid[p.r][p.c].char === '') { cursorPos = {r:p.r,c:p.c}; return; }
+      }
+      if (idx + 1 < clue.cells.length) cursorPos = {r:clue.cells[idx + 1].r,c:clue.cells[idx + 1].c};
+    }
+    function handleBackspace() {
+      if (isGameCompleted) return;
+      const r = cursorPos.r, c = cursorPos.c, clue = getClueById(activeClueId);
+      if (userGrid[r][c].char !== '') {
+        userGrid[r][c] = {char:'',pencil:false,error:false};
+      } else if (clue) {
+        const idx = clue.cells.findIndex(function(p){return p.r === r && p.c === c;});
+        if (idx > 0) {
+          const prev = clue.cells[idx - 1];
+          cursorPos = {r:prev.r,c:prev.c};
+          userGrid[prev.r][prev.c] = {char:'',pencil:false,error:false};
+        }
+      }
+      saveProgress(); updateUI(false);
+    }
+    function cycleClue(step) {
+      const idx = CLUES_DATA.findIndex(function(cl){return cl.id === activeClueId;});
+      const next = CLUES_DATA[(idx + step + CLUES_DATA.length) % CLUES_DATA.length];
+      activeClueId = next.id;
+      const firstEmpty = next.cells.find(function(p){return userGrid[p.r][p.c].char === '';});
+      cursorPos = firstEmpty ? {r:firstEmpty.r,c:firstEmpty.c} : {r:next.cells[0].r,c:next.cells[0].c};
+      saveProgress(); updateUI(true);
+    }
+
+    function updateUI(animateLupa) {
+      const active = getClueById(activeClueId);
+      CLUES_DATA.forEach(function(clue) {
+        const el = document.getElementById('clue-box-' + clue.id);
+        if (!el) return;
+        el.classList.toggle('active-clue',clue.id === activeClueId);
+        el.classList.toggle('completed-clue',isWordComplete(clue) && clue.id !== activeClueId && isWordCorrect(clue));
+      });
+      for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
+        if (SOLUTION_GRID[r][c] === null) continue;
+        const cellEl = document.getElementById('cell-' + r + '-' + c);
+        const charEl = document.getElementById('char-' + r + '-' + c);
+        if (!cellEl || !charEl) continue;
+        const state = userGrid[r][c];
+        const inWord = active && active.cells.some(function(p){return p.r === r && p.c === c;});
+        cellEl.classList.toggle('in-active-word',Boolean(inWord));
+        cellEl.classList.toggle('is-cursor',cursorPos.r === r && cursorPos.c === c);
+        cellEl.classList.toggle('cell-error',Boolean(state.error));
+        charEl.textContent = state.char;
+        charEl.className = 'cw-letter-char ' + (state.pencil ? 'mode-pencil' : 'mode-pen');
+        cellEl.setAttribute('aria-label','Casa ' + (r + 1) + ', ' + (c + 1) + (state.char ? ', letra ' + state.char : ', vazia'));
+      }
+      if (active) {
+        document.getElementById('lupa-dir-badge').textContent = active.dir === 'H' ? '→ HORIZONTAL' : '↓ VERTICAL';
+        document.getElementById('lupa-len-badge').textContent = active.answer.length + ' LETRAS';
+        document.getElementById('lupa-clue-text').textContent = active.fullClue;
+        if (animateLupa) {
+          const card = document.getElementById('lupa-card');
+          card.classList.remove('lupa-highlight-anim'); void card.offsetWidth; card.classList.add('lupa-highlight-anim');
+        }
+        renderLupaWordBoxes(active,'lupa-word-boxes');
+        const modal = document.getElementById('super-lupa-modal');
+        if (!modal.classList.contains('hidden')) syncSuperLupaModal(active);
+      }
+      updateProgressStats();
+      renderTime();
+    }
+    function renderLupaWordBoxes(clue,containerId) {
+      const container = document.getElementById(containerId);
+      if (!container) return;
+      container.innerHTML = '';
+      clue.cells.forEach(function(p,idx) {
+        const state = userGrid[p.r][p.c];
+        const current = p.r === cursorPos.r && p.c === cursorPos.c;
+        const box = document.createElement('button');
+        box.type = 'button';
+        box.className = 'w-8 h-9 sm:w-9 sm:h-10 rounded-md border-2 font-extrabold text-base sm:text-lg flex items-center justify-center shrink-0 transition-all ' +
+          (current ? 'bg-[#ffdd67] border-amber-700 text-stone-950 scale-105 shadow-sm' : state.char ? 'bg-white border-stone-400 text-stone-900' : 'bg-stone-100 border-stone-300 text-stone-400');
+        box.textContent = state.char || String(idx + 1);
+        if (!state.char) box.classList.add('text-[11px]','font-normal');
+        box.setAttribute('aria-label','Casa ' + (idx + 1) + (state.char ? ': ' + state.char : ': vazia'));
+        box.addEventListener('click',function(){cursorPos = {r:p.r,c:p.c}; saveProgress(); updateUI(false);});
+        container.appendChild(box);
+      });
+    }
+    function updateProgressStats() {
+      let total = 0, filled = 0;
+      for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) if (SOLUTION_GRID[r][c] !== null) { total++; if (userGrid[r][c].char !== '') filled++; }
+      document.getElementById('progress-badge').textContent = Math.round((filled / total) * 100) + '% preenchido';
+      const completed = CLUES_DATA.filter(function(cl){return isWordComplete(cl) && isWordCorrect(cl);}).length;
+      document.getElementById('words-counter').textContent = completed + ' / ' + CLUES_DATA.length + ' palavras';
+    }
+
+    function openSuperLupaModal() {
+      const clue = getClueById(activeClueId);
+      if (!clue) return;
+      syncSuperLupaModal(clue);
+      document.getElementById('super-lupa-modal').classList.remove('hidden');
+    }
+    function syncSuperLupaModal(clue) {
+      document.getElementById('modal-lupa-dir').textContent = clue.dir === 'H' ? '→ HORIZONTAL' : '↓ VERTICAL';
+      document.getElementById('modal-lupa-text').textContent = clue.fullClue;
+      document.getElementById('modal-lupa-meta').textContent = 'Palavra com ' + clue.answer.length + ' letras';
+      renderLupaWordBoxes(clue,'modal-lupa-boxes');
+    }
+    function closeSuperLupaModal() { document.getElementById('super-lupa-modal').classList.add('hidden'); }
+    function revealCurrentLetter() {
+      if (isGameCompleted) return;
+      const r = cursorPos.r, c = cursorPos.c, correct = gridValueAt(r,c);
+      if (!correct) return;
+      userGrid[r][c] = {char:correct,pencil:false,error:false};
+      saveProgress(); advanceCursorAfterInput(); updateUI(false); checkVictoryCondition();
+    }
+    function revealCurrentWord() {
+      if (isGameCompleted) return;
+      const clue = getClueById(activeClueId);
+      if (!clue) return;
+      clue.cells.forEach(function(p,i){userGrid[p.r][p.c] = {char:clue.answer[i],pencil:false,error:false};});
+      saveProgress(); updateUI(false); checkVictoryCondition();
+    }
+    function checkBoardErrors() {
+      let errors = 0, filled = 0;
+      for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
+        if (SOLUTION_GRID[r][c] === null) continue;
+        const current = userGrid[r][c].char;
+        if (current !== '') { filled++; userGrid[r][c].error = current !== SOLUTION_GRID[r][c]; if (userGrid[r][c].error) errors++; }
+      }
+      updateUI(false);
+      if (!filled) showDialog('Grade vazia','Preencha algumas letras primeiro para verificar seu progresso.','📝');
+      else if (!errors) showDialog('Tudo certo até aqui!','Nenhuma letra incorreta foi encontrada nas casas preenchidas.','✅');
+      else showDialog('Verificação concluída','Foram encontradas ' + errors + (errors === 1 ? ' letra incorreta destacada' : ' letras incorretas destacadas') + ' em vermelho claro.','🔎');
+    }
+    function confirmClearBoard() {
+      showConfirmDialog('Limpar todo o livreto?','Todas as letras preenchidas serão apagadas para você recomeçar do zero.','🗑️','Sim, limpar tudo',function() {
+        userGrid = Array.from({length:ROWS},function(){return Array.from({length:COLS},function(){return {char:'',pencil:false,error:false};});});
+        elapsedSeconds = 0; isGameCompleted = false; cursorPos = {r:1,c:1};
+        try { localStorage.removeItem(STORAGE_KEY); } catch(e) {}
+        updateUI(true);
+      });
+    }
+    function showConfirmDialog(title,message,icon,confirmLabel,onConfirm) {
+      const modal = document.getElementById('dialog-modal');
+      document.getElementById('dialog-icon').textContent = icon;
+      document.getElementById('dialog-title').textContent = title;
+      document.getElementById('dialog-message').textContent = message;
+      const actions = document.getElementById('dialog-actions');
+      actions.innerHTML = '<button id="dlg-cancel" type="button" class="px-4 py-2 rounded-xl bg-stone-200 hover:bg-stone-300 text-stone-800 font-bold text-xs">Cancelar</button><button id="dlg-confirm" type="button" class="px-4 py-2 rounded-xl bg-red-700 hover:bg-red-800 text-white font-bold text-xs">' + confirmLabel + '</button>';
+      modal.classList.remove('hidden');
+      document.getElementById('dlg-cancel').onclick = function(){modal.classList.add('hidden');};
+      document.getElementById('dlg-confirm').onclick = function(){modal.classList.add('hidden');onConfirm();};
+    }
+    function showDialog(title,message,icon) {
+      const modal = document.getElementById('dialog-modal');
+      document.getElementById('dialog-icon').textContent = icon || '✨';
+      document.getElementById('dialog-title').textContent = title;
+      document.getElementById('dialog-message').textContent = message;
+      const actions = document.getElementById('dialog-actions');
+      actions.innerHTML = '<button id="dlg-ok" type="button" class="px-6 py-2.5 rounded-xl bg-stone-900 hover:bg-stone-800 text-amber-200 font-extrabold text-xs">Continuar</button>';
+      modal.classList.remove('hidden');
+      document.getElementById('dlg-ok').onclick = function(){modal.classList.add('hidden');};
+    }
+    function checkVictoryCondition() {
+      for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) if (SOLUTION_GRID[r][c] !== null && userGrid[r][c].char !== SOLUTION_GRID[r][c]) return;
+      if (isGameCompleted) return;
+      isGameCompleted = true;
+      const m = String(Math.floor(elapsedSeconds / 60)).padStart(2,'0');
+      const s = String(elapsedSeconds % 60).padStart(2,'0');
+      saveProgress();
+      showDialog('Palavras Cruzadas Concluídas!','Parabéns! Você completou todas as 35 palavras da edição clássica com perfeição em ' + m + ':' + s + '.','🏆');
+    }
+
+    function saveProgress() {
+      try {
+        localStorage.setItem(STORAGE_KEY,JSON.stringify({userGrid:userGrid,elapsedSeconds:elapsedSeconds,activeClueId:activeClueId,clueFontScale:clueFontScale,cursorPos:cursorPos,isGameCompleted:isGameCompleted,isPencilMode:isPencilMode,openSuperLupaOnClueTap:openSuperLupaOnClueTap}));
+      } catch(e) {}
+    }
+    function loadProgress() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw) return;
+        const data = JSON.parse(raw);
+        if (data && Array.isArray(data.userGrid) && data.userGrid.length === ROWS && data.userGrid.every(function(row){return Array.isArray(row) && row.length === COLS;})) {
+          userGrid = data.userGrid.map(function(row){return row.map(function(cell){return {char:typeof cell.char === 'string' ? cell.char.slice(0,1).toUpperCase() : '',pencil:Boolean(cell.pencil),error:Boolean(cell.error)};});});
+          elapsedSeconds = Math.max(0,Number(data.elapsedSeconds) || 0);
+          if (getClueById(Number(data.activeClueId))) activeClueId = Number(data.activeClueId);
+          if (Number.isFinite(Number(data.clueFontScale))) clueFontScale = Math.max(.85,Math.min(1.6,Number(data.clueFontScale)));
+          if (data.cursorPos && Number.isInteger(data.cursorPos.r) && Number.isInteger(data.cursorPos.c) && gridValueAt(data.cursorPos.r,data.cursorPos.c) !== null) savedCursorPos = {r:data.cursorPos.r,c:data.cursorPos.c};
+          if (typeof data.isPencilMode === 'boolean') isPencilMode = data.isPencilMode;
+          if (typeof data.openSuperLupaOnClueTap === 'boolean') openSuperLupaOnClueTap = data.openSuperLupaOnClueTap;
+          isGameCompleted = Boolean(data.isGameCompleted);
+          document.documentElement.style.setProperty('--clue-font-scale',clueFontScale);
+          updatePencilButton();
+          updateLupaToggle();
+        }
+      } catch(e) {}
+    }
+    function renderTime() {
+      const display = document.getElementById('timer-display');
+      if (display) display.textContent = String(Math.floor(elapsedSeconds / 60)).padStart(2,'0') + ':' + String(elapsedSeconds % 60).padStart(2,'0');
+    }
+    function startTimer() {
+      renderTime();
+      timerInterval = window.setInterval(function() {
+        if (!isGameCompleted && !document.hidden) {
+          elapsedSeconds++;
+          renderTime();
+          if (elapsedSeconds % 10 === 0) saveProgress();
+        }
+      },1000);
+    }
+    function updatePencilButton() {
+      const btn = document.getElementById('btn-toggle-pencil');
+      document.getElementById('ink-icon').textContent = isPencilMode ? '✏️' : '✒️';
+      document.getElementById('ink-label').textContent = isPencilMode ? 'Lápis' : 'Caneta';
+      btn.className = 'flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-bold border transition-all shadow-sm ' + (isPencilMode ? 'bg-stone-600 text-amber-100 border-stone-700' : 'bg-blue-900 text-white border-blue-950');
+      btn.setAttribute('aria-pressed',String(isPencilMode));
+    }
+    function updateLupaToggle() {
+      const badge = document.getElementById('lupa-popup-status');
+      badge.textContent = openSuperLupaOnClueTap ? 'ATIVO' : 'PAINEL FIXO';
+      badge.className = openSuperLupaOnClueTap ? 'text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800' : 'text-[10px] font-bold px-1.5 py-0.5 rounded bg-stone-200 text-stone-700';
+    }
+
+    function bindEvents() {
+      window.addEventListener('keydown',function(e) {
+        if (e.ctrlKey || e.metaKey || e.altKey) return;
+        if (e.key === 'Escape') {
+          closeSuperLupaModal();
+          document.getElementById('dialog-modal').classList.add('hidden');
+          document.getElementById('help-dropdown').classList.add('hidden');
+          return;
+        }
+        if (!document.getElementById('super-lupa-modal').classList.contains('hidden') || !document.getElementById('dialog-modal').classList.contains('hidden')) return;
+        if (/^[a-zA-Z]$/.test(e.key)) { e.preventDefault(); inputLetter(e.key.toUpperCase()); }
+        else if (e.key === 'Backspace' || e.key === 'Delete') { e.preventDefault(); handleBackspace(); }
+        else if (e.key === 'Tab') { e.preventDefault(); cycleClue(e.shiftKey ? -1 : 1); }
+        else if (e.key === ' ') { e.preventDefault(); switchCrossingDirection(); }
+        else if (['ArrowRight','ArrowLeft','ArrowDown','ArrowUp'].includes(e.key)) { e.preventDefault(); moveCursorByArrow(e.key); }
+      });
+      document.querySelectorAll('.vk-key').forEach(function(btn) {
+        btn.addEventListener('click',function(e) {
+          e.preventDefault();
+          const key = btn.dataset.key;
+          if (!key) return;
+          if (key === 'BACKSPACE') handleBackspace();
+          else if (key === 'DIR') switchCrossingDirection();
+          else if (key === 'LUPA') openSuperLupaModal();
+          else inputLetter(key);
+        });
+      });
+      document.getElementById('btn-toggle-pencil').addEventListener('click',function(){isPencilMode = !isPencilMode;updatePencilButton();saveProgress();});
+      document.getElementById('btn-font-dec').addEventListener('click',function(){clueFontScale = Math.max(.85,Number((clueFontScale - .12).toFixed(2)));document.documentElement.style.setProperty('--clue-font-scale',clueFontScale);saveProgress();});
+      document.getElementById('btn-font-inc').addEventListener('click',function(){clueFontScale = Math.min(1.6,Number((clueFontScale + .12).toFixed(2)));document.documentElement.style.setProperty('--clue-font-scale',clueFontScale);saveProgress();});
+      document.getElementById('btn-prev-clue').addEventListener('click',function(){cycleClue(-1);});
+      document.getElementById('btn-next-clue').addEventListener('click',function(){cycleClue(1);});
+      document.getElementById('btn-switch-crossing').addEventListener('click',switchCrossingDirection);
+      document.getElementById('btn-expand-super-lupa').addEventListener('click',openSuperLupaModal);
+      document.getElementById('btn-close-super-lupa').addEventListener('click',closeSuperLupaModal);
+      document.getElementById('modal-btn-fill-now').addEventListener('click',function(){closeSuperLupaModal();document.getElementById('cell-' + cursorPos.r + '-' + cursorPos.c).scrollIntoView({block:'nearest',inline:'nearest',behavior:'smooth'});});
+      document.getElementById('modal-btn-reveal-letter').addEventListener('click',revealCurrentLetter);
+      document.getElementById('super-lupa-modal').addEventListener('click',function(e){if(e.target.id === 'super-lupa-modal') closeSuperLupaModal();});
+      const helpBtn = document.getElementById('btn-help-menu'), helpDrop = document.getElementById('help-dropdown');
+      helpBtn.addEventListener('click',function(e){e.stopPropagation();helpDrop.classList.toggle('hidden');});
+      helpDrop.addEventListener('click',function(e){e.stopPropagation();});
+      document.addEventListener('click',function(){helpDrop.classList.add('hidden');});
+      document.getElementById('act-reveal-letter').addEventListener('click',function(){helpDrop.classList.add('hidden');revealCurrentLetter();});
+      document.getElementById('act-reveal-word').addEventListener('click',function(){helpDrop.classList.add('hidden');revealCurrentWord();});
+      document.getElementById('act-check-errors').addEventListener('click',function(){helpDrop.classList.add('hidden');checkBoardErrors();});
+      document.getElementById('act-clear-board').addEventListener('click',function(){helpDrop.classList.add('hidden');confirmClearBoard();});
+      document.getElementById('act-toggle-lupa-modal').addEventListener('click',function(e){e.stopPropagation();openSuperLupaOnClueTap = !openSuperLupaOnClueTap;updateLupaToggle();saveProgress();});
+    }
+    function moveCursorByArrow(key) {
+      const deltas = {ArrowRight:{dr:0,dc:1},ArrowLeft:{dr:0,dc:-1},ArrowDown:{dr:1,dc:0},ArrowUp:{dr:-1,dc:0}};
+      const delta = deltas[key]; let nr = cursorPos.r + delta.dr, nc = cursorPos.c + delta.dc;
+      while (nr >= 0 && nr < ROWS && nc >= 0 && nc < COLS) {
+        if (SOLUTION_GRID[nr][nc] !== null) { onLetterCellClick(nr,nc); return; }
+        nr += delta.dr; nc += delta.dc;
+      }
+    }
+
+    window.addEventListener('load',function() {
+      buildGridDOM();
+      loadProgress();
+      const initialClue = getClueById(activeClueId) || CLUES_DATA[0];
+      cursorPos = savedCursorPos || {r:initialClue.cells[0].r,c:initialClue.cells[0].c};
+      bindEvents();
+      updatePencilButton();
+      updateLupaToggle();
+      updateUI(false);
+      startTimer();
+      if ('serviceWorker' in navigator) navigator.serviceWorker.register('./service-worker.js').catch(function(){});
+    });
+  </script>
+</body>
+</html>

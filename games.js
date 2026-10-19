@@ -22,7 +22,7 @@
   const gameCatalog = [
     {id:"chess", title:"Xadrez", icon:"♟️", category:"estrategia", label:"Estratégia", difficulty:"Intermediário", time:"5–20 min", desc:"Planeje jogadas, antecipe respostas e dispute uma partida no mesmo dispositivo.", color:"#e8e0ff", glow:"#d5c8ff"},
     {id:"sudoku", title:"Sudoku", icon:"🔢", category:"logica", label:"Lógica", difficulty:"Fácil a difícil", time:"5–15 min", desc:"Complete a grade sem repetir números nas linhas, colunas e blocos.", color:"#d9f7ee", glow:"#c4f1e3"},
-    {id:"crossword", title:"Palavras cruzadas", icon:"🔤", category:"palavras", label:"Palavras", difficulty:"Iniciante", time:"3–8 min", desc:"Descubra as palavras pelas pistas e pelas letras que se cruzam.", color:"#ffe1ef", glow:"#ffc9e1"},
+    {id:"crossword", title:"Palavras cruzadas", icon:"🔤", category:"palavras", label:"Palavras", difficulty:"Fácil, médio e difícil", time:"Livre", desc:"Um livreto clássico, com dicas em quadrinhos e modo tela cheia para jogar no celular.", color:"#ffe1ef", glow:"#ffc9e1"},
     {id:"tetris", title:"Tetris", icon:"🧱", category:"agilidade", label:"Agilidade", difficulty:"Ritmo crescente", time:"Livre", desc:"Encaixe as peças, complete linhas e tente bater seu recorde.", color:"#ffe8c9", glow:"#ffddb1"},
     {id:"2048", title:"2048", icon:"🧩", category:"logica", label:"Lógica", difficulty:"Progressivo", time:"3–10 min", desc:"Junte blocos iguais, pense alguns movimentos à frente e alcance 2048.", color:"#e7e4ff", glow:"#d4ceff"},
     {id:"memory", title:"Jogo da memória", icon:"🧠", category:"memoria", label:"Memória", difficulty:"Iniciante", time:"2–5 min", desc:"Encontre os pares e tente completar o tabuleiro com menos tentativas.", color:"#fff0bd", glow:"#ffe69b"},
@@ -85,6 +85,7 @@
     }
     cleanRuntime();
     activeGame = id;
+    document.body.classList.toggle("crossword-active", id === "crossword");
     $("#heroSection").hidden = true;
     $("#catalogSection").hidden = true;
     $(".up-next-section").hidden = true;
@@ -101,7 +102,7 @@
     const mount = $("#gameMount");
     if (id === "sudoku") initSudoku(mount);
     if (id === "chess") initChess(mount);
-    if (id === "crossword") initCrossword(mount);
+    if (id === "crossword") initEmbeddedGame(mount, "/games/palavras-cruzadas/index.html", game.title);
     if (id === "tetris") initTetris(mount);
     if (id === "2048") init2048(mount);
     if (id === "memory") initMemory(mount);
@@ -122,6 +123,7 @@
   function closeGame() {
     cleanRuntime();
     activeGame = "";
+    document.body.classList.remove("crossword-active");
     $("#gameStage").hidden = true;
     $("#heroSection").hidden = false;
     $("#catalogSection").hidden = false;
@@ -340,92 +342,6 @@
     $("#chessUndo", mount).addEventListener("click", () => { game.undo(); selected=null; legal=[]; renderBoard(); });
     $("#chessFlip", mount).addEventListener("click", () => { flipped=!flipped; renderBoard(); });
     renderBoard();
-  }
-
-  function initCrossword(mount) {
-    const target = {
-      "0,3":"L", "1,2":"R", "1,3":"U", "1,4":"A",
-      "2,1":"P", "2,2":"I", "2,3":"A", "3,1":"A", "3,2":"M", "3,3":"A"
-    };
-    const numbers = {"0,3":"2","1,2":"1","2,1":"3","3,1":"4"};
-    const entries = [
-      {direction:"Horizontal",number:"1",answer:"RUA",cells:[[1,2],[1,3],[1,4]]},
-      {direction:"Horizontal",number:"3",answer:"PIA",cells:[[2,1],[2,2],[2,3]]},
-      {direction:"Horizontal",number:"4",answer:"AMA",cells:[[3,1],[3,2],[3,3]]},
-      {direction:"Vertical",number:"1",answer:"RIM",cells:[[1,2],[2,2],[3,2]]},
-      {direction:"Vertical",number:"2",answer:"LUA",cells:[[0,3],[1,3],[2,3]]}
-    ];
-    const keys = Object.keys(target);
-    mount.innerHTML = '<div class="crossword-layout"><div class="crossword-grid" id="crossGrid" role="group" aria-label="Grade de palavras cruzadas">' +
-      Array.from({length:5}, (_,r) => Array.from({length:5}, (_,c) => {
-        const key = r + "," + c;
-        if (!target[key]) return '<div class="cross-cell block" aria-hidden="true"></div>';
-        return '<div class="cross-cell" data-key="' + key + '">' + (numbers[key] ? '<span class="cell-number">' + numbers[key] + '</span>' : '') +
-          '<input aria-label="Linha ' + (r+1) + ', coluna ' + (c+1) + '" maxlength="1" autocomplete="off" autocapitalize="characters" data-r="' + r + '" data-c="' + c + '"></div>';
-      }).join("")).join("") + '</div><div class="clues-side"><div class="clue-group"><h3>Horizontais</h3><ul class="clue-list">' +
-      '<li><button type="button" data-entry="0"><strong>1</strong><span>Via urbana por onde passam veículos e pedestres.</span></button></li>' +
-      '<li><button type="button" data-entry="1"><strong>3</strong><span>Recipiente instalado na cozinha para lavar louça.</span></button></li>' +
-      '<li><button type="button" data-entry="2"><strong>4</strong><span>Ele ___ muito por sua família (verbo amar).</span></button></li>' +
-      '</ul></div><div class="clue-group"><h3>Verticais</h3><ul class="clue-list">' +
-      '<li><button type="button" data-entry="3"><strong>1</strong><span>Órgão que filtra o sangue.</span></button></li>' +
-      '<li><button type="button" data-entry="4"><strong>2</strong><span>Satélite natural da Terra.</span></button></li>' +
-      '</ul></div><div class="board-actions"><button class="game-btn primary" id="crossCheck" type="button">Conferir respostas</button><button class="game-btn" id="crossHint" type="button">Revelar uma letra</button><button class="game-btn" id="crossReset" type="button">Limpar</button></div><p class="inline-status" id="crossStatus" style="margin-top:12px">Preencha as casas brancas usando as pistas.</p></div></div>';
-    const grid = $("#crossGrid", mount);
-    const status = $("#crossStatus", mount);
-    function getLetter(key) { const input = $('.cross-cell[data-key="' + key + '"] input', mount); return input ? input.value.toUpperCase() : ""; }
-    function setLetter(key, value) { const input = $('.cross-cell[data-key="' + key + '"] input', mount); if (input) input.value = value; }
-    grid.addEventListener("input", event => {
-      const input = event.target.closest("input");
-      if (!input) return;
-      input.value = input.value.toUpperCase().replace(/[^A-Z]/g,"").slice(0,1);
-      const key = input.dataset.r + "," + input.dataset.c;
-      if (input.value && input.parentElement.nextElementSibling) {
-        const next = input.parentElement.nextElementSibling.querySelector("input");
-        if (next) next.focus();
-      }
-      $$('.cross-cell', grid).forEach(cell => cell.classList.remove("correct","incorrect"));
-    });
-    $$("#gameMount [data-entry]").forEach(button => button.addEventListener("click", () => {
-      $$("#gameMount [data-entry]").forEach(item=>item.classList.toggle("active", item===button));
-      const entry = entries[Number(button.dataset.entry)];
-      const first = entry.cells[0];
-      const input = $('input[data-r="' + first[0] + '"][data-c="' + first[1] + '"]', mount);
-      if (input) input.focus();
-    }));
-    $("#crossCheck", mount).addEventListener("click", () => {
-      let completed = 0;
-      entries.forEach(entry => {
-        const answer = entry.cells.map(cell => getLetter(cell[0] + "," + cell[1])).join("");
-        if (answer === entry.answer) completed++;
-      });
-      $$('.cross-cell[data-key]', grid).forEach(cell => {
-        const key = cell.dataset.key;
-        cell.classList.toggle("correct", !!getLetter(key) && getLetter(key) === target[key]);
-        cell.classList.toggle("incorrect", !!getLetter(key) && getLetter(key) !== target[key]);
-      });
-      if (completed === entries.length) {
-        status.textContent = "Excelente! Você resolveu todas as palavras.";
-        status.className = "inline-status success";
-      } else {
-        status.textContent = completed + " de " + entries.length + " palavras corretas. Use as letras cruzadas para encontrar o restante.";
-        status.className = "inline-status" + (completed ? "" : " warning");
-      }
-    });
-    $("#crossHint", mount).addEventListener("click", () => {
-      const key = keys.find(item => !getLetter(item));
-      if (!key) { status.textContent = "Todas as casas já estão preenchidas."; return; }
-      setLetter(key, target[key]);
-      const input = $('.cross-cell[data-key="' + key + '"] input', mount);
-      if (input) input.focus();
-      status.textContent = "Uma letra revelada. Continue pelas pistas!";
-      status.className = "inline-status";
-    });
-    $("#crossReset", mount).addEventListener("click", () => {
-      $$("#crossGrid input").forEach(input=>input.value="");
-      $$('.cross-cell', grid).forEach(cell=>cell.classList.remove("correct","incorrect"));
-      status.textContent = "Tabuleiro limpo. Tente novamente!";
-      status.className = "inline-status";
-    });
   }
 
   function initTetris(mount) {

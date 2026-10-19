@@ -160,21 +160,6 @@ body.games-page {
 .chess-side { width:min(100%,280px); }
 .chess-turn { font-size:13px; font-weight:900; padding:12px; border-radius:12px; background:white; border:1px solid #e8e1fc; margin-bottom:10px; }
 .move-list { max-height:220px; overflow:auto; padding:10px 12px; border-radius:12px; background:white; border:1px solid #e8e1fc; color:#6e668e; font-size:11px; line-height:1.8; }
-.crossword-layout { display:grid; grid-template-columns:minmax(220px,340px) minmax(240px,1fr); gap:30px; justify-content:center; align-items:start; }
-.crossword-grid { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); grid-template-rows:repeat(5,minmax(0,1fr)); gap:3px; width:min(100%,350px); aspect-ratio:1; background:#4c3a87; border:4px solid #4c3a87; border-radius:8px; overflow:hidden; }
-.cross-cell { background:white; min-width:0; min-height:0; position:relative; display:grid; place-items:center; }
-.cross-cell.block { background:#3a2d68; }
-.cross-cell input { border:0; outline:0; width:100%; height:100%; min-width:0; min-height:0; text-align:center; text-transform:uppercase; background:transparent; font-weight:900; font-size:clamp(16px,2.8vw,26px); color:#5e48ca; padding:0; }
-.cross-cell input:focus { background:#ddd5ff; box-shadow:inset 0 0 0 2px #7459f3; }
-.cross-cell .cell-number { position:absolute; top:2px; left:4px; font-size:9px; line-height:1; color:#8177a4; pointer-events:none; font-weight:900; }
-.cross-cell.correct input { color:#14875d; background:#d8f8ea; }
-.cross-cell.incorrect input { color:#c82e5d; background:#ffe0eb; }
-.clue-group { margin-bottom:18px; }
-.clue-group h3 { margin:0 0 8px; font-size:13px; text-transform:uppercase; letter-spacing:.09em; color:#6c57d8; }
-.clue-list { list-style:none; padding:0; margin:0; display:grid; gap:7px; }
-.clue-list button { display:flex; align-items:flex-start; gap:9px; width:100%; text-align:left; border:1px solid #e7e1fb; border-radius:10px; padding:10px; background:white; color:#5c5677; font-size:12px; cursor:pointer; }
-.clue-list button strong { min-width:19px; display:inline-grid; place-items:center; width:22px; height:22px; border-radius:7px; background:#eee9ff; color:#6d56e3; font-size:10px; }
-.clue-list button.active { border-color:#8c78f7; background:#f0edff; }
 .tetris-layout { display:flex; align-items:flex-start; justify-content:center; gap:22px; flex-wrap:wrap; }
 .tetris-canvas-wrap { padding:8px; border-radius:12px; background:#211a45; box-shadow:0 14px 26px rgba(42,28,88,.16); }
 .tetris-canvas { display:block; width:min(100%,300px); height:auto; background:#17132d; border-radius:6px; }
@@ -264,8 +249,6 @@ body.games-page {
   .stage-heading { align-items:flex-start; flex-direction:column; }
   .stage-controls { justify-content:flex-start; }
   .game-mount { padding:12px 8px; }
-  .crossword-layout { grid-template-columns:1fr; justify-items:center; }
-  .crossword-layout .clues-side { width:min(100%,420px); }
   .chess-side { width:min(100%,420px); }
   .chess-board { border-width:4px; }
 }
@@ -285,3 +268,32 @@ body.games-page {
 .embedded-game-toolbar .game-btn { text-decoration:none; }
 .embedded-game-frame { display:block; width:100%; height:min(78vh,850px); min-height:600px; border:1px solid #d9d1f8; border-radius:14px; background:#101024; }
 @media (max-width:720px) { .embedded-game-frame { height:75vh; min-height:520px; } }
+
+
+/* Palavras Cruzadas: aplicação original integrada em área imersiva. */
+body.crossword-active { background:#f3efe6; overflow:hidden; }
+body.crossword-active .games-header,
+body.crossword-active .games-main,
+body.crossword-active .games-footer { display:none !important; }
+body.crossword-active .game-stage {
+  width:100%; max-width:none; min-height:100dvh; margin:0; padding:0;
+  border:0; border-radius:0; background:#f3efe6; box-shadow:none;
+}
+body.crossword-active .stage-topbar {
+  box-sizing:border-box; height:44px; min-height:44px; margin:0;
+  padding:5px 10px; border:0; border-radius:0; background:#191632;
+  position:relative; z-index:20;
+}
+body.crossword-active .stage-back { padding:7px 10px; background:#fff; color:#191632; }
+body.crossword-active .stage-brand { color:#fff; }
+body.crossword-active .stage-heading,
+body.crossword-active .stage-footnote { display:none !important; }
+body.crossword-active .game-mount {
+  min-height:0; margin:0; padding:0; border-radius:0; background:transparent;
+}
+body.crossword-active .embedded-game-shell { gap:0; }
+body.crossword-active .embedded-game-toolbar { display:none !important; }
+body.crossword-active .embedded-game-frame {
+  display:block; width:100%; height:calc(100dvh - 44px); min-height:0;
+  border:0; border-radius:0; background:#f3efe6;
+}
