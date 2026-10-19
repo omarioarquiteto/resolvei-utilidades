@@ -102,7 +102,7 @@
     const mount = $("#gameMount");
     if (id === "sudoku") initSudoku(mount);
     if (id === "chess") initChess(mount);
-    if (id === "crossword") initEmbeddedGame(mount, "/games/palavras-cruzadas/index.html", game.title);
+    if (id === "crossword") initEmbeddedGame(mount, "/games/palavras-cruzadas/index.html?v=20261019-mobile2", game.title);
     if (id === "tetris") initTetris(mount);
     if (id === "2048") init2048(mount);
     if (id === "memory") initMemory(mount);
