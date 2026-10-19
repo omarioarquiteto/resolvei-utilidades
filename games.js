@@ -25,6 +25,7 @@
     {id:"memory", title:"Jogo da memória", icon:"🧠", category:"memoria", label:"Memória", difficulty:"Iniciante", time:"2–5 min", desc:"Encontre os pares e tente completar o tabuleiro com menos tentativas.", color:"#fff0bd", glow:"#ffe69b"},
     {id:"wordsearch", title:"Caça-palavras", icon:"🔎", category:"palavras", label:"Palavras", difficulty:"Iniciante", time:"3–7 min", desc:"Localize palavras escondidas na horizontal, vertical ou diagonal.", color:"#dbf7dc", glow:"#c1efc5"},
     {id:"stellar-defense", title:"Stellar Defense", icon:"🚀", category:"arcade", label:"Combate espacial", difficulty:"Ondas crescentes", time:"Livre", desc:"Pilote uma nave de combate, enfrente esquadrões de drones, colete módulos e derrote naves capitãs em uma batalha sci-fi com efeitos luminosos.", embedUrl:"/game-space-invaders.html", color:"#dceaff", glow:"#c4d8ff"},
+    {id:"furia-animal", title:"Fúria Animal: Cidades do Mundo", icon:"🦜", category:"arcade", label:"Ação & física", difficulty:"15 cidades + turnê infinita", time:"Livre", desc:"Arremesse animais com habilidades especiais, destrua fortalezas e liberte cidades em uma aventura mundial.", embedUrl:"/games/furia-animal/index.html", color:"#ffe0c7", glow:"#ffd1ad"},
   ];
   const categoryNames = {logica:"Lógica", estrategia:"Estratégia", memoria:"Memória", palavras:"Palavras", agilidade:"Agilidade", plataforma:"Plataforma", arcade:"Arcade", acao:"Ação"};
   let activeFilter = "todos";
@@ -79,6 +80,7 @@
     cleanRuntime();
     activeGame = id;
     document.body.classList.toggle("crossword-active", id === "crossword");
+    document.body.classList.toggle("furia-animal-active", id === "furia-animal");
     $("#heroSection").hidden = true;
     $("#catalogSection").hidden = true;
     $(".up-next-section").hidden = true;
@@ -117,6 +119,7 @@
     cleanRuntime();
     activeGame = "";
     document.body.classList.remove("crossword-active");
+    document.body.classList.remove("furia-animal-active");
     $("#gameStage").hidden = true;
     $("#heroSection").hidden = false;
     $("#catalogSection").hidden = false;
