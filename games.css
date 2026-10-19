@@ -297,3 +297,32 @@ body.crossword-active .embedded-game-frame {
   display:block; width:100%; height:calc(100dvh - 44px); min-height:0;
   border:0; border-radius:0; background:#f3efe6;
 }
+
+
+/* Fúria Animal: modo imersivo para desktop e dispositivos móveis. */
+body.furia-animal-active { background:#0f172a; overflow:hidden; }
+body.furia-animal-active .games-header,
+body.furia-animal-active .games-main,
+body.furia-animal-active .games-footer { display:none !important; }
+body.furia-animal-active .game-stage {
+  width:100%; max-width:none; min-height:100dvh; margin:0; padding:0;
+  border:0; border-radius:0; background:#0f172a; box-shadow:none;
+}
+body.furia-animal-active .stage-topbar {
+  box-sizing:border-box; height:44px; min-height:44px; margin:0;
+  padding:5px 10px; border:0; border-radius:0; background:#0b1220;
+  position:relative; z-index:20;
+}
+body.furia-animal-active .stage-back { padding:7px 10px; background:#fff; color:#0f172a; }
+body.furia-animal-active .stage-brand { color:#fff; }
+body.furia-animal-active .stage-heading,
+body.furia-animal-active .stage-footnote { display:none !important; }
+body.furia-animal-active .game-mount {
+  min-height:0; margin:0; padding:0; border-radius:0; background:transparent;
+}
+body.furia-animal-active .embedded-game-shell { gap:0; }
+body.furia-animal-active .embedded-game-toolbar { display:none !important; }
+body.furia-animal-active .embedded-game-frame {
+  display:block; width:100%; height:calc(100dvh - 44px); min-height:0;
+  border:0; border-radius:0; background:#0f172a;
+}
