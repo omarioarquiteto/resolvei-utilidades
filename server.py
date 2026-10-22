@@ -94,6 +94,8 @@ app.include_router(trade_pro_router)
 
 from monitor_precos_api import router as monitor_precos_router, start_price_monitor_scheduler
 app.include_router(monitor_precos_router)
+from tabela_fipe_api import router as tabela_fipe_router
+app.include_router(tabela_fipe_router)
 
 @app.on_event("startup")
 async def _start_monitor_precos_scheduler():
