@@ -16,6 +16,6 @@ jobs:
         with:
           node-version: "20"
       - name: Validate Python syntax
-        run: python -m py_compile server.py documents_api.py
+        run: python -m py_compile server.py documents_api.py tabela_fipe_api.py
       - name: Validate JavaScript syntax
-        run: node --check app.js && node --check documents-tools.js
+        run: node --check app.js && node --check documents-tools.js && node --check tabela-fipe.js
