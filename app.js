@@ -47,6 +47,7 @@ const tools = [
   {id:'trade-pro',cat:'investimentos',icon:'⚡',title:'TRADE-PRÓ',desc:'Classificação de regime de mercado, confluência técnica e expiração sugerida a partir de candles da IQ Option.',tags:'trade pro trading call put compra venda sinais regime altista baixista expansão volatilidade consolidação expiração CME confluência'},
   {id:'consultor-senior',cat:'investimentos',icon:'🧠',title:'CONSULTOR SÊNIOR',desc:'Analista de mercado com Gemini e candles da IQ Option para identificar contexto, gatilhos e pontos de entrada.',tags:'consultor senior gemini iqoption opções binárias call put análise de mercado price action suporte resistência tendência entrada'},
   {id:'monitor-precos',cat:'compras',icon:'🛍️',title:'Monitor de Preços',desc:'Acompanhe o histórico de preços e compare ofertas em lojas online.',tags:'monitor preço preços histórico produto comparar lojas oferta promoção economia rastrear'},
+  {id:'tabela-fipe',cat:'carro',icon:'📊',title:'Consulta à Tabela FIPE',desc:'Consulte preços de carros, motos e caminhões e veja a evolução mensal do valor FIPE.',tags:'tabela fipe preço carro moto caminhão veículo valor histórico evolução preço usado marca modelo ano combustível'},
   {id:'combustivel-viagem',cat:'carro',icon:'⛽',title:'Combustível da viagem',desc:'Estime litros necessários e custo da viagem.',tags:'gasolina etanol combustível viagem litros km'},
   {id:'custo-km',cat:'carro',icon:'🛣️',title:'Custo por km',desc:'Descubra quanto seu carro custa a cada quilômetro.',tags:'custo km carro combustível consumo'},
   {id:'gasolina-etanol',cat:'carro',icon:'⚖️',title:'Gasolina × etanol',desc:'Compare preços pela eficiência energética do combustível.',tags:'gasolina etanol álcool abastecer'},
@@ -1452,6 +1453,7 @@ function categoriesPage(){return `<div class="section-head"><div><h1 style="marg
 function toolPage(id){
   if(id==='guru-dos-sinais-iqoption'||id==='laboratorio-estatistico')return '<div class="tool-page"><div class="card panel"><span class="eyebrow">DESCONTINUADA</span><h1>Esta ferramenta foi retirada do Resolvei.</h1><p>O catálogo foi enxugado para priorizar utilidades de uso cotidiano.</p><div class="actions"><a class="btn primary" href="#/ferramentas">Voltar às ferramentas</a></div></div></div>';
   if(id==='monitor-precos')return '<div id="monitorPrecosToolHost"></div>';
+  if(id==='tabela-fipe')return '<div id="tabelaFipeToolHost"></div>';
   if(id==='visao-opcoes')return '<div id="visaoOpcoesToolHost"></div>';
   if(id==='analista-bin')return '<div id="analistaBinToolHost"></div>';
   if(id==='trade-pro')return '<div id="tradeProToolHost"></div>';
@@ -1590,6 +1592,7 @@ function bind(){
     else {const s=document.createElement('script');s.src='/ferramenta/financiamento/financiamento.js?v=20261006';s.onload=startFin;document.head.appendChild(s);}
   }
   if(rid==='monitor-precos' && window.resolveiMonitorPrecosInit) window.resolveiMonitorPrecosInit();
+  if(rid==='tabela-fipe' && window.resolveiTabelaFipeInit) window.resolveiTabelaFipeInit();
   const calc=document.getElementById('calcBtn'); if(calc&&rid)calc.addEventListener('click',()=>calculate(rid));
   if(rid==='conversor-arquivos')bindFileConverter();
   if(rid==='conversor-unidades')bindUnitConverter();
