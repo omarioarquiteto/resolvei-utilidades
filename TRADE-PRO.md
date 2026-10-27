@@ -31,10 +31,12 @@ O documento do CME descreve opções sobre futuros com payoff, prêmio e vencime
 1. Apenas candles fechados entram no cálculo.
 2. O ativo deve pertencer ao catálogo obtido pela IQ Option.
 3. A emissão exige confirmação de tendência/direção, volume com variação real e volatilidade suficiente, além de confluência mínima de 72%.
-4. Volume ausente, zero ou constante é tratado como dado insuficiente; nesse caso, nenhum sinal é autorizado.
-5. Em consolidação ou transição, a API retorna `signal: null` e a interface mostra `SEM SINAL`.
-6. A expiração é uma estimativa heurística baseada no timeframe dos candles, velocidade relativa do movimento e ATR. Não é previsão de que a operação termine no lucro.
-7. Os logs registram cada sinal validado no máximo uma vez por candle e seguem o formato requerido.
+4. A confluência dá peso de 50% à direção/tendência e 25% a cada um dos filtros de volume e volatilidade. Volume e volatilidade continuam sendo requisitos independentes: a pontuação, sozinha, não aprova uma entrada.
+5. Volume ausente, zero ou constante é tratado como dado insuficiente; nesse caso, nenhum sinal é autorizado. A interface informa os motivos de bloqueio em vez de mostrar apenas `SEM SINAL`.
+6. A API mede a idade do último candle fechado. Se passar de `max(90 segundos, metade do timeframe)`, bloqueia o sinal por dados potencialmente atrasados e informa a idade encontrada.
+7. Em consolidação ou transição, a API retorna `signal: null` com diagnóstico dos filtros que não foram satisfeitos.
+8. A expiração é uma estimativa heurística baseada no timeframe dos candles, velocidade relativa do movimento e ATR. Não é previsão de que a operação termine no lucro.
+9. Os logs registram status, regime, confluência, idade do candle, filtros e motivos de bloqueio. Cada sinal validado é registrado no máximo uma vez por candle.
 
 ## Endpoints
 
@@ -55,4 +57,4 @@ Com as dependências do projeto instaladas:
 python -m unittest discover -s tests -p "test_trade_pro_engine.py"
 ```
 
-Antes de qualquer uso real, teste a conexão, verifique a qualidade de candles/volume e execute avaliações históricas fora da amostra. Confluência é apenas a saída de regras determinísticas, não uma probabilidade estatística calibrada de acerto.
+Os testes automatizados cobrem rejeição de candles insuficientes, timeframes inválidos, bloqueio de volume constante, explicação de ausência de sinal e cenários sintéticos altista/baixista com filtros satisfeitos. Antes de qualquer uso real, verifique a qualidade de candles/volume e execute avaliações históricas fora da amostra. Confluência é apenas a saída de regras determinísticas, não uma probabilidade estatística calibrada de acerto; nenhuma mudança garante rentabilidade.
