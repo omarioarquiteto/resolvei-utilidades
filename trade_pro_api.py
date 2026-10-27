@@ -235,6 +235,52 @@ async def run(
         }
     )
 
+    # A API de candles pode atrasar; a idade é medida desde o fechamento do
+    # último candle, não desde o seu horário de abertura.
+    candle_close_epoch = float(closed[-1]["time"]) + interval_seconds
+    data_age_seconds = round(max(0.0, time.time() - candle_close_epoch), 1)
+    max_data_age_seconds = max(90, int(interval_seconds * 0.5))
+    data_stale = data_age_seconds > max_data_age_seconds
+    result["data_quality"] = {
+        "returned_candles": len(raw or []),
+        "valid_closed_candles": len(closed),
+        "last_candle_close_time": datetime.fromtimestamp(
+            candle_close_epoch, timezone.utc
+        ).isoformat(timespec="seconds").replace("+00:00", "Z"),
+        "last_candle_age_seconds": data_age_seconds,
+        "max_allowed_age_seconds": max_data_age_seconds,
+        "stale": data_stale,
+    }
+    result.setdefault("checks", {})["data_fresh"] = not data_stale
+
+    # Não se emite sinal com candle fechado antigo, mesmo que os indicadores
+    # históricos pareçam favoráveis.
+    if data_stale:
+        stale_reason = (
+            f"Dados desatualizados: o último candle fechou há {data_age_seconds:.0f}s "
+            f"(limite {max_data_age_seconds}s). Sinal bloqueado até a atualização."
+        )
+        result["signal"] = None
+        result["status"] = "DADOS_DESATUALIZADOS"
+        result["expiration_minutes"] = None
+        result["reason"] = stale_reason
+        result.setdefault("blocking_reasons", []).insert(0, stale_reason)
+        result["checks"]["signal_valid"] = False
+
+    logger.info(
+        "[TRADE-PRÓ] ativo=%s timeframe=%s status=%s regime=%s sinal=%s "
+        "confluencia=%s idade_candle_s=%s checks=%s bloqueios=%s",
+        symbol,
+        timeframe,
+        result.get("status"),
+        result.get("regime"),
+        result.get("signal"),
+        result.get("confluence"),
+        data_age_seconds,
+        result.get("checks"),
+        " | ".join(result.get("blocking_reasons", [])) or "nenhum",
+    )
+
     # Um sinal é registrado no máximo uma vez por candle, mesmo no modo automático.
     if result["signal"] in {"COMPRA", "VENDA"}:
         log_key = f"{symbol}|{timeframe}"
