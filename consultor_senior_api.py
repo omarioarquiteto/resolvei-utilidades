@@ -441,16 +441,10 @@ def _sanitize_analysis(data: dict[str, Any]) -> dict[str, Any]:
     except Exception:
         confidence = 0.0
 
-    timeframe = str(data.get("timeframe", "5m") or "5m").strip().lower()
-    if timeframe not in {"5m", "15m"}:
-        timeframe = "5m"
-
-    try:
-        exp = int(data.get("expiry_minutes", 15))
-    except Exception:
-        exp = 15
-    if exp not in {15, 30}:
-        exp = 15
+    # A entrada é sempre avaliada no candle de 1 minuto; a expiração é fixa em 5 minutos.
+    timeframe = str(data.get("timeframe", "1m") or "1m").strip().lower()
+    if timeframe != "1m":
+        timeframe = "1m"
 
     def text_value(key: str, size: int) -> str:
         return str(data.get(key, "") or "").strip()[:size]
@@ -466,7 +460,7 @@ def _sanitize_analysis(data: dict[str, Any]) -> dict[str, Any]:
         "status": status,
         "confidence": round(confidence, 1),
         "timeframe": timeframe,
-        "expiry_minutes": exp,
+        "expiry_minutes": 5,
         "summary": text_value("summary", 500),
         "structure": text_value("structure", 1200),
         "trend": text_value("trend", 700),
@@ -549,21 +543,97 @@ def _save_consult_response(symbol: str, fingerprint: str, response: dict[str, An
     CONSULT_RESULT_CACHE[symbol] = (fingerprint, time.monotonic(), response)
 
 
+def _entry_trigger(
+    rows: list[dict[str, float]],
+    direction: str,
+) -> str | None:
+    """Procura um gatilho objetivo no último candle de 1m já fechado."""
+    if direction not in {"CALL", "PUT"} or len(rows) < 30:
+        return None
+
+    last = rows[-1]
+    previous = rows[-2]
+    candle_range = last["high"] - last["low"]
+    if candle_range <= 0:
+        return None
+
+    atr_values = _atr(rows, 14)
+    atr_now = atr_values[-1] if atr_values else 0.0
+    if atr_now and not math.isnan(atr_now) and candle_range / atr_now >= 2.8:
+        return None
+
+    body = abs(last["close"] - last["open"])
+    body_ratio = body / candle_range
+    upper_wick = last["high"] - max(last["open"], last["close"])
+    lower_wick = min(last["open"], last["close"]) - last["low"]
+    bullish = last["close"] > last["open"]
+    bearish = last["close"] < last["open"]
+
+    if direction == "CALL":
+        engulfing = (
+            bullish
+            and previous["close"] < previous["open"]
+            and last["open"] <= previous["close"]
+            and last["close"] >= previous["open"]
+        )
+        breakout = (
+            bullish
+            and body_ratio >= 0.35
+            and last["close"] > max(row["high"] for row in rows[-3:-1])
+        )
+        rejection = (
+            bullish
+            and lower_wick >= max(body * 1.3, candle_range * 0.30)
+            and (last["close"] - last["low"]) / candle_range >= 0.65
+        )
+        if engulfing:
+            return "engolfo comprador no candle fechado de 1m"
+        if breakout:
+            return "rompimento comprador da máxima dos dois candles anteriores em 1m"
+        if rejection:
+            return "rejeição compradora com sombra inferior em 1m"
+    else:
+        engulfing = (
+            bearish
+            and previous["close"] > previous["open"]
+            and last["open"] >= previous["close"]
+            and last["close"] <= previous["open"]
+        )
+        breakout = (
+            bearish
+            and body_ratio >= 0.35
+            and last["close"] < min(row["low"] for row in rows[-3:-1])
+        )
+        rejection = (
+            bearish
+            and upper_wick >= max(body * 1.3, candle_range * 0.30)
+            and (last["high"] - last["close"]) / candle_range >= 0.65
+        )
+        if engulfing:
+            return "engolfo vendedor no candle fechado de 1m"
+        if breakout:
+            return "rompimento vendedor da mínima dos dois candles anteriores em 1m"
+        if rejection:
+            return "rejeição vendedora com sombra superior em 1m"
+
+    return None
+
+
 def _entry_confirmed(
     analysis: dict[str, Any],
     frames: dict[str, list[dict[str, float]]],
     symbol: str,
 ) -> bool:
     """
-    Confirmação conservadora: além da saída da IA, 15m e 5m precisam
-    apontar para a mesma direção. A ferramenta apenas analisa; não executa ordens.
+    Validação independente para expiração de 5m: tendência alinhada em 15m/5m,
+    confirmação de curto prazo e gatilho observável no último candle fechado de 1m.
     """
     decision = analysis.get("decision")
     if (
         decision not in {"CALL", "PUT"}
         or analysis.get("status") != "AGORA"
-        or int(analysis.get("expiry_minutes") or 0) not in {15, 30}
-        or analysis.get("timeframe") not in {"5m", "15m"}
+        or int(analysis.get("expiry_minutes") or 0) != 5
+        or analysis.get("timeframe") != "1m"
         or not str(analysis.get("trigger") or "").strip()
         or str(analysis.get("data_quality") or "").strip().lower() not in {"boa", "moderada"}
     ):
@@ -574,18 +644,29 @@ def _entry_confirmed(
         return False
 
     try:
+        rows_1m = frames["1m"]
+        if not rows_1m:
+            return False
+        # Candle muito antigo não pode servir como sinal de entrada "agora".
+        age_seconds = time.time() - rows_1m[-1]["time"]
+        if age_seconds < -5 or age_seconds > 150:
+            return False
+
         score_15m = _directional_score(_summarize(frames["15m"], "15m"))
         score_5m = _directional_score(_summarize(frames["5m"], "5m"))
-    except (KeyError, IndexError, TypeError):
+        score_1m = _directional_score(_summarize(rows_1m, "1m"))
+        local_trigger = _entry_trigger(rows_1m, decision)
+    except (KeyError, IndexError, TypeError, ValueError):
         return False
 
     expected_sign = 1 if decision == "CALL" else -1
-    # A moderate directional bias is enough only when both horizons agree;
-    # require a recent, explicit trigger and the confidence threshold above too.
     return (
         score_15m * expected_sign >= 2
         and score_5m * expected_sign >= 2
+        and score_1m * expected_sign >= 1
+        and local_trigger is not None
     )
+
 
 async def _fetch_candles(client: Any, symbol: str, timeframe: str) -> list[dict[str, float]]:
     interval = INTERVALS[timeframe]
@@ -656,17 +737,19 @@ async def _load_frames(
 def _fast_screen(
     frames: dict[str, list[dict[str, float]]],
 ) -> tuple[bool, str, dict[str, dict[str, Any]]]:
-    # Always calculate a useful local diagnostic. Only call the AI when the
-    # underlying EMA, slope and momentum evidence offers a directional setup.
+    # A triagem local usa o contexto de 15m e a estrutura de 5m.
+    # O gatilho de entrada será verificado separadamente nos candles fechados de 1m.
     summaries = {
         timeframe: _summarize(frames[timeframe], timeframe)
-        for timeframe in ("15m", "5m")
+        for timeframe in ("15m", "5m", "1m")
     }
-    s15, s5 = summaries["15m"], summaries["5m"]
+    s15, s5, s1 = summaries["15m"], summaries["5m"], summaries["1m"]
     score_15m = _directional_score(s15)
     score_5m = _directional_score(s5)
+    score_1m = _directional_score(s1)
     s15["directional_score"] = score_15m
     s5["directional_score"] = score_5m
+    s1["directional_score"] = score_1m
 
     if score_15m * score_5m <= 0 or abs(score_15m) < 2 or abs(score_5m) < 2:
         reason = (
@@ -677,18 +760,24 @@ def _fast_screen(
         )
         return False, reason, summaries
 
-    candle_atr = s5.get("last_candle", {}).get("range_pct_atr")
-    if candle_atr is not None and candle_atr >= 2.8:
+    candle_atr_5m = s5.get("last_candle", {}).get("range_pct_atr")
+    candle_atr_1m = s1.get("last_candle", {}).get("range_pct_atr")
+    if (
+        (candle_atr_5m is not None and candle_atr_5m >= 2.8)
+        or (candle_atr_1m is not None and candle_atr_1m >= 2.8)
+    ):
         reason = (
-            "Diagnóstico rápido: viés direcional identificado, mas o último candle "
-            "de 5m tem amplitude extrema. Aguardar estabilização; nenhum sinal de entrada."
+            "Diagnóstico rápido: viés direcional identificado, mas foi detectado "
+            "um candle de amplitude extrema em 5m ou 1m. Aguardar estabilização; "
+            "nenhum sinal de entrada."
         )
         return False, reason, summaries
 
     direction = "comprador" if score_15m > 0 else "vendedor"
     reason = (
         f"Triagem aprovada: viés {direction} alinhado em 15m ({score_15m:+d}) "
-        f"e 5m ({score_5m:+d}). Avaliando gatilho objetivo para expiração de 15/30 min."
+        f"e 5m ({score_5m:+d}); viés de curto prazo em 1m ({score_1m:+d}). "
+        "Avaliando gatilho objetivo para expiração de 5 minutos."
     )
     return True, reason, summaries
 
@@ -701,36 +790,38 @@ def _screen_wait_analysis(
 ) -> dict[str, Any]:
     s15 = summaries["15m"]
     s5 = summaries["5m"]
+    s1 = summaries["1m"]
     support = s5.get("support", {}).get("nearest")
     resistance = s5.get("resistance", {}).get("nearest")
-    momentum = s5.get("momentum", {})
-    volatility = s5.get("volatility", {})
-    candle = s5.get("last_candle", {})
+    momentum = s1.get("momentum", {})
+    volatility = s1.get("volatility", {})
+    candle = s1.get("last_candle", {})
     return {
         "decision": "SEM OPERACAO",
         "status": "AGUARDAR",
         "confidence": 0,
-        "timeframe": "5m",
-        "expiry_minutes": 15,
+        "timeframe": "1m",
+        "expiry_minutes": 5,
         "summary": reason,
         "structure": str(s5.get("structure") or "Estrutura indisponível"),
         "trend": (
             f"15m: {s15.get('trend', '—')} (viés {s15.get('directional_score', 0):+d}) · "
-            f"5m: {s5.get('trend', '—')} (viés {s5.get('directional_score', 0):+d})"
+            f"5m: {s5.get('trend', '—')} (viés {s5.get('directional_score', 0):+d}) · "
+            f"1m: {s1.get('trend', '—')} (viés {s1.get('directional_score', 0):+d})"
         ),
-        "zone": f"Suporte próximo: {support if support is not None else '—'} · resistência próxima: {resistance if resistance is not None else '—'}",
+        "zone": f"Suporte 5m próximo: {support if support is not None else '—'} · resistência 5m próxima: {resistance if resistance is not None else '—'}",
         "trigger": reason,
-        "momentum": f"RSI 5m: {momentum.get('rsi14') if momentum.get('rsi14') is not None else '—'} · MACD histograma: {momentum.get('macd_hist') if momentum.get('macd_hist') is not None else '—'}",
-        "volatility": f"ATR% 5m: {volatility.get('atr_pct_price') if volatility.get('atr_pct_price') is not None else '—'} · faixa candle/ATR: {candle.get('range_pct_atr') if candle.get('range_pct_atr') is not None else '—'}",
-        "price_action": f"Último candle 5m: {candle.get('direction', '—')} · corpo {round(float(candle.get('body_pct') or 0), 1)}%",
+        "momentum": f"RSI 1m: {momentum.get('rsi14') if momentum.get('rsi14') is not None else '—'} · MACD histograma: {momentum.get('macd_hist') if momentum.get('macd_hist') is not None else '—'}",
+        "volatility": f"ATR% 1m: {volatility.get('atr_pct_price') if volatility.get('atr_pct_price') is not None else '—'} · faixa candle/ATR: {candle.get('range_pct_atr') if candle.get('range_pct_atr') is not None else '—'}",
+        "price_action": f"Último candle fechado 1m: {candle.get('direction', '—')} · corpo {round(float(candle.get('body_pct') or 0), 1)}%",
         "confluences": [],
         "risks": [reason],
-        "why_now": "Nenhuma entrada será sinalizada enquanto a triagem conservadora não encontrar condições suficientemente coerentes.",
+        "why_now": "Nenhuma entrada será sinalizada enquanto a tendência de 15m/5m e o gatilho de 1m não apresentarem condições suficientemente coerentes.",
         "facts_warning": "",
         "data_quality": "moderada",
         "asset": symbol,
         "is_otc": symbol.endswith("-OTC"),
-        "current_price": frames["5m"][-1]["close"],
+        "current_price": frames["1m"][-1]["close"],
         "source": "Triagem técnica local · sem chamada de IA",
         "automation": {"enabled": False, "orders": False, "execution": False},
     }
@@ -811,10 +902,8 @@ def _ai_market_payload(
     frames: dict[str, list[dict[str, float]]],
     facts: dict[str, Any],
 ) -> dict[str, Any]:
-    # Payload compacto: a análise local já calcula os indicadores; a IA
-    # recebe apenas os sinais relevantes e poucas velas recentes para
-    # preservar o limite de TPM dos provedores gratuitos.
-    candle_limits = {"1m": 5, "5m": 5, "15m": 4}
+    # A IA vê mais candles de 1m para avaliar o gatilho e usa 5m/15m como contexto.
+    candle_limits = {"1m": 8, "5m": 5, "15m": 4}
 
     def compact_summary(rows: list[dict[str, float]], timeframe: str) -> dict[str, Any]:
         full = _summarize(rows, timeframe)
@@ -841,9 +930,9 @@ def _ai_market_payload(
         "asset": symbol,
         "is_otc": symbol.endswith("-OTC"),
         "selection": {
-            "timeframe_options": ["5m", "15m"],
-            "expiry_options_minutes": [15, 30],
-            "instruction": "Escolha apenas expiração de 15 ou 30 minutos. Use 15m para contexto e 5m para estrutura/confirmação; 1m serve somente como apoio de timing. Só indique CALL/PUT com gatilho objetivo e dados coerentes.",
+            "timeframe_options": ["1m"],
+            "expiry_options_minutes": [5],
+            "instruction": "Entrada avaliada em candle fechado de 1m; 15m define o contexto, 5m confirma a estrutura e o gatilho deve ser objetivo no 1m. Expiração fixa de 5 minutos. Só indique CALL/PUT quando os períodos maiores estiverem alinhados e houver gatilho confirmado.",
         },
         "timeframes": {
             tf: {
@@ -859,6 +948,8 @@ def _ai_market_payload(
             "events": _filter_events(symbol, facts),
         },
     }
+
+
 def _ai_message(
     symbol: str,
     frames: dict[str, list[dict[str, float]]],
