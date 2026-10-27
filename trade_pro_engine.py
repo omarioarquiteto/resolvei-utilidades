@@ -273,7 +273,10 @@ def analyze(rows: list[dict[str, Any]], timeframe: str) -> dict[str, Any]:
         + (8 if volatility_expanding else 0)
     )
     trend_score = _clamp(float(trend_score))
-    confluence = round(0.40 * trend_score + 0.30 * volume_score + 0.30 * volatility_score, 1)
+    # A direção é o fator principal; volume e volatilidade continuam obrigatórios
+    # como filtros, mas não devem bloquear quase toda tendência por um score
+    # de volatilidade estruturalmente limitado em mercados direcionais.
+    confluence = round(0.50 * trend_score + 0.25 * volume_score + 0.25 * volatility_score, 1)
 
     signal = None
     expiration = None
@@ -310,6 +313,30 @@ def analyze(rows: list[dict[str, Any]], timeframe: str) -> dict[str, Any]:
         signal = None
         expiration = None
 
+    # Explique cada filtro que bloqueou o sinal. Isso permite depuração sem
+    # afrouxar os controles às cegas e torna o SEM SINAL acionável pelo usuário.
+    blocking_reasons: list[str] = []
+    if candidate not in {"COMPRA", "VENDA"}:
+        blocking_reasons.append(
+            "Direção não identificada: tendência, MACD, ADX ou rompimento ainda não confirmam um cenário."
+        )
+    if candidate in {"COMPRA", "VENDA"} and not trend_ok:
+        blocking_reasons.append("Confirmação direcional insuficiente pelos indicadores de tendência.")
+    if candidate in {"COMPRA", "VENDA"} and not directional_candle_ok:
+        blocking_reasons.append("O candle fechado não confirmou a direção do sinal.")
+    if not volume_has_information:
+        blocking_reasons.append("Dados de volume indisponíveis ou sem variação suficiente.")
+    elif not volume_ok:
+        blocking_reasons.append(
+            f"Volume não confirmado: exige pelo menos 1,02× a média recente e candle na direção do sinal (atual: {volume_ratio:.2f}×)."
+        )
+    if not volatility_ok:
+        blocking_reasons.append("Volatilidade insuficiente para validar a entrada.")
+    if confluence < SIGNAL_THRESHOLD:
+        blocking_reasons.append(
+            f"Confluência de {confluence:.1f}% abaixo do mínimo de {SIGNAL_THRESHOLD:.0f}%."
+        )
+
     return {
         "signal": signal,
         "status": "SINAL_VALIDADO" if signal else "SEM_SINAL",
@@ -318,6 +345,17 @@ def analyze(rows: list[dict[str, Any]], timeframe: str) -> dict[str, Any]:
         "confluence": confluence,
         "threshold": SIGNAL_THRESHOLD,
         "expiration_minutes": expiration,
+        "blocking_reasons": blocking_reasons,
+        "checks": {
+            "direction_detected": candidate in {"COMPRA", "VENDA"},
+            "trend_confirmed": bool(trend_ok),
+            "directional_candle_confirmed": bool(directional_candle_ok),
+            "volume_data_available": bool(volume_has_information),
+            "volume_confirmed": bool(volume_ok),
+            "volatility_confirmed": bool(volatility_ok),
+            "confluence_confirmed": bool(confluence >= SIGNAL_THRESHOLD),
+            "signal_valid": bool(signal),
+        },
         "market": {
             "price": round(price, 8),
             "adx": round(adx_value, 2),
