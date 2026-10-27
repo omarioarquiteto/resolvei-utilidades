@@ -32,8 +32,6 @@ FACTS_CACHE: dict[str, tuple[float, dict[str, Any]]] = {}
 FACTS_CACHE_TTL = 45.0
 AI_PROVIDER_COOLDOWN: dict[str, float] = {}
 AI_PROVIDER_COOLDOWN_SECONDS = 60.0
-CONSULT_RESULT_CACHE: dict[str, tuple[str, float, dict[str, Any]]] = {}
-CONSULT_RESULT_CACHE_TTL = 75.0
 
 def _clean_symbol(symbol: str) -> str:
     s = symbol.strip().upper().replace(" ", "")
@@ -387,6 +385,20 @@ def _compact_candles(rows: list[dict[str, float]], limit: int = 100):
     ] for x in rows[-limit:]]
 
 
+def _chart_frames(
+    frames: dict[str, list[dict[str, float]]],
+) -> dict[str, dict[str, Any]]:
+    """Candles and indicator summaries returned with a single on-demand analysis."""
+    limits = {"1m": 110, "5m": 90, "15m": 70}
+    return {
+        timeframe: {
+            "summary": _summarize(rows, timeframe),
+            "candles": _compact_candles(rows, limits.get(timeframe, 70)),
+        }
+        for timeframe, rows in frames.items()
+    }
+
+
 def _parse_ai_json(raw: str) -> dict[str, Any]:
     text = raw.strip()
     fence = chr(96) * 3
@@ -511,36 +523,6 @@ def _directional_score(summary: dict[str, Any]) -> int:
         score += 1 if pdi > mdi else -1 if pdi < mdi else 0
 
     return score
-
-
-def _frames_fingerprint(frames: dict[str, list[dict[str, float]]]) -> str:
-    # All frames contain closed candles only; an unchanged fingerprint means
-    # an identical technical snapshot, so a new AI request cannot add information.
-    return "|".join(
-        f"{tf}:{int(rows[-1]['time']) if rows else 0}"
-        for tf, rows in sorted(frames.items())
-    )
-
-
-def _cached_consult_response(symbol: str, fingerprint: str, started: float) -> dict[str, Any] | None:
-    cached = CONSULT_RESULT_CACHE.get(symbol)
-    if not cached or cached[0] != fingerprint:
-        return None
-    if time.monotonic() - cached[1] >= CONSULT_RESULT_CACHE_TTL:
-        return None
-
-    payload = dict(cached[2])
-    analysis = dict(payload.get("analysis") or {})
-    diagnostics = dict(analysis.get("diagnostics") or {})
-    diagnostics["serverDurationMs"] = round((time.perf_counter() - started) * 1000)
-    diagnostics["cachedSnapshot"] = True
-    analysis["diagnostics"] = diagnostics
-    payload["analysis"] = analysis
-    return payload
-
-
-def _save_consult_response(symbol: str, fingerprint: str, response: dict[str, Any]) -> None:
-    CONSULT_RESULT_CACHE[symbol] = (fingerprint, time.monotonic(), response)
 
 
 def _entry_trigger(
@@ -1221,12 +1203,12 @@ async def consult(
     symbol = _clean_symbol(req.symbol)
 
     started = time.perf_counter()
+    # A new click is an explicit request for fresh market data: bypass the short
+    # shared chart cache and do not reuse a previous analysis result.
+    LIVE_FRAMES_CACHE.pop(symbol, None)
     frames = await _load_frames(item["client"], symbol)
-    fingerprint = _frames_fingerprint(frames)
-
-    cached_response = _cached_consult_response(symbol, fingerprint, started)
-    if cached_response is not None:
-        return cached_response
+    snapshot_timestamp = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    chart_frames = _chart_frames(frames)
 
     # Quick local screen. It returns a complete diagnostic immediately when
     # the technical context is mixed; the frontend displays it rather than
@@ -1248,9 +1230,9 @@ async def consult(
             "ok": True,
             "found": False,
             "analysis": analysis,
-            "next_check_seconds": 8,
+            "timestamp": snapshot_timestamp,
+            "chart_frames": chart_frames,
         }
-        _save_consult_response(symbol, fingerprint, response)
         return response
 
     facts = await _facts(symbol)
@@ -1264,7 +1246,7 @@ async def consult(
         "asset": symbol,
         "is_otc": symbol.endswith("-OTC"),
         "current_price": selected_rows[-1]["close"],
-        "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "timestamp": snapshot_timestamp,
         "gemini_model": model if provider == "Gemini" else "",
         "ai_provider": provider,
         "ai_model": model,
@@ -1309,19 +1291,18 @@ async def consult(
             analysis["risks"] = (analysis.get("risks") or [])[:5] + ["Cenário direcional não passou na validação final."]
         elif not analysis.get("summary"):
             analysis["summary"] = (
-                "Nenhum gatilho confirmado neste ciclo. A análise técnica foi atualizada "
-                "e o monitoramento continua."
+                "Nenhum gatilho foi confirmado nesta consulta. Clique em CONSULTAR novamente para analisar candles mais recentes."
             )
         if not candidate_trigger:
-            analysis["trigger"] = "Nenhum gatilho objetivo confirmado neste ciclo."
+            analysis["trigger"] = "Nenhum gatilho objetivo confirmado nesta consulta."
 
     response = {
         "ok": True,
         "found": found,
         "analysis": analysis,
-        "next_check_seconds": 8 if not found else 0,
+        "timestamp": snapshot_timestamp,
+        "chart_frames": chart_frames,
     }
-    _save_consult_response(symbol, fingerprint, response)
     return response
 
 @router.get("/assets")
