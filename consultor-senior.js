@@ -109,7 +109,7 @@
           '</div>' +
           '<button id="csConsult" type="button">CONSULTAR</button>' +
         '</section>' +
-        '<div class="cs-ai-choice"><span>HORIZONTE DE ENTRADA</span><b>EXPIRAÇÕES DE 15 OU 30 MINUTOS</b><small>15m define o contexto, 5m confirma a estrutura e 1m serve apenas como apoio de timing. Nenhum sinal é forçado quando falta confirmação.</small></div>' +
+        '<div class="cs-ai-choice"><span>ESTRATÉGIA DE TENDÊNCIA</span><b>EXPIRAÇÃO FIXA DE 5 MINUTOS</b><small>15m define o contexto, 5m confirma a estrutura e 1m procura o gatilho de entrada. COMPRA/VENDA só aparece com confirmação técnica; sem confluência, a indicação é AGUARDAR.</small></div>' +
 
         '<div id="csProgress" class="cs-progress" hidden><span></span><b id="csProgressTitle">Monitorando o mercado…</b><small id="csProgressDetail">Comparando 15m → 5m → 1m · contexto → estrutura → gatilho</small></div>' +
         '<div id="csError" class="cs-msg"></div>' +
@@ -123,7 +123,7 @@
               '<button type="button" data-tf="1m" class="active">1M</button>' +
               '<button type="button" data-tf="5m">5M</button>' +
               '<button type="button" data-tf="15m">15M</button>' +
-              '<span>visualização · o Consultor continua escolhendo o timeframe de entrada automaticamente</span>' +
+              '<span>visualização do gráfico · entrada em 1m · expiração fixa de 5 min</span>' +
             '</div>' +
             '<div id="csChart" class="cs-chart"></div>' +
           '</div>' +
@@ -509,7 +509,7 @@
       '<div class="cs-thinking">' +
         '<div class="cs-spinner"></div>' +
         '<strong>O Consultor está procurando um ponto de entrada…</strong>' +
-        '<span>Ele vai continuar analisando o ativo até encontrar um gatilho confirmado. Timeframe e expiração serão escolhidos automaticamente.</span>' +
+        '<span>Ele compara a tendência de 15m, a estrutura de 5m e o gatilho no candle fechado de 1m. A expiração é fixa em 5 minutos.</span>' +
       '</div>';
 
     while (monitoring && token === monitorToken) {
