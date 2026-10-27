@@ -2,12 +2,10 @@
   const API = "/api/consultor-senior";
   const KEY = "resolvei_consultor_senior_iq_session";
   let assetNames = [];
-  let monitoring = false;
-  let monitorCycle = 0;
-  let monitorToken = 0;
-  let liveTimer = null;
-  let liveBusy = false;
+  let consulting = false;
+  let analysisRequestId = 0;
   let chartTimeframe = "1m";
+  let chartSnapshot = null;
 
   const $ = id => document.getElementById(id);
   const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;" }[c]));
@@ -109,14 +107,14 @@
           '</div>' +
           '<button id="csConsult" type="button">CONSULTAR</button>' +
         '</section>' +
-        '<div class="cs-ai-choice"><span>ESTRATÉGIA DE TENDÊNCIA</span><b>EXPIRAÇÃO FIXA DE 5 MINUTOS</b><small>15m define o contexto, 5m confirma a estrutura e 1m procura o gatilho de entrada. COMPRA/VENDA só aparece com confirmação técnica; sem confluência, a indicação é AGUARDAR.</small></div>' +
+        '<div class="cs-ai-choice"><span>ESTRATÉGIA DE TENDÊNCIA</span><b>EXPIRAÇÃO FIXA DE 5 MINUTOS</b><small>15m define o contexto, 5m confirma a estrutura e 1m procura o gatilho de entrada. Cada clique faz uma única análise; não há monitoramento nem novas consultas automáticas.</small></div>' +
 
-        '<div id="csProgress" class="cs-progress" hidden><span></span><b id="csProgressTitle">Monitorando o mercado…</b><small id="csProgressDetail">Comparando 15m → 5m → 1m · contexto → estrutura → gatilho</small></div>' +
+        '<div id="csProgress" class="cs-progress" hidden><span></span><b id="csProgressTitle">Analisando o gráfico atual…</b><small id="csProgressDetail">Consultando candles atuais em 15m, 5m e 1m</small></div>' +
         '<div id="csError" class="cs-msg"></div>' +
         '<section id="csLive" class="cs-live-layout" hidden>' +
           '<div class="cs-live-chart card">' +
             '<div class="cs-live-head">' +
-              '<div><small>MONITORAMENTO EM TEMPO REAL</small><h2 id="csChartTitle">—</h2></div>' +
+              '<div><small>GRÁFICO DA CONSULTA ATUAL</small><h2 id="csChartTitle">—</h2></div>' +
               '<div class="cs-live-price"><strong id="csLivePrice">—</strong><span id="csLiveClock">—</span></div>' +
             '</div>' +
             '<div class="cs-chart-tabs">' +
@@ -128,7 +126,7 @@
             '<div id="csChart" class="cs-chart"></div>' +
           '</div>' +
           '<aside class="cs-trace card">' +
-            '<div class="cs-trace-head"><small>O QUE O CONSULTOR ESTÁ LENDO</small><b id="csTraceCycle">CICLO 0</b></div>' +
+            '<div class="cs-trace-head"><small>O QUE O CONSULTOR ESTÁ LENDO</small><b id="csTraceCycle">AGUARDANDO CONSULTA</b></div>' +
             '<div id="csTraceList" class="cs-trace-list">' +
               traceItem("context", "CONTEXTO", "Aguardando leitura…") +
               traceItem("structure", "ESTRUTURA", "Aguardando leitura…") +
@@ -146,67 +144,42 @@
       '</div>';
 
     $("csLogout").onclick = async () => {
-      stopLiveMarket();
+      analysisRequestId += 1;
+      consulting = false;
       try { await call("/logout", { method: "POST" }); } catch (_) {}
       clearSession();
       renderRoute();
     };
 
-    $("csConsult").onclick = () => monitoring ? stopMonitoring() : consult();
+    $("csConsult").onclick = () => consult();
 
     document.querySelectorAll(".cs-chart-tabs button").forEach(button => {
       button.onclick = () => {
         chartTimeframe = button.dataset.tf || "1m";
         document.querySelectorAll(".cs-chart-tabs button").forEach(b => b.classList.toggle("active", b === button));
-        refreshLiveMarket(true);
+        renderSelectedChart();
       };
     });
   }
 
-  function progress(show, cycle = 0) {
+  function progress(show, asset = "") {
     const box = $("csProgress");
     const button = $("csConsult");
-    const asset = $("csAsset")?.value || "";
+    const select = $("csAsset");
     if (box) box.hidden = !show;
 
     if (show) {
-      $("csProgressTitle").textContent = cycle
-        ? "Analisando " + asset + " · ciclo " + cycle
-        : "Monitorando o mercado…";
+      $("csProgressTitle").textContent = "Analisando " + asset + "…";
       $("csProgressDetail").textContent =
-        "Leitura rápida · contexto 15m → estrutura 5m → gatilho 1m · expiração 5 min";
+        "Uma consulta única · contexto 15m → estrutura 5m → gatilho 1m";
     }
 
     if (button) {
-      button.disabled = false;
-      button.textContent = show ? "PARAR CONSULTA" : "CONSULTAR";
+      button.disabled = show;
+      button.textContent = show ? "ANALISANDO…" : "CONSULTAR";
     }
-
-    const select = $("csAsset");
     if (select) select.disabled = show;
-  }
-
-  function sleep(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
-  }
-
-  function stopLiveMarket() {
-    if (liveTimer) {
-      clearInterval(liveTimer);
-      liveTimer = null;
-    }
-    liveBusy = false;
-  }
-
-  function startLiveMarket() {
-    const box = $("csLive");
-    if (box) box.hidden = false;
-    stopLiveMarket();
-    refreshLiveMarket(true);
-    liveTimer = setInterval(() => refreshLiveMarket(false), 4000);
-  }
-
-  function traceItem(id, title, value) {
+  }  function traceItem(id, title, value) {
     return '<article class="cs-trace-item" id="csTrace-' + id + '">' +
       '<span class="cs-trace-dot"></span>' +
       '<div><small>' + title + '</small><p>' + esc(value) + '</p></div>' +
@@ -227,12 +200,12 @@
     return Number.isFinite(n) ? n.toFixed(2) + "%" : "—";
   }
 
-  function updateTrace(snapshot, cycle) {
+  function updateTrace(snapshot) {
     const f = snapshot?.frames || {};
     const s15 = f["15m"]?.summary || {};
     const s5 = f["5m"]?.summary || {};
     const s1 = f["1m"]?.summary || {};
-    $("csTraceCycle") && ($("csTraceCycle").textContent = "CICLO " + (cycle || 0));
+    $("csTraceCycle") && ($("csTraceCycle").textContent = "ANÁLISE CONCLUÍDA");
 
     traceSet("context", "15m · " + (s15.trend || "indefinido"), "reading");
     traceSet("structure", "5m · " + (s5.structure || "indefinida"), "reading");
@@ -266,20 +239,19 @@
       "reading"
     );
 
-    traceSet("trigger", "Aguardando evento objetivo e confirmação no 1m.", "waiting");
-  }
-
-  function updateTraceFromAnalysis(a, found) {
+    traceSet("trigger", "Aguardando interpretação do gatilho de entrada.", "waiting");
+  }  function updateTraceFromAnalysis(a, found) {
     traceSet("context", a.trend || "Contexto avaliado", "reading");
     traceSet("structure", a.structure || "Estrutura avaliada", "reading");
     traceSet("regions", a.zone || "Região avaliada", "reading");
     traceSet("price", a.price_action || "Price action avaliado", "reading");
     traceSet("momentum", a.momentum || "Momentum avaliado", "reading");
     traceSet("volatility", a.volatility || "Volatilidade avaliada", "reading");
+    $("csTraceCycle") && ($("csTraceCycle").textContent = "ANÁLISE CONCLUÍDA");
     traceSet("trigger",
       found
         ? ((a.trigger || "Gatilho confirmado") + " · " + (a.status || "AGORA"))
-        : (a.trigger || "Nenhum gatilho confirmado neste ciclo."),
+        : (a.trigger || "Nenhum gatilho confirmado nesta consulta."),
       found ? "confirmed" : "waiting"
     );
   }
@@ -290,6 +262,16 @@
     const out = [values[0]];
     for (let i = 1; i < values.length; i++) out.push(values[i] * k + out[i - 1] * (1 - k));
     return out;
+  }
+
+  function renderSelectedChart() {
+    const frame = chartSnapshot?.frames?.[chartTimeframe];
+    if (!frame) return;
+    drawChart({
+      ...frame,
+      asset: chartSnapshot.asset,
+      timestamp: chartSnapshot.timestamp
+    });
   }
 
   function drawChart(payload) {
@@ -359,36 +341,6 @@
     $("csChartTitle").textContent = payload.asset + " · " + selected;
     $("csLivePrice").textContent = Number(last).toFixed(5);
     $("csLiveClock").textContent = payload.timestamp ? new Date(payload.timestamp).toLocaleTimeString("pt-BR") : "—";
-  }
-
-  async function refreshLiveMarket(force) {
-    if (!monitoring || liveBusy) return;
-    const asset = ($("csAsset")?.value || "").trim().toUpperCase();
-    if (!asset) return;
-    liveBusy = true;
-    try {
-      const data = await call("/market?symbol=" + encodeURIComponent(asset) + "&timeframe=" + encodeURIComponent(chartTimeframe));
-      drawChart(data);
-      updateTrace(data, monitorCycle);
-    } catch (error) {
-      if (force) {
-        const err = $("csError");
-        if (err) err.textContent = "⚠️ Gráfico ao vivo: " + error.message;
-      }
-    } finally {
-      liveBusy = false;
-    }
-  }
-
-  function stopMonitoring() {
-    monitoring = false;
-    monitorToken += 1;
-    stopLiveMarket();
-    progress(false);
-    const live = $("csLive");
-    if (live) live.hidden = true;
-    const error = $("csError");
-    if (error) error.textContent = "Monitoramento interrompido pelo usuário.";
   }
 
   async function loadAssets() {
@@ -488,7 +440,8 @@
   }
 
   async function consult() {
-    const asset = ($("csAsset").value || "").trim().toUpperCase();
+    if (consulting) return;
+    const asset = ($("csAsset")?.value || "").trim().toUpperCase();
     const error = $("csError");
     const result = $("csResult");
 
@@ -497,91 +450,72 @@
       return;
     }
 
+    consulting = true;
+    const requestId = ++analysisRequestId;
     error.textContent = "";
-    monitoring = true;
-    monitorCycle = 0;
-    const token = ++monitorToken;
+    chartSnapshot = null;
+    progress(true, asset);
 
-    progress(true, 0);
-    startLiveMarket();
-
+    const live = $("csLive");
+    if (live) live.hidden = false;
+    $("csChart").innerHTML = '<div class="cs-chart-empty">Obtendo candles para esta consulta…</div>';
+    $("csTraceCycle").textContent = "ANALISANDO";
     result.innerHTML =
       '<div class="cs-thinking">' +
         '<div class="cs-spinner"></div>' +
-        '<strong>O Consultor está procurando um ponto de entrada…</strong>' +
-        '<span>Ele compara a tendência de 15m, a estrutura de 5m e o gatilho no candle fechado de 1m. A expiração é fixa em 5 minutos.</span>' +
+        '<strong>Analisando o gráfico atual…</strong>' +
+        '<span>Esta ação fará uma única leitura dos candles disponíveis. Para atualizar a análise, clique novamente em CONSULTAR.</span>' +
       '</div>';
 
-    while (monitoring && token === monitorToken) {
-      monitorCycle += 1;
-      progress(true, monitorCycle);
+    try {
+      // One request per button click. No interval, polling loop or automatic retry.
+      const data = await call("/consult", {
+        method: "POST",
+        body: JSON.stringify({ symbol: asset })
+      });
+      if (requestId !== analysisRequestId) return;
 
-      try {
-        const data = await call("/consult", {
-          method: "POST",
-          body: JSON.stringify({ symbol: asset })
-        });
+      if (!data.analysis) {
+        throw new Error("A API não retornou uma análise para este ativo.");
+      }
 
-        if (data.found && data.analysis) {
-          monitoring = false;
-          stopLiveMarket();
-          const live = $("csLive");
-          if (live) live.hidden = false;
-          updateTraceFromAnalysis(data.analysis, true);
-          result.innerHTML = resultCard(data.analysis);
+      chartSnapshot = {
+        asset: data.analysis.asset || asset,
+        timestamp: data.timestamp || data.analysis.timestamp || new Date().toISOString(),
+        frames: data.chart_frames || {}
+      };
+      renderSelectedChart();
+      updateTrace({ frames: chartSnapshot.frames });
+      updateTraceFromAnalysis(data.analysis, Boolean(data.found));
+      result.innerHTML = resultCard(data.analysis);
 
-          const provider = data.analysis?.ai_provider || "IA";
-          const model = data.analysis?.ai_model || data.analysis?.gemini_model || "";
-          const tf = data.analysis?.timeframe || "—";
-          const exp = data.analysis?.expiry_minutes || "—";
-          $("csMeta").textContent =
-            provider + (model ? " · " + model : "") +
-            " · " + tf + " · expiração " + exp + " min · ENTRADA ENCONTRADA";
-
-          progress(false);
-          return;
-        }
-
-        error.textContent = "";
-        if (data.analysis) {
-          updateTraceFromAnalysis(data.analysis, false);
-          // Exibe a leitura técnica a cada ciclo. Não deixa o usuário esperando
-          // indefinidamente por um sinal final para enxergar o diagnóstico.
-          result.innerHTML = resultCard(data.analysis);
-          const source = data.analysis?.ai_provider || (data.analysis?.diagnostics?.aiCalled ? "IA" : "análise local");
-          const duration = data.analysis?.diagnostics?.serverDurationMs;
-          $("csMeta").textContent =
-            source + (duration != null ? " · " + duration + " ms" : "") +
-            " · diagnóstico atualizado · ciclo " + monitorCycle;
-        }
-
-        const waitSeconds = Math.max(8, Math.min(15, Number(data.next_check_seconds || 8)));
-        $("csProgressDetail").textContent =
-          "Próxima leitura em " + waitSeconds + "s · diagnóstico local rápido + confirmação multi-timeframe";
-
-        await sleep(waitSeconds * 1000);
-      } catch (ex) {
-        if (!monitoring || token !== monitorToken) break;
-
-        // Erros de provedor/candles podem ser transitórios. Não encerramos o
-        // monitoramento: mostramos o problema e tentamos novamente.
-        error.textContent = "⚠️ " + ex.message + " · nova tentativa automática.";
-        result.innerHTML =
-          '<div class="cs-thinking">' +
-            '<div class="cs-spinner"></div>' +
-            '<strong>Reconectando a análise…</strong>' +
-            '<span>O Consultor continuará tentando enquanto a sessão da IQ Option estiver ativa.</span>' +
-          '</div>';
-
-        const retrySeconds = /429|rate limit|limite/i.test(ex.message) ? 30 : 15;
-        $("csProgressDetail").textContent =
-          "Nova tentativa em " + retrySeconds + "s · mantendo o monitoramento ativo";
-        await sleep(retrySeconds * 1000);
+      const source = data.analysis?.ai_provider ||
+        (data.analysis?.diagnostics?.aiCalled ? "IA" : "análise técnica local");
+      const duration = data.analysis?.diagnostics?.serverDurationMs;
+      const tf = data.analysis?.timeframe || "1m";
+      const exp = data.analysis?.expiry_minutes || 5;
+      const decision = data.found ? "SINAL CONFIRMADO" : "AGUARDAR";
+      $("csMeta").textContent =
+        source +
+        (duration != null ? " · " + duration + " ms" : "") +
+        " · " + tf + " · expiração " + exp + " min · " + decision;
+    } catch (ex) {
+      if (requestId !== analysisRequestId) return;
+      error.textContent = "⚠️ " + ex.message;
+      result.innerHTML =
+        '<div class="cs-empty">' +
+          '<strong>Não foi possível concluir esta análise.</strong>' +
+          '<span>Verifique a conexão da IQ Option e clique em CONSULTAR para tentar novamente.</span>' +
+        '</div>';
+      $("csTraceCycle").textContent = "FALHA NA CONSULTA";
+      const chart = $("csChart");
+      if (chart) chart.innerHTML = '<div class="cs-chart-empty">Nenhum gráfico carregado nesta consulta.</div>';
+    } finally {
+      if (requestId === analysisRequestId) {
+        consulting = false;
+        progress(false);
       }
     }
-
-    progress(false);
-    stopLiveMarket();
   }
 
   async function renderConnected() {
