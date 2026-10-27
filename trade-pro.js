@@ -99,6 +99,7 @@
           '<button id="tpAnalyze" type="button">ANALISAR AGORA</button>' +
         '</section>' +
         '<section class="tp-toolbar"><span id="tpConnectionStatus">Carregando catálogo de ativos…</span>' +
+          '<span id="tpCandleFreshness" class="tp-candle-freshness">Candles: aguardando análise</span>' +
           '<label class="tp-auto"><input id="tpAuto" type="checkbox"> Análise automática a cada 20 s</label></section>' +
         '<section class="tp-summary-grid">' +
           '<article id="tpSignalCard" class="tp-card tp-signal tp-neutral"><small>DECISÃO ATUAL</small><strong id="tpSignal">AGUARDANDO</strong><span id="tpSignalCaption">Selecione um ativo e inicie a análise.</span></article>' +
@@ -113,7 +114,7 @@
               '<div><span>ADX</span><b id="tpAdx">—</b></div><div><span>ATR relativo</span><b id="tpAtr">—</b></div>' +
               '<div><span>Volume relativo</span><b id="tpVolume">—</b></div><div><span>Velocidade (ATR)</span><b id="tpVelocity">—</b></div>' +
             '</div>' +
-            '<div id="tpChecks" class="tp-checks"></div>' +
+            '<div id="tpChecks" class="tp-checks"></div><div id="tpBlockers" class="tp-blockers" role="status"></div>' +
           '</article>' +
           '<article class="tp-card"><div class="tp-section-title"><div><small>PONTUAÇÃO DA CONFLUÊNCIA</small><h2>Filtros simultâneos</h2></div></div>' +
             '<div class="tp-score-row"><span>Tendência</span><div class="tp-meter"><i id="tpTrendMeter"></i></div><b id="tpTrendScore">0%</b></div>' +
@@ -180,36 +181,65 @@
   }
 
   function show(data) {
-    const hasSignal = ["COMPRA", "VENDA"].includes(data.signal);
+    const quality = data.data_quality || {};
+    const stale = Boolean(quality.stale || data.status === "DADOS_DESATUALIZADOS");
+    const hasSignal = !stale && ["COMPRA", "VENDA"].includes(data.signal);
     const direction = data.signal === "COMPRA" ? "tp-buy" : data.signal === "VENDA" ? "tp-sell" : "tp-neutral";
     $("tpSignalCard").className = "tp-card tp-signal " + direction;
     $("tpSignal").textContent = hasSignal ? data.signal : "SEM SINAL";
     $("tpSignalCaption").textContent = hasSignal
       ? "Sinal validado — " + data.confluence + "% de confluência."
-      : "Filtros não confirmados simultaneamente. Aguardar nova leitura.";
+      : stale
+        ? "Entrada bloqueada porque os candles estão desatualizados."
+        : "Filtros não confirmados simultaneamente. Veja abaixo o que bloqueou a entrada.";
     $("tpScore").textContent = Math.round(Number(data.confluence) || 0);
     $("tpMeter").style.width = Math.max(0, Math.min(100, Number(data.confluence) || 0)) + "%";
     $("tpThreshold").textContent = (data.threshold || 72) + "%";
     $("tpExpiration").textContent = hasSignal ? data.expiration_minutes + " MIN" : "—";
     $("tpExpiryCaption").textContent = hasSignal ? "Estimativa analítica, não uma ordem." : "Indefinida enquanto não houver sinal.";
     $("tpRegime").textContent = data.regime || "Sem classificação";
-    $("tpMode").textContent = hasSignal ? "VALIDADO" : (data.regime || "SEM SINAL");
+    $("tpMode").textContent = hasSignal ? "VALIDADO" : stale ? "DADOS ANTIGOS" : (data.regime || "SEM SINAL");
     $("tpMode").className = "tp-chip " + (hasSignal ? "tp-chip-ok" : "tp-chip-muted");
     $("tpReason").textContent = data.reason || "Sem justificativa disponível.";
     const market = data.market || {};
+    const freshness = $("tpCandleFreshness");
+    if (freshness) {
+      if (quality.last_candle_age_seconds == null) {
+        freshness.textContent = "Atualidade dos candles: não informada";
+        freshness.className = "tp-candle-freshness";
+      } else {
+        const ageSeconds = Math.round(Number(quality.last_candle_age_seconds) || 0);
+        const maximumAge = Number(quality.max_allowed_age_seconds) || 0;
+        freshness.textContent = (stale ? "DADOS ANTIGOS" : "Candle atualizado") +
+          " · último fechamento há " + ageSeconds + " s" +
+          (maximumAge ? " · limite " + maximumAge + " s" : "");
+        freshness.className = "tp-candle-freshness " + (stale ? "tp-freshness-stale" : "tp-freshness-ok");
+      }
+    }
     $("tpAdx").textContent = market.adx == null ? "—" : Number(market.adx).toFixed(1);
     $("tpAtr").textContent = market.atr_ratio == null ? "—" : Number(market.atr_ratio).toFixed(2) + "×";
     $("tpVolume").textContent = market.volume_ratio == null ? "—" : Number(market.volume_ratio).toFixed(2) + "×";
     $("tpVelocity").textContent = market.velocity_atr == null ? "—" : Number(market.velocity_atr).toFixed(2);
+    const checkState = data.checks || {};
     const checks = [
-      ["trend_confirmed", "Tendência"],
-      ["volume_confirmed", "Volume"],
-      ["volatility_confirmed", "Volatilidade"]
+      ["direction_detected", "Direção", checkState.direction_detected],
+      ["trend_confirmed", "Tendência", market.trend_confirmed],
+      ["volume_data_available", "Dados de volume", market.volume_data_available],
+      ["volume_confirmed", "Volume", market.volume_confirmed],
+      ["volatility_confirmed", "Volatilidade", market.volatility_confirmed],
+      ["confluence_confirmed", "Confluência", checkState.confluence_confirmed],
+      ["data_fresh", "Atualidade dos candles", !stale]
     ];
     $("tpChecks").innerHTML = checks.map(pair => {
-      const ok = Boolean(market[pair[0]]);
+      const ok = Boolean(pair[2]);
       return '<span class="' + (ok ? "tp-check-ok" : "tp-check-no") + '">' + (ok ? "✓ " : "× ") + pair[1] + (ok ? " confirmado" : " não confirmado") + '</span>';
     }).join("");
+    const blockers = Array.isArray(data.blocking_reasons) ? data.blocking_reasons : [];
+    $("tpBlockers").innerHTML = hasSignal
+      ? '<strong>Filtros aprovados.</strong><span>Condições simultâneas confirmadas para este candle. Isso não representa garantia de resultado.</span>'
+      : blockers.length
+        ? '<strong>Por que não houve sinal</strong><ul>' + blockers.map(item => '<li>' + esc(item) + '</li>').join("") + '</ul>'
+        : '<strong>Por que não houve sinal</strong><span>A API não retornou detalhes dos filtros nesta resposta. Execute uma nova análise.</span>';
     const scores = data.scores || {};
     displayScore("tpTrend", scores.trend);
     displayScore("tpVolume", scores.volume);
