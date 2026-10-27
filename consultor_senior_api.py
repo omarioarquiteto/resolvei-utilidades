@@ -1259,7 +1259,7 @@ async def consult(
     found = _entry_confirmed(analysis, frames, symbol)
 
     selected_tf = analysis["timeframe"]
-    selected_rows = frames.get(selected_tf) or frames["5m"]
+    selected_rows = frames.get(selected_tf) or frames["1m"]
     analysis.update({
         "asset": symbol,
         "is_otc": symbol.endswith("-OTC"),
@@ -1283,6 +1283,15 @@ async def consult(
             "cachedSnapshot": False,
         },
     })
+
+    local_trigger = _entry_trigger(frames.get("1m", []), analysis.get("decision", ""))
+    if local_trigger:
+        analysis["diagnostics"]["entryTrigger"] = local_trigger
+        if found:
+            ai_trigger = str(analysis.get("trigger") or "").strip()
+            analysis["trigger"] = (
+                f"{ai_trigger} Confirmação técnica independente: {local_trigger}."
+            )[:1000]
 
     if not found:
         candidate = analysis["decision"] if analysis["decision"] in {"CALL", "PUT"} else ""
