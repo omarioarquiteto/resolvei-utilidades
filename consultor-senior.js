@@ -240,7 +240,9 @@
     );
 
     traceSet("trigger", "Aguardando interpretação do gatilho de entrada.", "waiting");
-  }  function updateTraceFromAnalysis(a, found) {
+  }
+
+  function updateTraceFromAnalysis(a, found) {
     traceSet("context", a.trend || "Contexto avaliado", "reading");
     traceSet("structure", a.structure || "Estrutura avaliada", "reading");
     traceSet("regions", a.zone || "Região avaliada", "reading");
