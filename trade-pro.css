@@ -73,3 +73,52 @@
 #tpLoginMsg{color:#ff8194;font-size:12px;margin-top:12px;overflow-wrap:anywhere}
 @media(max-width:850px){.tp-summary-grid{grid-template-columns:1fr 1fr}.tp-signal{grid-column:1/-1;min-height:130px}.tp-two-col{grid-template-columns:1fr}.tp-config{grid-template-columns:1fr 1fr}.tp-asset-label{grid-column:1/-1}.tp-config>button{width:100%}}
 @media(max-width:560px){.tp-app{padding:10px;border-radius:12px}.tp-app header{align-items:flex-start}.tp-app header p{max-width:230px}.tp-head-actions{gap:5px;flex-direction:column;align-items:flex-end}.tp-head-actions button{padding:7px 9px}.tp-config{grid-template-columns:1fr}.tp-asset-label{grid-column:auto}.tp-config>button{height:44px}.tp-toolbar{align-items:flex-start;flex-direction:column}.tp-summary-grid{grid-template-columns:1fr}.tp-signal{grid-column:auto}.tp-confidence,.tp-expiration{min-height:auto}.tp-metrics{grid-template-columns:1fr 1fr}.tp-log-list{grid-template-columns:1fr}.tp-score-row{grid-template-columns:78px minmax(45px,1fr) 40px;gap:7px}.tp-card{padding:14px}}
+
+
+/* Diagnóstico explícito dos filtros e da atualidade dos candles. */
+.tp-candle-freshness {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--tp-muted, #64748b);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.tp-candle-freshness.tp-freshness-ok {
+  color: var(--tp-success, #15803d);
+}
+.tp-candle-freshness.tp-freshness-stale {
+  color: var(--tp-danger, #b91c1c);
+  font-weight: 700;
+}
+.tp-blockers {
+  display: block;
+  margin-top: 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--tp-border, #dbe3ee);
+  border-radius: 10px;
+  background: var(--tp-panel, #f8fafc);
+  color: var(--tp-text, #334155);
+  font-size: 13px;
+  line-height: 1.55;
+}
+.tp-blockers > strong {
+  display: block;
+  margin-bottom: 6px;
+}
+.tp-blockers ul {
+  margin: 6px 0 0;
+  padding-left: 20px;
+}
+.tp-blockers li + li {
+  margin-top: 4px;
+}
+@media (max-width: 700px) {
+  .tp-candle-freshness {
+    width: 100%;
+    order: 3;
+  }
+  .tp-blockers {
+    padding: 10px 11px;
+  }
+}
