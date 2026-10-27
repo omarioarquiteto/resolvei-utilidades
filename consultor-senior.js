@@ -174,7 +174,7 @@
         ? "Analisando " + asset + " · ciclo " + cycle
         : "Monitorando o mercado…";
       $("csProgressDetail").textContent =
-        "Leitura rápida · contexto 15m → confirmação 5m · horizonte 15/30 min";
+        "Leitura rápida · contexto 15m → estrutura 5m → gatilho 1m · expiração 5 min";
     }
 
     if (button) {
