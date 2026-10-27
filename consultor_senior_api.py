@@ -1294,7 +1294,7 @@ async def consult(
                 "Nenhum gatilho foi confirmado nesta consulta. Clique em CONSULTAR novamente para analisar candles mais recentes."
             )
         if not candidate_trigger:
-            analysis["trigger"] = "Nenhum gatilho objetivo confirmado neste ciclo."
+            analysis["trigger"] = "Nenhum gatilho objetivo confirmado nesta consulta."
 
     response = {
         "ok": True,
