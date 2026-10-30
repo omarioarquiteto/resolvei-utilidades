@@ -29,23 +29,61 @@ class AltosLucrosAnalyzeRequest(BaseModel):
 
 
 def _wait_for_strikes(asset_client: Any, symbol: str, duration: int) -> dict[str, Any]:
-    """Leitura limitada do mesmo buffer usado pela iqoptionapi.
-
-    get_realtime_strike_list() da biblioteca faz busy-wait sem timeout. Aqui
-    consultamos o buffer interno equivalente com limite de tempo para não
-    prender uma thread do servidor quando a IQ Option não publica strikes.
-    """
+    """Combina o strike-list (preço + IDs) com os payouts do stream digital."""
     api = getattr(asset_client, "api", None)
+    if api is None:
+        return {}
+
+    # A iqoptionapi mantém strike_list como resposta global da conexão.
+    # Zerar antes da requisição evita reutilizar a resposta de outro vencimento.
+    api.strike_list = None
+    try:
+        api.get_strike_list(symbol, duration)
+    except Exception as exc:
+        raise RuntimeError(f"Não foi possível solicitar a grade de strikes: {exc}") from exc
+
     deadline = time.monotonic() + STRIKE_TIMEOUT_SECONDS
     while time.monotonic() < deadline:
-        store = getattr(api, "instrument_quites_generated_data", None)
-        if isinstance(store, dict):
-            by_symbol = store.get(symbol)
-            if isinstance(by_symbol, dict):
-                quotes = by_symbol.get(duration * 60)
-                if isinstance(quotes, dict) and quotes:
-                    return dict(quotes)
+        raw = getattr(api, "strike_list", None)
+        if isinstance(raw, dict):
+            rows = (raw.get("msg") or {}).get("strike") or []
+            if rows:
+                payout_store = getattr(api, "instrument_quites_generated_data", None)
+                payouts = {}
+                if isinstance(payout_store, dict):
+                    by_symbol = payout_store.get(symbol)
+                    if isinstance(by_symbol, dict):
+                        payouts = by_symbol.get(duration * 60) or {}
+
+                result: dict[str, Any] = {}
+                matching_ids = 0
+                for row in rows:
+                    try:
+                        # Mesmo fator de conversão empregado pelo método
+                        # get_strike_list() da stable_api da IQ Option.
+                        strike = float(row["value"]) * 10e-7
+                        call_id = str(row["call"]["id"])
+                        put_id = str(row["put"]["id"])
+                    except (KeyError, TypeError, ValueError):
+                        continue
+
+                    call_payout = payouts.get(call_id) if isinstance(payouts, dict) else None
+                    put_payout = payouts.get(put_id) if isinstance(payouts, dict) else None
+                    if call_payout is not None:
+                        matching_ids += 1
+                    if put_payout is not None:
+                        matching_ids += 1
+                    result[f"{strike:.8f}"] = {
+                        "call": {"profit": call_payout, "id": call_id},
+                        "put": {"profit": put_payout, "id": put_id},
+                    }
+
+                # Só entrega a grade quando os IDs retornados no strike-list
+                # existem também no stream de payouts da mesma conexão.
+                if result and matching_ids:
+                    return result
         time.sleep(0.12)
+
     return {}
 
 
@@ -71,9 +109,9 @@ async def _digital_strikes(item: dict[str, Any], symbol: str, duration: int) -> 
             raise HTTPException(
                 status_code=504,
                 detail=(
-                    f"A IQ Option não publicou os strikes digitais de {duration} minutos "
-                    "dentro do limite de consulta. Confirme se o ativo e o vencimento "
-                    "estão disponíveis no modo Digital."
+                    f"A IQ Option não disponibilizou a grade de strikes/payouts digitais "
+                    f"de {duration} minutos para {symbol}. Confirme a disponibilidade "
+                    "do ativo no modo Digital e tente novamente."
                 ),
             )
         return quotes
