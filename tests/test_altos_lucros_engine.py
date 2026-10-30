@@ -60,6 +60,26 @@ class TestAltosLucrosEngine(unittest.TestCase):
         self.assertEqual(result["symbol_price"], round(current * 1.001, 8))
         self.assertEqual(result["reference_price_source"], "live_m1")
 
+    def test_reads_iqoption_client_price_generated_grid(self):
+        candles = rising_candles()
+        current = candles[-1]["close"]
+        strike = round(current * 1.00005, 6)
+        # Formato gravado pela iqoptionapi ao processar client-price-generated.
+        snapshot = {
+            f"{strike:.8f}": {
+                "call": {"id": "digital-call-contract", "profit": 250.0},
+                "put": {"id": "digital-put-contract", "profit": 199.0},
+            },
+            "SPT": {
+                "call": {"id": "spot-contract", "profit": 0.0},
+                "put": {"id": "spot-contract", "profit": 0.0},
+            },
+        }
+        result = analyze_targets(candles, snapshot, 5)
+        self.assertEqual(result["status"], "ALVO_VALIDADO")
+        self.assertEqual(result["recommendation"]["direction"], "ACIMA")
+        self.assertEqual(result["recommendation"]["target_price"], strike)
+
     def test_rejects_unsupported_horizon(self):
         with self.assertRaisesRegex(ValueError, "5 ou 15"):
             analyze_targets(rising_candles(), {}, 10)
