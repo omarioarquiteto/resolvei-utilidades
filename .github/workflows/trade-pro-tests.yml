@@ -21,6 +21,9 @@ on:
       - "altos_lucros_*.py"
       - "altos-lucros.js"
       - "tests/test_trade_pro_engine.py"
+      - "tests/test_altos_lucros_marketdata.py"
+      - "tests/test_altos_lucros_catalog.py"
+      - "tests/test_altos_lucros_api.py"
       - "tests/test_altos_lucros_engine.py"
       - ".github/workflows/trade-pro-tests.yml"
 
