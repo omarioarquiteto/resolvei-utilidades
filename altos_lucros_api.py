@@ -439,8 +439,9 @@ async def _digital_strikes(
 async def assets(x_iq_session: str | None = Header(default=None)) -> dict[str, Any]:
     item = _get_session(x_iq_session)
     catalog = await _load_assets(item)
-    _install_digital_quote_callback(item, item.get("asset_client"), catalog.get("assets", []))
     digital = await _load_digital_catalog(item)
+    asset_client = await _ensure_asset_client_connected(item)
+    _install_digital_quote_callback(item, asset_client, catalog.get("assets", []))
 
     if digital.get("available"):
         digital_by_name = digital.get("assets") or {}
