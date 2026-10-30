@@ -205,6 +205,17 @@ async def run(
 
     if not closed:
         raise HTTPException(status_code=502, detail="A IQ Option não retornou candles M1 fechados.")
+    # Prefere o close da vela M1 ainda em formação, que é a melhor referência
+    # disponível na resposta de candles para comparar os strikes ao preço atual.
+    latest_raw = rows[-1] if rows else None
+    live_reference = (
+        float(latest_raw["close"])
+        if latest_raw
+        and latest_raw["time"] + 60 > now + 0.2
+        and now - latest_raw["time"] <= 90
+        else None
+    )
+    reference_price = live_reference if live_reference and live_reference > 0 else float(closed[-1]["close"])
     candle_close_epoch = float(closed[-1]["time"]) + 60
     data_age = round(max(0.0, now - candle_close_epoch), 1)
     if data_age > 90:
@@ -221,6 +232,7 @@ async def run(
             quotes,
             horizon,
             MINIMUM_PAYOUT_PERCENT,
+            reference_price,
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
@@ -234,6 +246,8 @@ async def run(
     result.update({
         "ok": True,
         "symbol": symbol,
+        "reference_price": round(reference_price, 8),
+        "reference_price_source": "live_m1" if live_reference is not None else "last_closed_m1",
         "timestamp": datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z"),
         "data_quality": {
             "returned_candles": len(raw or []),
