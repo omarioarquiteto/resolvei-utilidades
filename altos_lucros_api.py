@@ -28,62 +28,70 @@ class AltosLucrosAnalyzeRequest(BaseModel):
     horizon_minutes: int = Field(default=5, ge=5, le=15)
 
 
+def _clear_strike_buffer(asset_client: Any, symbol: str, duration: int) -> None:
+    """Remove qualquer grade anterior para só aceitar dados da nova assinatura."""
+    api = getattr(asset_client, "api", None)
+    store = getattr(api, "instrument_quites_generated_data", None)
+    if isinstance(store, dict):
+        try:
+            store[symbol][duration * 60] = {}
+        except Exception:
+            pass
+    raw_store = getattr(api, "instrument_quotes_generated_raw_data", None)
+    if isinstance(raw_store, dict):
+        try:
+            raw_store[symbol][duration * 60] = {}
+        except Exception:
+            pass
+
+
 def _wait_for_strikes(asset_client: Any, symbol: str, duration: int) -> dict[str, Any]:
-    """Combina o strike-list (preço + IDs) com os payouts do stream digital."""
+    """Lê a grade que a iqoptionapi monta ao receber client-price-generated.
+
+    A implementação atual da biblioteca assina price-splitter.client-price-generated.
+    O WebSocket converte essa resposta no evento client-price-generated e grava a
+    grade completa (preço, IDs e payouts CALL/PUT) em
+    instrument_quites_generated_data[symbol][period]. Não se deve pedir
+    get_strike_list() nem esperar instrument-quotes-generated: esse é outro
+    protocolo e não corresponde à assinatura usada por subscribe_strike_list().
+    """
     api = getattr(asset_client, "api", None)
     if api is None:
         return {}
 
-    # A iqoptionapi mantém strike_list como resposta global da conexão.
-    # Zerar antes da requisição evita reutilizar a resposta de outro vencimento.
-    api.strike_list = None
-    try:
-        api.get_strike_list(symbol, duration)
-    except Exception as exc:
-        raise RuntimeError(f"Não foi possível solicitar a grade de strikes: {exc}") from exc
-
     deadline = time.monotonic() + STRIKE_TIMEOUT_SECONDS
     while time.monotonic() < deadline:
-        raw = getattr(api, "strike_list", None)
-        if isinstance(raw, dict):
-            rows = (raw.get("msg") or {}).get("strike") or []
-            if rows:
-                payout_store = getattr(api, "instrument_quites_generated_data", None)
-                payouts = {}
-                if isinstance(payout_store, dict):
-                    by_symbol = payout_store.get(symbol)
-                    if isinstance(by_symbol, dict):
-                        payouts = by_symbol.get(duration * 60) or {}
-
-                result: dict[str, Any] = {}
-                matching_ids = 0
-                for row in rows:
-                    try:
-                        # Mesmo fator de conversão empregado pelo método
-                        # get_strike_list() da stable_api da IQ Option.
-                        strike = float(row["value"]) * 10e-7
-                        call_id = str(row["call"]["id"])
-                        put_id = str(row["put"]["id"])
-                    except (KeyError, TypeError, ValueError):
-                        continue
-
-                    call_payout = payouts.get(call_id) if isinstance(payouts, dict) else None
-                    put_payout = payouts.get(put_id) if isinstance(payouts, dict) else None
-                    if call_payout is not None:
-                        matching_ids += 1
-                    if put_payout is not None:
-                        matching_ids += 1
-                    result[f"{strike:.8f}"] = {
-                        "call": {"profit": call_payout, "id": call_id},
-                        "put": {"profit": put_payout, "id": put_id},
-                    }
-
-                # Só entrega a grade quando os IDs retornados no strike-list
-                # existem também no stream de payouts da mesma conexão.
-                if result and matching_ids:
-                    return result
+        store = getattr(api, "instrument_quites_generated_data", None)
+        if isinstance(store, dict):
+            by_symbol = store.get(symbol)
+            if isinstance(by_symbol, dict):
+                quotes = by_symbol.get(duration * 60)
+                if isinstance(quotes, dict) and quotes:
+                    # O evento também pode incluir o strike SPT (preço spot).
+                    # O motor aceita apenas preços numéricos e descarta o SPT.
+                    normalized: dict[str, Any] = {}
+                    for raw_strike, sides in quotes.items():
+                        try:
+                            strike = float(raw_strike)
+                        except (TypeError, ValueError):
+                            continue
+                        if strike <= 0 or not isinstance(sides, dict):
+                            continue
+                        call = sides.get("call") or {}
+                        put = sides.get("put") or {}
+                        normalized[f"{strike:.8f}"] = {
+                            "call": {
+                                "id": call.get("id"),
+                                "profit": call.get("profit"),
+                            },
+                            "put": {
+                                "id": put.get("id"),
+                                "profit": put.get("profit"),
+                            },
+                        }
+                    if normalized:
+                        return normalized
         time.sleep(0.12)
-
     return {}
 
 
@@ -96,6 +104,8 @@ async def _digital_strikes(item: dict[str, Any], symbol: str, duration: int) -> 
         )
     subscribed = False
     try:
+        # Evita ler um snapshot antigo de uma tentativa anterior.
+        await asyncio.to_thread(_clear_strike_buffer, asset_client, symbol, duration)
         await asyncio.wait_for(
             asyncio.to_thread(asset_client.subscribe_strike_list, symbol, duration),
             timeout=5,
@@ -109,9 +119,9 @@ async def _digital_strikes(item: dict[str, Any], symbol: str, duration: int) -> 
             raise HTTPException(
                 status_code=504,
                 detail=(
-                    f"A IQ Option não disponibilizou a grade de strikes/payouts digitais "
-                    f"de {duration} minutos para {symbol}. Confirme a disponibilidade "
-                    "do ativo no modo Digital e tente novamente."
+                    f"A IQ Option não enviou o evento client-price-generated com a grade digital "
+                    f"de {duration} minutos para {symbol}. Verifique se esse ativo "
+                    "tem opções digitais abertas nesse vencimento ou tente outro ativo."
                 ),
             )
         return quotes
