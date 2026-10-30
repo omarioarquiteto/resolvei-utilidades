@@ -982,3 +982,20 @@ button, input, select { font: inherit; }
   .tool-card{padding:12px}
   .tool-card h3{font-size:13px}
 }
+
+
+/* ALTOS LUCROS — descoberta na página inicial */
+.al-discovery{
+  display:grid;grid-template-columns:minmax(0,1fr) minmax(230px,.55fr);
+  gap:18px;align-items:center;margin:22px 0 28px;padding:20px;
+  border:1px solid color-mix(in srgb,var(--accent) 28%,var(--line));
+  border-radius:18px;background:linear-gradient(135deg,var(--accent-soft),var(--surface));
+}
+.al-discovery-copy h2{margin:9px 0 7px;font-size:clamp(22px,3vw,30px);letter-spacing:-.04em}
+.al-discovery-copy p{max-width:650px;color:var(--muted);font-size:13px;line-height:1.55;margin:0 0 14px}
+.al-discovery-card .tool-card{height:100%;min-height:150px}
+.al-discovery-card .tool-card p{-webkit-line-clamp:3}
+@media(max-width:700px){
+  .al-discovery{grid-template-columns:1fr;gap:12px;padding:15px;margin:16px 0 22px}
+  .al-discovery-card .tool-card{min-height:130px}
+}
