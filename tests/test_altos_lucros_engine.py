@@ -51,6 +51,15 @@ class TestAltosLucrosEngine(unittest.TestCase):
         self.assertEqual(result["status"], "SEM_STRIKE_200")
         self.assertIsNone(result["recommendation"])
 
+    def test_uses_live_reference_price_when_provided(self):
+        candles = rising_candles()
+        current = candles[-1]["close"]
+        strike = round(current * 1.00005, 6)
+        quotes = {str(strike): {"call": {"profit": 250.0}}}
+        result = analyze_targets(candles, quotes, 5, reference_price=current * 1.001)
+        self.assertEqual(result["symbol_price"], round(current * 1.001, 8))
+        self.assertEqual(result["reference_price_source"], "live_m1")
+
     def test_rejects_unsupported_horizon(self):
         with self.assertRaisesRegex(ValueError, "5 ou 15"):
             analyze_targets(rising_candles(), {}, 10)
