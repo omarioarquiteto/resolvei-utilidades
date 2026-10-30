@@ -113,16 +113,26 @@
     if (!select) return;
     const data = await call(API, "/assets");
     const assets = Array.isArray(data.assets) ? data.assets : [];
-    if (!assets.length) throw new Error("A IQ Option não retornou ativos nesta sessão.");
-    select.innerHTML = assets.map(asset =>
-      '<option value="' + esc(asset.symbol) + '">' + esc(asset.symbol) + '</option>'
-    ).join("");
-    const preferred = assets.find(asset => /^EURUSD(?:-OTC)?$/i.test(asset.symbol))
-      || assets.find(asset => /EURUSD/i.test(asset.symbol))
+    if (!assets.length) {
+      const reason = data.digital_catalog_reason || "A IQ Option não retornou ativos disponíveis nesta sessão.";
+      throw new Error(reason);
+    }
+    select.innerHTML = assets.map(asset => {
+      const state = asset.digital_open === true ? " · ABERTO"
+        : asset.digital_open === false ? " · FECHADO"
+        : asset.digital_available === true ? " · DIGITAL"
+        : "";
+      return '<option value="' + esc(asset.symbol) + '">' +
+        esc(asset.symbol + state) + '</option>';
+    }).join("");
+    const preferred = assets.find(asset => /^EURUSD(?:-OTC)?$/i.test(asset.symbol) && asset.digital_open !== false)
+      || assets.find(asset => /EURUSD/i.test(asset.symbol) && asset.digital_open !== false)
+      || assets.find(asset => asset.digital_open === true)
       || assets[0];
     select.value = preferred.symbol;
-    $("alStatus").textContent = assets.length + " ativos no catálogo · atualização " +
-      new Date().toLocaleTimeString("pt-BR");
+    const known = data.digital_catalog_available === true;
+    $("alStatus").textContent = (known ? assets.length + " ativos Digital identificados" : assets.length + " ativos recebidos · catálogo Digital não confirmado") +
+      " · atualização " + new Date().toLocaleTimeString("pt-BR");
   }
 
   function candidateTable(candidates) {
@@ -208,7 +218,8 @@
       });
       show(data);
       $("alStatus").textContent = symbol + " · vencimento " + horizon +
-        " min · consulta " + new Date(data.timestamp || Date.now()).toLocaleTimeString("pt-BR");
+        " min · fonte: " + String(data.digital_quote_source || "IQ Option") +
+        " · consulta " + new Date(data.timestamp || Date.now()).toLocaleTimeString("pt-BR");
     } catch (error) {
       $("alStatus").textContent = "⚠️ " + error.message;
     } finally {

@@ -21,6 +21,9 @@ on:
       - "altos_lucros_*.py"
       - "altos-lucros.js"
       - "tests/test_trade_pro_engine.py"
+      - "tests/test_altos_lucros_marketdata.py"
+      - "tests/test_altos_lucros_catalog.py"
+      - "tests/test_altos_lucros_api.py"
       - "tests/test_altos_lucros_engine.py"
       - ".github/workflows/trade-pro-tests.yml"
 
@@ -35,13 +38,17 @@ jobs:
         with:
           python-version: "3.11"
       - name: Install analysis dependencies
-        run: python -m pip install --upgrade pip numpy "pandas>=2,<3"
+        run: python -m pip install --upgrade pip fastapi pydantic numpy "pandas>=2,<3" "git+https://github.com/victalejo/iqoptionapi.git@acac6e08333466ae188c7dfa7fd2a03174e34ca2"
       - name: Compile IQ Option analysis modules
-        run: python -m compileall -q trade_pro_auth.py trade_pro_api.py trade_pro_engine.py altos_lucros_api.py altos_lucros_engine.py
+        run: python -m compileall -q trade_pro_auth.py trade_pro_api.py trade_pro_engine.py altos_lucros_api.py altos_lucros_engine.py altos_lucros_marketdata.py
       - name: Run TRADE-PRÓ deterministic tests
         run: python -m unittest discover -s tests -p "test_trade_pro_engine.py" -v
-      - name: Run ALTOS LUCROS deterministic tests
-        run: python -m unittest discover -s tests -p "test_altos_lucros_engine.py" -v
+      - name: Run ALTOS LUCROS deterministic backtests
+        run: |
+          python -m unittest discover -s tests -p "test_altos_lucros_engine.py" -v
+          python -m unittest discover -s tests -p "test_altos_lucros_marketdata.py" -v
+          python -m unittest discover -s tests -p "test_altos_lucros_api.py" -v
+          python -m unittest discover -s tests -p "test_altos_lucros_catalog.py" -v
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
