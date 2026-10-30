@@ -366,19 +366,36 @@ async def _digital_strikes(
     duration: int,
     catalog_assets: list[dict[str, Any]],
 ) -> dict[str, Any]:
+    """Obtém a grade digital por dois protocolos, priorizando o fluxo clássico.
+
+    O fluxo clássico pede strike-list (preço + IDs) e instrument-quotes-generated
+    (payout por ID). O novo price-splitter permanece como alternativa. Ambos são
+    somente leitura e usam a mesma sessão auxiliar.
+    """
     asset_client = await _ensure_asset_client_connected(item)
     _install_digital_quote_callback(item, asset_client, catalog_assets)
     _clear_strike_buffer(item, asset_client, symbol, duration)
     request_started = time.time()
-    subscribed = False
 
+    # Protocolo clássico: o pacote ainda distribui as classes v1 e o parser
+    # instrument-quotes-generated. É o caminho mais completo para strike + payout.
+    quotes = await _legacy_digital_strikes(
+        item, asset_client, symbol, duration, request_started
+    )
+    if quotes:
+        return quotes
+
+    # Protocolo mais recente: mantém compatibilidade para contas/servidores
+    # que publicam apenas client-price-generated.
+    subscribed = False
     try:
+        _clear_strike_buffer(item, asset_client, symbol, duration)
+        request_started = time.time()
         await asyncio.wait_for(
             asyncio.to_thread(asset_client.subscribe_strike_list, symbol, duration),
             timeout=5,
         )
         subscribed = True
-
         quotes = await asyncio.wait_for(
             asyncio.to_thread(
                 _wait_for_strikes,
@@ -392,44 +409,16 @@ async def _digital_strikes(
         )
         if quotes:
             return quotes
-
+    except asyncio.TimeoutError:
         logger.warning(
-            "[ALTOS LUCROS] Canal Digital principal sem snapshot para %s M%s; acionando fallback legado.",
+            "[ALTOS LUCROS] Timeout no canal price-splitter de %s M%s.",
             symbol, duration,
         )
-        quotes = await _legacy_digital_strikes(
-            item, asset_client, symbol, duration, request_started
-        )
-        if quotes:
-            return quotes
-
-        api = getattr(asset_client, "api", None)
-        alive = False
-        try:
-            alive = bool(api.websocket_alive())
-        except Exception:
-            pass
-        raise HTTPException(
-            status_code=409,
-            detail=(
-                f"A IQ Option não publicou strikes digitais para {symbol} no vencimento de "
-                f"{duration} minutos. Conexão auxiliar: {'ativa' if alive else 'reconectando'}. "
-                "A ferramenta tentou os dois protocolos de cotações. Verifique se o ativo "
-                "está marcado como ABERTO no catálogo Digital ou selecione outro ativo/vencimento."
-            ),
-        )
-    except HTTPException:
-        raise
-    except asyncio.TimeoutError as exc:
-        raise HTTPException(
-            status_code=504,
-            detail="A consulta dos dados digitais da IQ Option excedeu o tempo limite. A conexão foi preservada; tente novamente.",
-        ) from exc
     except Exception as exc:
-        raise HTTPException(
-            status_code=502,
-            detail=f"Falha ao consultar dados digitais: {type(exc).__name__}: {str(exc)[:180]}",
-        ) from exc
+        logger.warning(
+            "[ALTOS LUCROS] Canal price-splitter falhou para %s M%s: %s: %s",
+            symbol, duration, type(exc).__name__, str(exc)[:160],
+        )
     finally:
         if subscribed:
             try:
@@ -438,7 +427,26 @@ async def _digital_strikes(
                     timeout=4,
                 )
             except Exception:
-                logger.warning("[ALTOS LUCROS] Não foi possível encerrar a assinatura principal para %s M%s.", symbol, duration)
+                logger.warning(
+                    "[ALTOS LUCROS] Não foi possível encerrar o canal price-splitter para %s M%s.",
+                    symbol, duration,
+                )
+
+    api = getattr(asset_client, "api", None)
+    try:
+        alive = bool(api.websocket_alive())
+    except Exception:
+        alive = False
+    raise HTTPException(
+        status_code=409,
+        detail=(
+            f"A IQ Option não disponibilizou uma grade de strikes digitais para {symbol} "
+            f"no vencimento de {duration} minutos. Foram consultados o fluxo clássico "
+            "strike-list/instrument-quotes-generated e o fluxo price-splitter. "
+            f"WebSocket auxiliar: {'conectado' if alive else 'desconectado'}. "
+            "Confirme se o ativo está aberto em Digital e se esse vencimento está disponível."
+        ),
+    )
 
 
 @router.get("/assets")
