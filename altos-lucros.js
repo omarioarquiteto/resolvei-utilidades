@@ -154,7 +154,7 @@
         (quality.valid_closed_candles || 0) + " candles M1 válidos";
     }
     const valid = data.status === "ALVO_VALIDADO" && data.recommendation;
-    const candidate = data.recommendation || data.best_candidate;
+    const candidate = data.recommendation;
     const heading = valid ? "ALVO ESTATISTICAMENTE VALIDADO" : "SEM OPORTUNIDADE VÁLIDA";
     const direction = candidate ? candidate.direction : "—";
     const hero =
@@ -164,7 +164,7 @@
         (candidate ?
           '<div class="al-target"><small>ALVO DIGITAL ' + esc(direction) + '</small><b>' + price(candidate.target_price) + '</b>' +
           '<span>Payout IQ Option: ' + pct(candidate.payout_percent) + '</span></div>' :
-          '<div class="al-target al-no-target"><small>ALVO</small><b>—</b><span>Nenhum strike elegível</span></div>') +
+          '<div class="al-target al-no-target"><small>ALVO</small><b>—</b><span>Nenhum alvo aprovado</span></div>') +
       '</article>';
     const metrics = candidate ?
       '<section class="al-metrics">' +
