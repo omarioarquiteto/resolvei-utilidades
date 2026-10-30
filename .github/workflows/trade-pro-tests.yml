@@ -1,19 +1,27 @@
-name: Trade Pro smoke tests
+name: IQ Option analysis tests
 
 on:
   push:
-    branches: [feature/trade-pro]
+    branches:
+      - feature/trade-pro
+      - feature/altos-lucros-digital-targets
     paths:
       - "trade_pro_*.py"
       - "trade-pro.js"
+      - "altos_lucros_*.py"
+      - "altos-lucros.js"
       - "tests/test_trade_pro_engine.py"
+      - "tests/test_altos_lucros_engine.py"
       - ".github/workflows/trade-pro-tests.yml"
   pull_request:
     branches: [main]
     paths:
       - "trade_pro_*.py"
       - "trade-pro.js"
+      - "altos_lucros_*.py"
+      - "altos-lucros.js"
       - "tests/test_trade_pro_engine.py"
+      - "tests/test_altos_lucros_engine.py"
       - ".github/workflows/trade-pro-tests.yml"
 
 jobs:
@@ -28,13 +36,17 @@ jobs:
           python-version: "3.11"
       - name: Install analysis dependencies
         run: python -m pip install --upgrade pip numpy "pandas>=2,<3"
-      - name: Compile new Python modules
-        run: python -m compileall -q trade_pro_auth.py trade_pro_api.py trade_pro_engine.py
-      - name: Run deterministic engine tests
+      - name: Compile IQ Option analysis modules
+        run: python -m compileall -q trade_pro_auth.py trade_pro_api.py trade_pro_engine.py altos_lucros_api.py altos_lucros_engine.py
+      - name: Run TRADE-PRÓ deterministic tests
         run: python -m unittest discover -s tests -p "test_trade_pro_engine.py" -v
+      - name: Run ALTOS LUCROS deterministic tests
+        run: python -m unittest discover -s tests -p "test_altos_lucros_engine.py" -v
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
           node-version: "22"
       - name: Check frontend JavaScript syntax
-        run: node --check trade-pro.js
+        run: |
+          node --check trade-pro.js
+          node --check altos-lucros.js
