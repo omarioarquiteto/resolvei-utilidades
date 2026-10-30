@@ -6,6 +6,7 @@ exige fechamento além do strike no horizonte, não apenas toque intraperíodo.
 from __future__ import annotations
 
 from math import isfinite, sqrt
+from statistics import NormalDist
 from typing import Any
 
 SUPPORTED_HORIZONS = {5, 15}
@@ -87,7 +88,7 @@ def _historical_probability(
         end = start + horizon
         # Descarta intervalos com candles ausentes ou lacunas de mercado.
         elapsed = candles[end]["time"] - candles[start]["time"]
-        if elapsed > horizon * 60 + 20:
+        if abs(elapsed - horizon * 60) > 20:
             continue
         entry = candles[start]["close"]
         expiry_close = candles[end]["close"]
@@ -105,6 +106,7 @@ def analyze_targets(
     strike_quotes: dict[str, Any],
     horizon_minutes: int,
     minimum_payout: float = MINIMUM_PAYOUT_PERCENT,
+    reference_price: float | None = None,
 ) -> dict[str, Any]:
     if horizon_minutes not in SUPPORTED_HORIZONS:
         raise ValueError("O vencimento deve ser de 5 ou 15 minutos.")
@@ -123,12 +125,16 @@ def analyze_targets(
         raise ValueError("A IQ Option não disponibilizou a grade de strikes digitais.")
 
     closes = [row["close"] for row in candles]
-    current_price = closes[-1]
+    try:
+        live_reference = float(reference_price) if reference_price is not None else 0.0
+    except (TypeError, ValueError):
+        live_reference = 0.0
+    current_price = live_reference if isfinite(live_reference) and live_reference > 0 else closes[-1]
     ema20 = _ema(closes[-80:], 20)
     ema50 = _ema(closes[-160:], 50)
     bias = "ALTA" if ema20 > ema50 * 1.00005 else "BAIXA" if ema20 < ema50 * 0.99995 else "NEUTRA"
 
-    candidates: list[dict[str, Any]] = []
+    eligible: list[tuple[float, str, str, float]] = []
     for raw_strike, sides in strike_quotes.items():
         try:
             strike = float(raw_strike)
@@ -137,45 +143,51 @@ def analyze_targets(
         if not isfinite(strike) or strike <= 0 or not isinstance(sides, dict):
             continue
 
-        direction_by_side = {"call": "ACIMA", "put": "ABAIXO"}
-        for side, direction in direction_by_side.items():
+        for side, direction in (("call", "ACIMA"), ("put", "ABAIXO")):
             if direction == "ACIMA" and strike <= current_price:
                 continue
             if direction == "ABAIXO" and strike >= current_price:
                 continue
             payout = _read_payout(sides.get(side))
-            if payout is None or payout + 1e-9 < minimum_payout:
-                continue
+            if payout is not None and payout + 1e-9 >= minimum_payout:
+                eligible.append((strike, direction, side.upper(), payout))
 
-            relative_distance = strike / current_price - 1.0
-            successes, samples = _historical_probability(
-                candles, relative_distance, direction, horizon_minutes
-            )
-            if samples < MINIMUM_SAMPLES:
-                continue
+    # Corrige a seleção entre vários strikes testados simultaneamente.
+    # O limite inferior de 90% permanece conservador após procurar o melhor alvo.
+    comparisons = max(1, len(eligible))
+    adjusted_z = NormalDist().inv_cdf(1.0 - 0.10 / (2.0 * comparisons))
 
-            probability = successes / samples
-            low, high = _wilson_interval(successes, samples)
-            breakeven = 100.0 / (100.0 + payout)
-            edge = low - breakeven
-            conservative_ev = low * payout - (1.0 - low) * 100.0
-            candidates.append({
-                "direction": direction,
-                "side": side.upper(),
-                "target_price": round(strike, 8),
-                "payout_percent": round(payout, 2),
-                "distance_percent": round(abs(relative_distance) * 100.0, 4),
-                "samples": samples,
-                "successes": successes,
-                "probability_percent": round(probability * 100.0, 1),
-                "confidence_low_percent": round(low * 100.0, 1),
-                "confidence_high_percent": round(high * 100.0, 1),
-                "confidence_level_percent": 90,
-                "breakeven_probability_percent": round(breakeven * 100.0, 1),
-                "edge_lower_bound_pp": round(edge * 100.0, 1),
-                "conservative_expected_value_percent": round(conservative_ev, 1),
-                "statistically_valid": bool(edge >= 0.05 and conservative_ev > 0),
-            })
+    candidates: list[dict[str, Any]] = []
+    for strike, direction, side, payout in eligible:
+        relative_distance = strike / current_price - 1.0
+        successes, samples = _historical_probability(
+            candles, relative_distance, direction, horizon_minutes
+        )
+        if samples < MINIMUM_SAMPLES:
+            continue
+
+        probability = successes / samples
+        low, high = _wilson_interval(successes, samples, z=adjusted_z)
+        breakeven = 100.0 / (100.0 + payout)
+        edge = low - breakeven
+        conservative_ev = low * payout - (1.0 - low) * 100.0
+        candidates.append({
+            "direction": direction,
+            "side": side,
+            "target_price": round(strike, 8),
+            "payout_percent": round(payout, 2),
+            "distance_percent": round(abs(relative_distance) * 100.0, 4),
+            "samples": samples,
+            "successes": successes,
+            "probability_percent": round(probability * 100.0, 1),
+            "confidence_low_percent": round(low * 100.0, 1),
+            "confidence_high_percent": round(high * 100.0, 1),
+            "confidence_level_percent": 90,
+            "breakeven_probability_percent": round(breakeven * 100.0, 1),
+            "edge_lower_bound_pp": round(edge * 100.0, 1),
+            "conservative_expected_value_percent": round(conservative_ev, 1),
+            "statistically_valid": bool(edge >= 0.05 and conservative_ev > 0),
+        })
 
     candidates.sort(
         key=lambda item: (
@@ -201,17 +213,24 @@ def analyze_targets(
             "A grade contém strikes com payout de 200% ou mais, mas nenhum "
             "superou o ponto de equilíbrio com a margem estatística exigida."
         )
+    elif eligible:
+        status = "HISTORICO_INSUFICIENTE"
+        message = (
+            "Há strikes com payout de 200% ou mais, mas os candles válidos "
+            "não formaram 30 janelas completas do vencimento selecionado."
+        )
     else:
         status = "SEM_STRIKE_200"
         message = (
             "A IQ Option não disponibilizou strikes elegíveis com payout de "
-            "pelo menos 200% e histórico suficiente para avaliá-los."
+            "pelo menos 200% para este ativo e vencimento."
         )
 
     return {
         "status": status,
         "message": message,
         "symbol_price": round(current_price, 8),
+        "reference_price_source": "live_m1" if live_reference > 0 and isfinite(live_reference) else "last_closed_m1",
         "horizon_minutes": horizon_minutes,
         "minimum_payout_percent": round(minimum_payout, 2),
         "market_bias": bias,
@@ -226,6 +245,8 @@ def analyze_targets(
             "outcome_rule": "Fechamento do candle no vencimento além do strike",
             "sample_windows": "Não sobrepostas",
             "confidence_level_percent": 90,
+            "confidence_adjustment": "Bonferroni",
+            "tested_strikes": comparisons,
             "minimum_samples": MINIMUM_SAMPLES,
             "minimum_edge_percentage_points": 5.0,
         },
