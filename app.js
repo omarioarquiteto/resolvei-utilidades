@@ -26,6 +26,7 @@ const esc = s => String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&g
 const slug = s => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
 
 const tools = [
+  {id:'altos-lucros',cat:'investimentos',icon:'🎯',title:'ALTOS LUCROS',desc:'Analisa strikes digitais da IQ Option com payout de 200% ou mais e estima a probabilidade histórica no vencimento de 5 ou 15 minutos.',tags:'altos lucros iqoption digital strike alvo payout 200% 5 minutos 15 minutos probabilidade estatística opções digitais'},
   {id:'porcentagem',cat:'dinheiro',icon:'%',title:'Calculadora de porcentagem',desc:'Descubra porcentagens, variações e valores rapidamente.',tags:'porcentagem percentual percentagem aumento redução'},
   {id:'regra-de-3',cat:'dinheiro',icon:'⅓',title:'Regra de 3',desc:'Resolva proporções simples em segundos.',tags:'regra de tres proporção proporcional'},
   {id:'desconto',cat:'dinheiro',icon:'🏷️',title:'Desconto',desc:'Calcule preço final, desconto e economia.',tags:'desconto promoção preço liquidação'},
@@ -45,7 +46,6 @@ const tools = [
   {id:'visao-opcoes',cat:'investimentos',icon:'🔭',title:'VISÃO OPÇÕES',desc:'Terminal de análise de pares com dados da IQ Option, radar de mercado e fatos relevantes da Biquote.',tags:'visão opções iqoption pares radar análise técnica candles OTC biquote fatos relevantes calendário econômico call put'},
   {id:'analista-bin',cat:'investimentos',icon:'📡',title:'ANALISTA BIN',desc:'Motor técnico ponderado para confluência de 30 indicadores em pares da IQ Option.',tags:'analista bin iqoption opções binárias call put tendência rompimento reversão indicadores score confluência'},
   {id:'trade-pro',cat:'investimentos',icon:'⚡',title:'TRADE-PRÓ',desc:'Classificação de regime de mercado, confluência técnica e expiração sugerida a partir de candles da IQ Option.',tags:'trade pro trading call put compra venda sinais regime altista baixista expansão volatilidade consolidação expiração CME confluência'},
-  {id:'altos-lucros',cat:'investimentos',icon:'🎯',title:'ALTOS LUCROS',desc:'Analisa strikes digitais da IQ Option com payout de 200% ou mais e estima a probabilidade histórica no vencimento de 5 ou 15 minutos.',tags:'altos lucros iqoption digital strike alvo payout 200% 5 minutos 15 minutos probabilidade estatística opções digitais'},
   {id:'consultor-senior',cat:'investimentos',icon:'🧠',title:'CONSULTOR SÊNIOR',desc:'Analista de mercado com Gemini e candles da IQ Option para identificar contexto, gatilhos e pontos de entrada.',tags:'consultor senior gemini iqoption opções binárias call put análise de mercado price action suporte resistência tendência entrada'},
   {id:'monitor-precos',cat:'compras',icon:'🛍️',title:'Monitor de Preços',desc:'Acompanhe o histórico de preços e compare ofertas em lojas online.',tags:'monitor preço preços histórico produto comparar lojas oferta promoção economia rastrear'},
   {id:'tabela-fipe',cat:'carro',icon:'📊',title:'Consulta à Tabela FIPE',desc:'Consulte preços de carros, motos e caminhões e veja a evolução mensal do valor FIPE.',tags:'tabela fipe preço carro moto caminhão veículo valor histórico evolução preço usado marca modelo ano combustível'},
@@ -1444,8 +1444,10 @@ function home(){
       favoritesSection='<section class="home-favorites-section"><div class="section-head"><div><h2>Minhas ferramentas</h2><p>Arraste os cards para organizar na ordem que preferir.</p></div><a class="btn" href="#/ferramentas">Adicionar ferramentas</a></div>'+notice+content+'</section>';
     }
   }
+  const featured=tools.find(t=>t.id==='altos-lucros');
+  const investmentSpotlight=featured?'<section class="al-discovery"><div class="al-discovery-copy"><span class="chip">NOVA FERRAMENTA</span><h2>ALTOS LUCROS</h2><p>Explore strikes digitais da IQ Option com payout a partir de 200%, vencimentos de 5 ou 15 minutos e validação estatística.</p><a class="btn primary" href="#/ferramenta/altos-lucros">Abrir ALTOS LUCROS →</a></div><div class="al-discovery-card">'+card(featured)+'</div></section>':'';
   const categories='<div class="section-head"><div><h2>Categorias</h2><p>Encontre ferramentas por assunto.</p></div></div><div class="category-grid">'+Object.entries(CATS).map(categoryCard).join('')+'</div>';
-  return hero+favoritesSection+categories;
+  return hero+favoritesSection+investmentSpotlight+categories;
 }
 function toolsPage(list=tools,title='Todas as ferramentas',sub='Escolha uma ferramenta ou pesquise pelo que você precisa.'){
   return `<div class="section-head"><div><h1 style="margin:0;letter-spacing:-.04em">${esc(title)}</h1><p>${esc(sub)}</p></div></div><div class="search-box" style="max-width:none;margin-bottom:20px"><input id="listSearch" autocomplete="off" placeholder="Buscar entre as ferramentas..."><button id="listSearchSubmit" class="search-submit" type="button" aria-label="Pesquisar ferramenta" title="Pesquisar"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-4-4"></path></svg></button></div><div id="toolGrid" class="grid">${list.map(card).join('')}</div>`;
@@ -1501,7 +1503,7 @@ function render(){
   if(!parts[0]) html=home();
   else if(parts[0]==='ferramentas') html=toolsPage();
   else if(parts[0]==='categorias') html=categoriesPage();
-  else if(parts[0]==='categoria') {const id=parts[1];const c=CATS[id];html=c?toolsPage(tools.filter(t=>t.cat===id),`${c.icon} ${c.name}`,c.desc):`<div class="empty">Categoria não encontrada.</div>`;}
+  else if(parts[0]==='categoria') {const id=parts[1];const c=CATS[id];const list=tools.filter(t=>t.cat===id).sort((a,b)=>(a.id==='altos-lucros'?-1:b.id==='altos-lucros'?1:0));html=c?toolsPage(list,`${c.icon} ${c.name}`,c.desc):`<div class="empty">Categoria não encontrada.</div>`;}
   else if(parts[0]==='ferramenta') html=toolPage(parts[1]);
   else if(parts[0]==='favoritos') html=favoritesPage();
   else if(parts[0]==='conta') html=resolveiAccountPage();
