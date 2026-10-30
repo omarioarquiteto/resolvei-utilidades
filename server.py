@@ -84,6 +84,7 @@ from consultor_senior_api import router as consultor_senior_router
 from documents_api import router as documents_router
 from trade_pro_auth import router as trade_pro_auth_router
 from trade_pro_api import router as trade_pro_router
+from altos_lucros_api import router as altos_lucros_router
 app.include_router(consultor_senior_auth_router)
 app.include_router(analista_bin_router)
 app.include_router(financiamento_router)
@@ -91,6 +92,7 @@ app.include_router(consultor_senior_router)
 app.include_router(documents_router)
 app.include_router(trade_pro_auth_router)
 app.include_router(trade_pro_router)
+app.include_router(altos_lucros_router)
 
 from monitor_precos_api import router as monitor_precos_router, start_price_monitor_scheduler
 app.include_router(monitor_precos_router)
