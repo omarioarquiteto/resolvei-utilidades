@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import re
 import threading
 import time
 from datetime import datetime, timezone
@@ -123,6 +122,13 @@ def _install_digital_quote_callback(
         return
 
     active_to_symbol = _asset_active_map(assets)
+    digital_cache = item.get("altos_digital_catalog_cache") or {}
+    digital_data = digital_cache.get("data") or {}
+    for digital_symbol, detail in (digital_data.get("assets") or {}).items():
+        active_id = detail.get("active_id")
+        symbol = detail.get("symbol") or digital_symbol
+        if active_id is not None and symbol:
+            active_to_symbol[str(active_id)] = str(symbol)
     cache = item.setdefault("altos_digital_quote_cache", {})
     payouts_cache = item.setdefault("altos_legacy_payout_cache", {})
     lock = item.setdefault("altos_digital_quote_lock", threading.RLock())
