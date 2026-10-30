@@ -1378,7 +1378,7 @@ async function persistHomeToolOrder(order){
     render();
   }
 }
-function card(t){return `<article class="card tool-card"><button class="fav ${isFav(t.id)?'active':''}" data-fav="${t.id}" aria-label="Favoritar">${isFav(t.id)?'★':'☆'}</button><a href="#/ferramenta/${t.id}"><div class="tool-icon">${t.icon}</div><h3>${t.title}</h3><p>${t.desc}</p></a></article>`}
+function card(t){return `<article class="card tool-card ${t.id==='altos-lucros'?'al-tool-featured':''}"><button class="fav ${isFav(t.id)?'active':''}" data-fav="${t.id}" aria-label="Favoritar">${isFav(t.id)?'★':'☆'}</button><a href="#/ferramenta/${t.id}"><div class="tool-icon">${t.icon}</div><h3>${t.title}</h3><p>${t.desc}</p></a></article>`}
 function homeFavoriteCard(t){
   return card(t).replace('<article class="card tool-card">','<article class="card tool-card home-tool-card" draggable="true" data-home-tool="'+esc(t.id)+'">');
 }
