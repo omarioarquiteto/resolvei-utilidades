@@ -80,6 +80,40 @@ class TestAltosLucrosEngine(unittest.TestCase):
         self.assertEqual(result["recommendation"]["direction"], "ACIMA")
         self.assertEqual(result["recommendation"]["target_price"], strike)
 
+    def test_m15_backtest_validates_a_consistent_trend(self):
+        candles = rising_candles(650)
+        current = candles[-1]["close"]
+        strike = round(current * 1.00005, 6)
+        result = analyze_targets(
+            candles,
+            {str(strike): {"call": {"profit": 250.0}}},
+            15,
+        )
+        self.assertEqual(result["status"], "ALVO_VALIDADO")
+        self.assertGreaterEqual(result["recommendation"]["samples"], 30)
+        self.assertEqual(result["method"]["candle_timeframe"], "1m")
+
+    def test_m5_backtest_rejects_a_flat_market_target(self):
+        candles = []
+        for index in range(600):
+            value = 1.10000
+            candles.append({
+                "time": 1_700_000_000 + index * 60,
+                "open": value,
+                "high": value + 0.00001,
+                "low": value - 0.00001,
+                "close": value,
+            })
+        strike = 1.10050
+        result = analyze_targets(
+            candles,
+            {str(strike): {"call": {"profit": 250.0}}},
+            5,
+        )
+        self.assertEqual(result["status"], "SEM_OPORTUNIDADE")
+        self.assertIsNone(result["recommendation"])
+        self.assertEqual(result["best_candidate"]["successes"], 0)
+
     def test_rejects_unsupported_horizon(self):
         with self.assertRaisesRegex(ValueError, "5 ou 15"):
             analyze_targets(rising_candles(), {}, 10)
