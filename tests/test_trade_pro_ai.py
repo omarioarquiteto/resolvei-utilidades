@@ -26,6 +26,9 @@ def base_analysis(signal="COMPRA", stale=False):
         },
         "blocking_reasons": [] if signal else ["Volume não confirmado."],
         "data_quality": {"stale": stale, "last_candle_age_seconds": 4},
+        "recent_candles": [
+            {"time": 60, "open": 1.1, "high": 1.2, "low": 1.0, "close": 1.15, "volume": 120}
+        ],
     }
 
 
@@ -74,6 +77,8 @@ class TradeProAITests(unittest.TestCase):
         self.assertIn("Nunca inverta a direção", prompt)
         self.assertIn('"symbol":"EURUSD"', prompt)
         self.assertIn('"confluence":88.5', prompt)
+        self.assertIn('"recent_closed_candles"', prompt)
+        self.assertIn('"high":1.2', prompt)
 
     def test_rejects_invalid_gemini_json(self):
         with self.assertRaisesRegex(ValueError, "JSON inválido"):
