@@ -75,9 +75,11 @@ def _get_session(session_id: str | None) -> dict[str, Any]:
         SESSIONS.pop(sid, None)
         client = item.get("client")
         try:
-            asyncio.get_running_loop().create_task(_close_client(client))
+            loop = asyncio.get_running_loop()
         except RuntimeError:
-            pass
+            loop = None
+        if loop is not None:
+            loop.create_task(_close_client(client))
         raise HTTPException(
             status_code=401,
             detail="A sessão exclusiva do VIBE LUCRO expirou. Faça login novamente.",
