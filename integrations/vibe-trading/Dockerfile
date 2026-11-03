@@ -1,4 +1,4 @@
-# Deploy a dedicated, read-only Vibe-Trading review API for Resolvei.
+# Dedicated, read-only Vibe-Trading review API for Resolvei.
 # The official HKUDS source is pinned to a verified upstream commit.
 FROM python:3.11-slim AS builder
 
@@ -21,13 +21,13 @@ RUN git init /opt/vibe-trading \
 WORKDIR /opt/vibe-trading
 
 COPY integrations/vibe-trading/vibe_lucro_routes.py /tmp/vibe_lucro_routes.py
+COPY integrations/vibe-trading/vibe_lucro_server.py /tmp/vibe_lucro_server.py
 COPY integrations/vibe-trading/install_routes.py /tmp/install_routes.py
 
-RUN python /tmp/install_routes.py /opt/vibe-trading /tmp/vibe_lucro_routes.py
+RUN python /tmp/install_routes.py /opt/vibe-trading /tmp/vibe_lucro_routes.py /tmp/vibe_lucro_server.py
 
-# Keep the same hash-pinned dependency set used by the upstream Vibe-Trading
-# container image. Channel SDKs are installed for import compatibility, but
-# shell tools remain explicitly disabled at runtime.
+# Install the upstream hash-pinned runtime. The public app below deliberately
+# exposes no general Vibe-Trading sessions, AgentLoop, MCP, broker or shell API.
 RUN pip install --no-cache-dir --require-hashes -r requirements-lock.txt \
     && pip install --no-cache-dir --require-hashes -r requirements-channels-lock.txt \
     && pip install --no-cache-dir --no-deps -e . \
@@ -48,10 +48,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 RUN useradd --create-home --shell /usr/sbin/nologin vibe \
-    && mkdir -p /home/vibe/.vibe-trading /opt/vibe-trading/agent/runs \
-       /opt/vibe-trading/agent/sessions /opt/vibe-trading/agent/uploads \
-       /opt/vibe-trading/agent/.swarm/runs \
-    && chown -R vibe:vibe /home/vibe /opt/vibe-trading
+    && mkdir -p /home/vibe/.vibe-trading \
+    && chown -R vibe:vibe /home/vibe
 
 ENV VIRTUAL_ENV=/opt/venv \
     PATH="/opt/venv/bin:$PATH" \
@@ -69,4 +67,4 @@ USER vibe
 
 EXPOSE 10000
 
-CMD ["sh", "-c", "vibe-trading serve --host 0.0.0.0 --port ${PORT:-10000}"]
+CMD ["sh", "-c", "uvicorn vibe_lucro_server:app --host 0.0.0.0 --port ${PORT:-10000}"]
