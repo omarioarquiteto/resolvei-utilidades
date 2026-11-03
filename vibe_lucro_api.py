@@ -30,6 +30,83 @@ class AnalyzeRequest(BaseModel):
     expiry_minutes: Literal[1, 5, 15] = 5
 
 
+
+def _vibe_trading_configured() -> bool:
+    return bool(VIBE_TRADING_API_URL and VIBE_TRADING_API_KEY)
+
+
+def _call_vibe_trading_review(
+    symbol: str,
+    expiry_minutes: int,
+    analysis: dict[str, Any],
+    frames: dict[str, list[dict[str, float]]],
+) -> dict[str, Any]:
+    """Send bounded, sanitized market evidence to an optional Vibe-Trading review.
+
+    IQ Option passwords, session tokens, user identity and account information
+    are never part of this payload.
+    """
+    if not _vibe_trading_configured():
+        return {
+            "configured": False,
+            "available": False,
+            "message": "Servidor Vibe-Trading ainda não configurado; análise quantitativa local disponível.",
+        }
+
+    safe_candles: dict[str, list[dict[str, float]]] = {}
+    for timeframe in ("1m", "5m", "15m"):
+        safe_candles[timeframe] = [
+            {
+                "open": float(row["open"]),
+                "high": float(row["high"]),
+                "low": float(row["low"]),
+                "close": float(row["close"]),
+                "volume": float(row.get("volume") or 0),
+                "timestamp": float(row.get("datetime", row.get("time", 0)) or 0),
+            }
+            for row in frames.get(timeframe, [])[-30:]
+        ]
+
+    payload = {
+        "symbol": symbol,
+        "expiry_minutes": expiry_minutes,
+        "signal": analysis["signal"],
+        "score": analysis["score"],
+        "buy_score": analysis["buy_score"],
+        "sell_score": analysis["sell_score"],
+        "reasons": list(analysis.get("reasons") or [])[:8],
+        "timeframes": analysis.get("timeframes") or {},
+        "candles": safe_candles,
+    }
+    try:
+        response = requests.post(
+            VIBE_TRADING_API_URL + "/api/vibe-lucro/analyze",
+            headers={"Authorization": "Bearer " + VIBE_TRADING_API_KEY},
+            json=payload,
+            timeout=(4.0, VIBE_TRADING_REVIEW_TIMEOUT),
+        )
+        response.raise_for_status()
+        data = response.json()
+        review = str(data.get("review") or "").strip()
+        if not review:
+            raise ValueError("Vibe-Trading retornou uma revisão vazia.")
+        return {
+            "configured": True,
+            "available": True,
+            "review": review[:6000],
+            "provider": str(data.get("provider") or "Vibe-Trading"),
+            "model": str(data.get("model") or ""),
+            "direction_override": False,
+            "message": "Revisão complementar; não altera o sinal quantitativo.",
+        }
+    except Exception as exc:
+        return {
+            "configured": True,
+            "available": False,
+            "message": "Revisão de IA indisponível: " + f"{type(exc).__name__}: {str(exc)[:180]}",
+        }
+
+
 def _resolve_session(session_id: str | None) -> dict[str, Any]:
     """Resolve only the VIBE LUCRO-owned session store."""
     return auth._get_session(session_id)
