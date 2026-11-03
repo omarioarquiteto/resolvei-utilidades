@@ -296,7 +296,8 @@
     const recommendation = ["COMPRA", "VENDA", "AGUARDAR"].includes(data.recommendation) ? data.recommendation : "AGUARDAR";
     const card = $("tpAiCard");
     if (!card) return;
-    card.className = "tp-card tp-ai-card tp-ai-" + recommendation.toLowerCase();
+    const directionClass = recommendation === "COMPRA" ? "buy" : recommendation === "VENDA" ? "venda" : "wait";
+    card.className = "tp-card tp-ai-card tp-ai-" + directionClass;
     $("tpAiStatus").textContent = data.ai_used ? "GEMINI CONSULTADO" : "ENTRADA BLOQUEADA";
     $("tpAiRecommendation").textContent = recommendation;
     $("tpAiConfidence").textContent = "CONVICÇÃO QUALITATIVA " + Math.max(0, Math.min(100, Number(data.confidence) || 0)) + "/100";
