@@ -26,6 +26,14 @@ VIBE_TRADING_API_KEY=SUA_CHAVE_DE_API_DO_VIBE
 
 Não coloque a chave no frontend, no Git ou no navegador.
 
+## Sessão da IQ Option no Resolvei
+
+O VIBE LUCRO abre uma autenticação exclusiva da IQ Option em seu próprio
+módulo `vibe_lucro_auth.py`. O token fica em uma chave própria do
+`sessionStorage`, e o servidor mantém um cliente IQ Option separado.
+O logout do VIBE LUCRO encerra apenas esse cliente, sem consultar nem remover
+sessões da Visão Opções, Analista Bin, TRADE-PRÓ ou Consultor Sênior.
+
 ## Contrato e segurança
 
 - Endpoint: `POST /api/vibe-lucro/analyze`.
