@@ -27,7 +27,7 @@ const slug = s => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,''
 
 const tools = [
   {id:'altos-lucros',cat:'investimentos',icon:'🎯',title:'ALTOS LUCROS',desc:'Analisa strikes digitais da IQ Option com payout de 200% ou mais e estima a probabilidade histórica no vencimento de 5 ou 15 minutos.',tags:'altos lucros iqoption digital strike alvo payout 200% 5 minutos 15 minutos probabilidade estatística opções digitais'},
-  {id:'vibe-lucro',cat:'investimentos',icon:'✦',title:'VIBE LUCRO',desc:'Analisa candles da IQ Option em múltiplos tempos e identifica confluências para CALL, PUT ou AGUARDAR nas expirações de 1, 5 e 15 minutos.',tags:'vibe lucro vibe trading iqoption iq option call put compra venda candles análise técnica multi timeframe expiração 1 5 15 minutos'}
+  {id:'vibe-lucro',cat:'investimentos',icon:'✦',title:'VIBE LUCRO',desc:'Analisa candles da IQ Option em múltiplos tempos e identifica confluências para CALL, PUT ou AGUARDAR nas expirações de 1, 5 e 15 minutos.',tags:'vibe lucro vibe trading iqoption iq option call put compra venda candles análise técnica multi timeframe expiração 1 5 15 minutos'},
   {id:'porcentagem',cat:'dinheiro',icon:'%',title:'Calculadora de porcentagem',desc:'Descubra porcentagens, variações e valores rapidamente.',tags:'porcentagem percentual percentagem aumento redução'},
   {id:'regra-de-3',cat:'dinheiro',icon:'⅓',title:'Regra de 3',desc:'Resolva proporções simples em segundos.',tags:'regra de tres proporção proporcional'},
   {id:'desconto',cat:'dinheiro',icon:'🏷️',title:'Desconto',desc:'Calcule preço final, desconto e economia.',tags:'desconto promoção preço liquidação'},
