@@ -71,6 +71,17 @@ def _get_session(session_id: str | None) -> dict[str, Any]:
             status_code=401,
             detail="A sessão exclusiva do VIBE LUCRO expirou. Faça login novamente.",
         )
+    if item.get("last_used", 0) < time.time() - SESSION_TTL_SECONDS:
+        SESSIONS.pop(sid, None)
+        client = item.get("client")
+        try:
+            asyncio.get_running_loop().create_task(_close_client(client))
+        except RuntimeError:
+            pass
+        raise HTTPException(
+            status_code=401,
+            detail="A sessão exclusiva do VIBE LUCRO expirou. Faça login novamente.",
+        )
     client = item.get("client")
     websocket = getattr(client, "_ws", None)
     if websocket is None or bool(getattr(websocket, "_closed", False)):
