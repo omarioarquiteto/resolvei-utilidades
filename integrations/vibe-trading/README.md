@@ -1,49 +1,84 @@
 # Ponte VIBE LUCRO ↔ Vibe-Trading
 
-Esta pasta contém o adaptador de integração que deve ser instalado no repositório
-`HKUDS/Vibe-Trading`. A conexão GitHub usada nesta implementação não autorizou
-a criação de uma branch no repositório original, portanto o arquivo está
-preparado aqui, mas ainda **não está instalado nem ativo no servidor Vibe-Trading**.
+Este diretório constrói um serviço Render separado com o código oficial de
+[HKUDS/Vibe-Trading](https://github.com/HKUDS/Vibe-Trading), adiciona uma rota
+de revisão exclusiva e mantém o Resolvei como cliente da API.
 
-## Instalação no Vibe-Trading
+O Dockerfile baixa uma revisão upstream fixada, instala as dependências com os
+arquivos de lock oficiais e injeta o adaptador durante o build. O repositório
+original HKUDS não é alterado.
 
-1. Copie `vibe_lucro_routes.py` para `agent/src/api/vibe_lucro_routes.py`.
-2. Em `agent/api_server.py`, acrescente após o registro dos conectores:
+## Arquitetura
 
-```python
-from src.api.vibe_lucro_routes import register_vibe_lucro_routes  # noqa: E402
-register_vibe_lucro_routes(app)
-```
+1. O usuário entra na IQ Option pelo formulário exclusivo do VIBE LUCRO.
+2. O backend Resolvei obtém os candles M1/M5/M15 usando somente a sessão IQ
+   Option pertencente ao VIBE LUCRO.
+3. O Resolvei envia ao serviço Vibe-Trading apenas símbolo, expiração,
+   indicadores, scores e até 90 candles OHLCV.
+4. A rota adicionada usa o `ChatLLM` do Vibe-Trading diretamente, sem iniciar
+   AgentLoop e sem anexar ferramentas. Portanto, não há ferramentas de corretora,
+   ordens, shell ou execução disponíveis nessa revisão.
+5. O texto do Vibe-Trading explica convergências, divergências e riscos; ele não
+   pode alterar o sinal quantitativo CALL/PUT/AGUARDAR do motor do Resolvei.
 
-3. Publique o Vibe-Trading com sua autenticação de API já configurada
-   (`API_AUTH_KEY` / `VIBE_TRADING_API_KEY`).
-4. No ambiente do Resolvei, configure:
+A senha, o token da IQ Option, o identificador da sessão, a identidade e os
+dados da conta nunca são enviados ao Vibe-Trading.
 
-```text
-VIBE_TRADING_API_URL=https://SEU-SERVIDOR-VIBE
-VIBE_TRADING_API_KEY=SUA_CHAVE_DE_API_DO_VIBE
-```
+## Criar o serviço Render
 
-Não coloque a chave no frontend, no Git ou no navegador.
+Crie um novo Web Service no mesmo workspace do Resolvei:
 
-## Sessão da IQ Option no Resolvei
+- Repository: `https://github.com/omarioarquiteto/resolvei-utilidades`
+- Branch: `main`
+- Runtime: `Docker`
+- Dockerfile Path: `integrations/vibe-trading/Dockerfile`
+- Docker Context: `.`
+- Region: `Oregon` (mesma região do Resolvei)
+- Plan: `Free` para evitar custos sem aprovação
+- Service name sugerido: `resolvei-vibe-trading`
 
-O VIBE LUCRO abre uma autenticação exclusiva da IQ Option em seu próprio
-módulo `vibe_lucro_auth.py`. O token fica em uma chave própria do
-`sessionStorage`, e o servidor mantém um cliente IQ Option separado.
-O logout do VIBE LUCRO encerra apenas esse cliente, sem consultar nem remover
-sessões da Visão Opções, Analista Bin, TRADE-PRÓ ou Consultor Sênior.
+Configure as variáveis no serviço Vibe-Trading:
 
-## Contrato e segurança
+| Variável | Valor |
+| --- | --- |
+| `API_AUTH_KEY` | Chave aleatória forte, compartilhada somente entre os dois serviços |
+| `LANGCHAIN_PROVIDER` | Provedor escolhido, por exemplo `gemini` |
+| `LANGCHAIN_MODEL_NAME` | Modelo disponível no provedor |
+| `GEMINI_API_KEY` | Necessária somente quando `LANGCHAIN_PROVIDER=gemini` |
+| `OPENROUTER_API_KEY` | Necessária somente quando `LANGCHAIN_PROVIDER=openrouter` |
+| `DEEPSEEK_API_KEY` | Necessária somente quando `LANGCHAIN_PROVIDER=deepseek` |
+| `VIBE_TRADING_ENABLE_SHELL_TOOLS` | `0` |
 
-- Endpoint: `POST /api/vibe-lucro/analyze`.
-- Autenticação: `Authorization: Bearer <API key do Vibe-Trading>`.
-- O payload contém apenas símbolo, expiração, score, indicadores e até 90 candles
-  OHLCV. Não contém login, senha, session ID, dados de conta ou token da IQ Option.
-- A rota chama `ChatLLM` diretamente, **sem fornecer esquemas de ferramentas**,
-  sem iniciar AgentLoop e sem usar conectores de corretora.
-- Respostas que tentem solicitar ferramentas são rejeitadas.
-- A revisão de IA é explicativa. Ela não pode substituir CALL/PUT/AGUARDAR nem
-  alterar o score quantitativo do Resolvei.
-- Sem essa ponte instalada, o motor quantitativo do Resolvei continua operando
-  e a interface informa que a revisão do Vibe-Trading está indisponível.
+Use somente a chave do provedor correspondente ao `LANGCHAIN_PROVIDER`
+selecionado. Nunca coloque chaves no frontend, no Git ou em mensagens de chat.
+
+## Conectar o Resolvei
+
+No serviço Render `resolvei`, defina:
+
+- `VIBE_TRADING_API_URL`: URL pública do novo serviço Vibe-Trading.
+- `VIBE_TRADING_API_KEY`: o mesmo valor de `API_AUTH_KEY` configurado no
+  Vibe-Trading.
+
+O Resolvei já possui o cliente HTTP para chamar
+`POST /api/vibe-lucro/analyze`. A rota retorna `available=false` quando o
+serviço externo está inacessível; a análise quantitativa local continua
+disponível e não é substituída por uma resposta de IA.
+
+## Segurança e operação
+
+- A rota exige `Authorization: Bearer <API_AUTH_KEY>`.
+- O adaptador recebe somente dados de mercado anonimizados.
+- O adaptador chama `ChatLLM.chat(...)` sem argumento `tools` e rejeita
+  respostas com tool calls.
+- Não registra rotas de AgentLoop, broker, paper/live trading ou execução.
+- O shell do Vibe-Trading permanece explicitamente desativado.
+- O plano Free do Render pode suspender o serviço por inatividade. A primeira
+  chamada após suspensão pode demorar mais; o Resolvei mantém o sinal local se
+  o serviço não responder.
+
+## Sessão IQ Option
+
+O login, token, cliente websocket, TTL e logout continuam isolados em
+`vibe_lucro_auth.py`. O Vibe-Trading recebe somente candles/indicadores: nunca
+recebe a sessão nem as credenciais da IQ Option.
