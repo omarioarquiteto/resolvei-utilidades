@@ -3,6 +3,7 @@
   const KEY = "resolvei_trade_pro_session";
   let timer = null;
   let busy = false;
+  let aiBusy = false;
   let lastUiSignalKey = "";
   const $ = id => document.getElementById(id);
   const esc = value => String(value ?? "").replace(/[&<>"']/g, ch => ({
@@ -97,6 +98,7 @@
           '</label>' +
           '<label>TIMEFRAME DOS CANDLES<select id="tpTimeframe"><option value="1m">M1 · 1 minuto</option><option value="5m">M5 · 5 minutos</option><option value="15m">M15 · 15 minutos</option></select></label>' +
           '<button id="tpAnalyze" type="button">ANALISAR AGORA</button>' +
+          '<button id="tpGeminiAnalyze" class="tp-ai-trigger" type="button">✦ ANALISAR COM GEMINI</button>' +
         '</section>' +
         '<section class="tp-toolbar"><span id="tpConnectionStatus">Carregando catálogo de ativos…</span>' +
           '<span id="tpCandleFreshness" class="tp-candle-freshness">Candles: aguardando análise</span>' +
@@ -122,6 +124,14 @@
             '<div class="tp-score-row"><span>Volatilidade</span><div class="tp-meter"><i id="tpVolatilityMeter"></i></div><b id="tpVolatilityScore">0%</b></div>' +
             '<p class="tp-small-note">Um score alto, isoladamente, não emite sinal: os três filtros também precisam ser confirmados.</p>' +
           '</article>' +
+        '</section>' +
+        '<section id="tpAiCard" class="tp-card tp-ai-card">' +
+          '<div class="tp-section-title"><div><small>SEGUNDA LEITURA DO MERCADO</small><h2>Gemini do Resolvei</h2></div><span id="tpAiStatus" class="tp-ai-status">AGUARDANDO ANÁLISE</span></div>' +
+          '<div class="tp-ai-main"><strong id="tpAiRecommendation">AGUARDAR</strong><span id="tpAiConfidence">CONVICÇÃO QUALITATIVA —</span></div>' +
+          '<p id="tpAiSummary" class="tp-ai-summary">Selecione o ativo e clique em “Analisar com Gemini” para obter uma segunda leitura dos indicadores do candle.</p>' +
+          '<div class="tp-ai-columns"><div><b>FATORES DA DECISÃO</b><ul id="tpAiReasons"><li>Aguardando análise.</li></ul></div><div><b>RISCOS E PONTOS DE ATENÇÃO</b><ul id="tpAiRisks"><li>Aguardando análise.</li></ul></div></div>' +
+          '<div class="tp-ai-entry"><b>CONDIÇÃO PARA ENTRADA</b><p id="tpAiEntry">Nenhuma entrada foi recomendada.</p></div>' +
+          '<p id="tpAiFootnote" class="tp-ai-footnote">O Gemini usa os dados técnicos recebidos da IQ Option. A convicção de 0 a 100 é qualitativa, não uma probabilidade de lucro.</p>' +
         '</section>' +
         '<section class="tp-card tp-log-card"><div class="tp-section-title"><div><small>HISTÓRICO DE SINAIS VALIDADOS</small><h2>Registro desta sessão</h2></div><button id="tpClearLog" type="button">LIMPAR</button></div>' +
           '<div id="tpLog" class="tp-log-empty">Nenhum sinal validado nesta sessão. Análises sem confluência não entram no histórico.</div>' +
@@ -282,6 +292,63 @@
     }
   }
 
+  function showAi(data) {
+    const recommendation = ["COMPRA", "VENDA", "AGUARDAR"].includes(data.recommendation) ? data.recommendation : "AGUARDAR";
+    const card = $("tpAiCard");
+    if (!card) return;
+    card.className = "tp-card tp-ai-card tp-ai-" + recommendation.toLowerCase();
+    $("tpAiStatus").textContent = data.ai_used ? "GEMINI CONSULTADO" : "ENTRADA BLOQUEADA";
+    $("tpAiRecommendation").textContent = recommendation;
+    $("tpAiConfidence").textContent = "CONVICÇÃO QUALITATIVA " + Math.max(0, Math.min(100, Number(data.confidence) || 0)) + "/100";
+    $("tpAiSummary").textContent = data.summary || "O Gemini não retornou uma justificativa."; 
+    const reasons = Array.isArray(data.reasons) ? data.reasons : [];
+    const risks = Array.isArray(data.risks) ? data.risks : [];
+    $("tpAiReasons").innerHTML = (reasons.length ? reasons : ["Sem fatores adicionais informados."]).map(item => "<li>" + esc(item) + "</li>").join("");
+    $("tpAiRisks").innerHTML = (risks.length ? risks : ["Considere a possibilidade de perda e mudanças rápidas no mercado."]).map(item => "<li>" + esc(item) + "</li>").join("");
+    $("tpAiEntry").textContent = data.entry_condition || "Aguarde uma nova leitura antes de considerar uma entrada.";
+    $("tpAiFootnote").textContent = data.ai_used
+      ? "Análise gerada pelo Gemini conectado à sua conta Resolvei. A convicção é qualitativa, não representa taxa histórica de acerto nem probabilidade de lucro. Nenhuma ordem é enviada."
+      : (data.note || "O Trade Pro bloqueou a recomendação para proteger contra dados de mercado inadequados.");
+  }
+
+  async function analyzeWithGemini() {
+    if (aiBusy) return;
+    const symbol = $("tpSymbol")?.value.trim();
+    const timeframe = $("tpTimeframe")?.value || "1m";
+    if (!symbol) { $("tpAiSummary").textContent = "Selecione um ativo antes de solicitar a análise."; return; }
+    if (typeof resolveiUser === "undefined" || !resolveiUser || typeof resolveiToken !== "function") {
+      $("tpAiStatus").textContent = "LOGIN RESOLVEI NECESSÁRIO";
+      $("tpAiRecommendation").textContent = "AGUARDAR";
+      $("tpAiSummary").textContent = "Entre na sua conta Resolvei para usar o Gemini. Acesse Minha Conta e depois retorne ao Trade Pro.";
+      $("tpAiEntry").innerHTML = '<a href="#/conta">Entrar na Minha Conta do Resolvei</a>';
+      return;
+    }
+    aiBusy = true;
+    const button = $("tpGeminiAnalyze");
+    if (button) { button.disabled = true; button.textContent = "CONSULTANDO GEMINI…"; }
+    $("tpAiStatus").textContent = "CONSULTANDO GEMINI";
+    $("tpAiSummary").textContent = "Enviando os indicadores e a qualidade dos candles para uma segunda leitura…";
+    try {
+      const token = await resolveiToken();
+      const data = await call("/analyze-ai", {
+        method: "POST",
+        headers: { Authorization: "Bearer " + token },
+        body: JSON.stringify({ symbol, timeframe })
+      });
+      if (data.base_analysis) show(data.base_analysis);
+      showAi(data);
+      $("tpConnectionStatus").textContent = "Gemini consultado às " + new Date().toLocaleTimeString("pt-BR") + " · " + symbol;
+    } catch (error) {
+      $("tpAiStatus").textContent = "ANÁLISE NÃO CONCLUÍDA";
+      $("tpAiRecommendation").textContent = "AGUARDAR";
+      $("tpAiSummary").textContent = error.message || "Não foi possível consultar o Gemini.";
+      $("tpAiEntry").textContent = "Verifique sua conexão Gemini em Minha Conta e tente novamente.";
+      $("tpAiFootnote").textContent = "Nenhuma recomendação foi gerada. O sistema não substitui a análise dos dados nem executa operações.";
+    } finally {
+      aiBusy = false;
+      if ($("tpGeminiAnalyze")) { $("tpGeminiAnalyze").disabled = false; $("tpGeminiAnalyze").textContent = "✦ ANALISAR COM GEMINI"; }
+    }
+  }
   async function render() {
     const host = $("tradeProToolHost");
     if (!host) return;
@@ -304,6 +371,7 @@
       login();
     };
     $("tpAnalyze").onclick = analyze;
+    $("tpGeminiAnalyze").onclick = analyzeWithGemini;
     $("tpAuto").onchange = () => {
       stopAuto();
       if ($("tpAuto").checked) {
