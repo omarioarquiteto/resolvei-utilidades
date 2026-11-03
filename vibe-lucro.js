@@ -68,7 +68,7 @@
     return renderGroup("MERCADO NORMAL", normal) + renderGroup("MERCADO OTC", otc);
   }
 
-  function shell(status) {
+  function shell(status, vibeStatus = {}) {
     return '<div class="vl-app">' +
       '<header class="vl-header"><div><span class="vl-eyebrow">RESOLVEI · IQ OPTION · SOMENTE LEITURA</span>' +
       '<h1>VIBE <span>LUCRO</span></h1><p>Leitura multi-timeframe e pontos de atenção para opções de 1, 5 ou 15 minutos.</p></div>' +
@@ -80,7 +80,7 @@
       '</section>' +
       '<div id="vlStatus" class="vl-status" role="status">' + esc(status || "Conexão validada. Escolha o ativo e a expiração.") + '</div>' +
       '<div id="vlResult" class="vl-result"><section class="vl-placeholder"><span>◉</span><strong>Aguardando análise</strong><p>O motor vai comparar tendência, momentum, price action e contexto dos três períodos.</p></section></div>' +
-      '<div id="vlInsightState" class="vl-agent-state"><span class="vl-agent-dot"></span><div><strong>Motor quantitativo VIBE LUCRO</strong><small>Ativo · integração com o servidor autônomo Vibe-Trading não configurada nesta implantação.</small></div></div>' +
+      '<div id="vlInsightState" class="vl-agent-state"><span class="vl-agent-dot"></span><div><strong>Motor quantitativo VIBE LUCRO</strong><small>' + esc(vibeStatus.message || "Motor local ativo. A IA Vibe-Trading pode ser conectada como revisão complementar.") + '</small></div></div>' +
       '<p class="vl-disclaimer">A ferramenta somente lê candles e apresenta análises. Não envia ordens, não movimenta saldo e não garante resultados. O score mede confluência técnica, não probabilidade de acerto.</p>' +
       '</div>';
   }
@@ -132,6 +132,11 @@
         '<div class="vl-tf-table">' + rows + '</div></section>' +
       '<section class="vl-panel"><div class="vl-panel-head"><div><small>CONFLUÊNCIA</small><h2>Grupos de confirmação</h2></div></div><div class="vl-votes">' + votes + '</div></section>' +
       '<section class="vl-panel vl-reasons"><div class="vl-panel-head"><div><small>JUSTIFICATIVA</small><h2>Por que o motor chegou a esse estado</h2></div></div><ul>' + reasons + '</ul></section>' +
+      (data.vibe_trading_review && data.vibe_trading_review.available
+        ? '<section class="vl-panel vl-ai-review"><div class="vl-panel-head"><div><small>VIBE-TRADING · REVISÃO DE IA</small><h2>Segunda leitura independente</h2></div><span class="vl-tag-ok">CONECTADO</span></div><div class="vl-ai-review-text">' + esc(data.vibe_trading_review.review) + '</div><small>' + esc(data.vibe_trading_review.message || "Revisão complementar, sem alterar o sinal quantitativo.") + '</small></section>'
+        : (data.vibe_trading_review && data.vibe_trading_review.configured
+          ? '<section class="vl-panel vl-ai-review"><div class="vl-panel-head"><div><small>VIBE-TRADING · REVISÃO DE IA</small><h2>Segunda leitura indisponível</h2></div><span class="vl-tag-warn">INDISPONÍVEL</span></div><p>' + esc(data.vibe_trading_review.message || "A revisão de IA não respondeu.") + '</p></section>'
+          : '<section class="vl-panel vl-ai-review"><div class="vl-panel-head"><div><small>VIBE-TRADING · REVISÃO DE IA</small><h2>Integração complementar</h2></div><span class="vl-tag-warn">NÃO CONFIGURADA</span></div><p>O motor quantitativo local continua funcionando. A segunda leitura por IA será ativada quando o endpoint protegido do Vibe-Trading estiver instalado e configurado.</p></section>')) +
       '<div class="vl-result-foot">Análise concluída em ' + new Date(Number(data.analysis_time || Date.now() / 1000) * 1000).toLocaleTimeString("pt-BR") +
         ' · ' + Number(data.timeframes?.["1m"]?.candles || 0) + ' candles M1 · ' + (quality.fresh ? "sem períodos atrasados" : "há períodos atrasados") + '</div>';
   }
@@ -178,9 +183,12 @@
     if (!host) return;
     loading = false;
     try {
-      await request("/status");
+      const connectionStatus = await request("/status");
       await loadAssets();
-      host.innerHTML = shell("Conexão existente reconhecida. Nenhum novo login foi aberto.");
+      host.innerHTML = shell(
+        "Conexão existente reconhecida. Nenhum novo login foi aberto.",
+        connectionStatus.vibe_trading_agent || {}
+      );
       $("vlSymbol").innerHTML = assetOptions();
       if ([...$("vlSymbol").options].some(option => option.value === "EURUSD")) $("vlSymbol").value = "EURUSD";
       $("vlAnalyze")?.addEventListener("click", analyzeNow);
