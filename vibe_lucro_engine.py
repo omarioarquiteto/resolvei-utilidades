@@ -5,7 +5,7 @@ Não envia ordens, não acessa carteira e não tenta automatizar operações.
 """
 from __future__ import annotations
 
-from math import isfinite, sqrt
+from math import isfinite
 from statistics import mean
 from typing import Any
 
@@ -139,7 +139,9 @@ def _features(rows: list[dict[str, float]], timeframe: str, now: float) -> dict[
 
     atr_pct = (atr / abs(close) * 100.0) if atr is not None and close else None
     period = TIMEFRAME_SECONDS[timeframe]
-    age = max(0.0, now - (candle["time"] + period))
+    raw_age = now - (candle["time"] + period)
+    age = max(0.0, raw_age)
+    fresh = -30.0 <= raw_age <= MAX_CANDLE_AGE_SECONDS[timeframe]
 
     return {
         "timeframe": timeframe,
@@ -158,7 +160,7 @@ def _features(rows: list[dict[str, float]], timeframe: str, now: float) -> dict[
         "last_close": close,
         "last_candle_time": candle["time"],
         "age_seconds": age,
-        "fresh": age <= MAX_CANDLE_AGE_SECONDS[timeframe],
+        "fresh": fresh,
         "candles": len(rows),
     }
 
