@@ -63,6 +63,11 @@
       if (button) { button.disabled = true; button.textContent = "CONECTANDO…"; }
       if (message) message.textContent = "";
       try {
+        const previousToken = sid();
+        if (previousToken) {
+          try { await request("/logout", { method: "POST" }, previousToken); } catch (_) {}
+          sessionStorage.removeItem(SESSION_KEY);
+        }
         const result = await request("/login", {
           method: "POST",
           body: JSON.stringify({ email, password })
@@ -246,7 +251,7 @@
       });
     } catch (error) {
       host.innerHTML = loginShell(error.message);
-      if (!sid()) bindLogin();
+      bindLogin();
     }
   }
 
