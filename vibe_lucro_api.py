@@ -21,6 +21,7 @@ EXPIRIES = (1, 5, 15)
 CANDLE_COUNTS = {"1m": 220, "5m": 160, "15m": 110}
 VIBE_TRADING_API_URL = os.getenv("VIBE_TRADING_API_URL", "").strip().rstrip("/")
 VIBE_TRADING_API_KEY = os.getenv("VIBE_TRADING_API_KEY", "").strip()
+VIBE_TRADING_CONNECT_TIMEOUT = 90.0  # allow the Render Free instance to wake from sleep
 VIBE_TRADING_REVIEW_TIMEOUT = 32.0
 
 
@@ -83,7 +84,7 @@ def _call_vibe_trading_review(
             VIBE_TRADING_API_URL + "/api/vibe-lucro/analyze",
             headers={"Authorization": "Bearer " + VIBE_TRADING_API_KEY},
             json=payload,
-            timeout=(4.0, VIBE_TRADING_REVIEW_TIMEOUT),
+            timeout=(VIBE_TRADING_CONNECT_TIMEOUT, VIBE_TRADING_REVIEW_TIMEOUT),
         )
         response.raise_for_status()
         data = response.json()
