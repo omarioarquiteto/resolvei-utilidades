@@ -27,7 +27,6 @@ const slug = s => s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,''
 
 const tools = [
   {id:'altos-lucros',cat:'investimentos',icon:'🎯',title:'ALTOS LUCROS',desc:'Analisa strikes digitais da IQ Option com payout de 200% ou mais e estima a probabilidade histórica no vencimento de 5 ou 15 minutos.',tags:'altos lucros iqoption digital strike alvo payout 200% 5 minutos 15 minutos probabilidade estatística opções digitais'},
-  {id:'vibe-lucro',cat:'investimentos',icon:'✦',title:'VIBE LUCRO',desc:'Analisa candles da IQ Option em múltiplos tempos e identifica confluências para CALL, PUT ou AGUARDAR nas expirações de 1, 5 e 15 minutos.',tags:'vibe lucro vibe trading iqoption iq option call put compra venda candles análise técnica multi timeframe expiração 1 5 15 minutos'},
   {id:'porcentagem',cat:'dinheiro',icon:'%',title:'Calculadora de porcentagem',desc:'Descubra porcentagens, variações e valores rapidamente.',tags:'porcentagem percentual percentagem aumento redução'},
   {id:'regra-de-3',cat:'dinheiro',icon:'⅓',title:'Regra de 3',desc:'Resolva proporções simples em segundos.',tags:'regra de tres proporção proporcional'},
   {id:'desconto',cat:'dinheiro',icon:'🏷️',title:'Desconto',desc:'Calcule preço final, desconto e economia.',tags:'desconto promoção preço liquidação'},
@@ -151,7 +150,7 @@ const ACTIVE_TOOL_IDS = new Set([
   'gerador-de-senhas','combustivel-viagem','tinta','piso','concreto','iluminacao','ar-condicionado','placas-solares',
   'conversor-arquivos','conversor-unidades','idade','datas-e-horarios','somar-horas','rescisao-clt','clt-vs-pj',
   'receita','custo-receita','por-quanto-vender','churrasco','festa','lista-compras',
-  'gerenciamento-risco','vibe-lucro','visao-opcoes','analista-bin','trade-pro','consultor-senior','monitor-precos'
+  'gerenciamento-risco','visao-opcoes','analista-bin','trade-pro','consultor-senior','monitor-precos'
 ]);
 for(let i=tools.length-1;i>=0;i--){if(!ACTIVE_TOOL_IDS.has(tools[i].id))tools.splice(i,1);}
 const popular = ['monitor-precos','porcentagem','combustivel-viagem','piso','tinta','financiamento','juros-compostos','lista-compras'];
@@ -1462,7 +1461,6 @@ function toolPage(id){
   if(id==='analista-bin')return '<div id="analistaBinToolHost"></div>';
   if(id==='trade-pro')return '<div id="tradeProToolHost"></div>';
   if(id==='altos-lucros')return '<div id="altosLucrosToolHost"></div>';
-  if(id==='vibe-lucro')return '<div id="vibeLucroToolHost"></div>';
   if(id==='consultor-senior')return '<div id="consultorSeniorToolHost"></div>';
   if(id==='financiamento')return '<div class="tool-page"><div class="breadcrumb"><a href="#/">Início</a> / <a href="#/categoria/dinheiro">Dinheiro</a> / Financiamento</div><div id="financiamentoToolHost"></div></div>';
   const redirects={
