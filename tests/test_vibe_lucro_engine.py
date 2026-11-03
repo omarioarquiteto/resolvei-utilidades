@@ -10,7 +10,8 @@ def make_rows(count: int, now: float, *, slope: float = 0.001, start: float = 1.
     price = start
     base_time = now - count * period - 10
     for index in range(count):
-        next_price = price * (1.0 + slope)
+        movement = slope * (1.0, -0.4, -0.4, 1.0)[index % 4]
+        next_price = price * (1.0 + movement)
         rows.append({
             "open": price,
             "high": max(price, next_price) * 1.0002,
