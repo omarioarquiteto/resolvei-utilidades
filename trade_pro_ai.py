@@ -29,6 +29,7 @@ def build_trade_pro_ai_prompt(base: dict[str, Any]) -> str:
         "checks": base.get("checks") or {},
         "blocking_reasons": base.get("blocking_reasons") or [],
         "data_quality": base.get("data_quality") or {},
+        "recent_closed_candles": base.get("recent_candles") or [],
     }
     return (
         "Você é um analista técnico de mercado especializado em leitura de candles. "
@@ -45,7 +46,10 @@ def build_trade_pro_ai_prompt(base: dict[str, Any]) -> str:
         "4. A IA pode vetar um sinal, mas não pode liberar uma entrada que o motor-base não validou.\n"
         "5. Não invente preço de entrada, stop, payout ou alvo. A expiração, quando houver sinal, "
         "deve permanecer igual à expiração sugerida pelo motor-base.\n"
-        "6. Seja conservador. Diferencie tendência, impulso, volume, volatilidade, risco de reversão "
+        "6. Analise também a sequência dos últimos candles fechados: estrutura de máximas/mínimas, "
+        "corpos, sombras, continuidade, rejeições e rompimentos falsos quando os dados permitirem. "
+        "Não trate um padrão isolado como confirmação suficiente.\n"
+        "7. Seja conservador. Diferencie tendência, impulso, volume, volatilidade, risco de reversão "
         "e ausência de confirmação.\n\n"
         "Retorne SOMENTE JSON válido, sem markdown, com este formato: "
         '{"recommendation":"COMPRA|VENDA|AGUARDAR","confidence":0,'
