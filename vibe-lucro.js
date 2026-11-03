@@ -6,7 +6,7 @@
     "resolvei_visao_opcoes_session",
     "resolvei_iqoption_session",
     "resolvei_trade_pro_session",
-    "resolvei_consultor_senior_session",
+    "resolvei_consultor_senior_iq_session",
     "resolvei_analista_bin_session"
   ];
   const $ = id => document.getElementById(id);
