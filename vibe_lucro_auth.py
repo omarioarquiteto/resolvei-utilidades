@@ -123,7 +123,12 @@ async def login(request: VibeLucroLoginRequest) -> dict[str, Any]:
         raise
     except Exception as exc:
         await _close_client(client)
-        detail = str(exc)[:260] or "A IQ Option recusou a conexão."
+        raw_detail = str(exc) or "A IQ Option recusou a conexão."
+        if password:
+            raw_detail = raw_detail.replace(password, "[senha ocultada]")
+        if email:
+            raw_detail = raw_detail.replace(email, "[e-mail ocultado]")
+        detail = raw_detail[:260]
         code = 401 if any(
             token in detail.lower()
             for token in ("login", "auth", "password", "credential", "senha")
