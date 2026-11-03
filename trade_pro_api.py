@@ -232,6 +232,19 @@ async def run(
             "candle_time": int(closed[-1]["time"]),
             "timeframe": timeframe,
             "execution_enabled": False,
+            # Amostra dos últimos candles fechados para análise contextual opcional
+            # pelo Gemini. A interface determinística pode ignorar este campo.
+            "recent_candles": [
+                {
+                    "time": int(row["time"]),
+                    "open": float(row["open"]),
+                    "high": float(row["high"]),
+                    "low": float(row["low"]),
+                    "close": float(row["close"]),
+                    "volume": float(row["volume"]) if row.get("volume") is not None else None,
+                }
+                for row in closed[-60:]
+            ],
         }
     )
 

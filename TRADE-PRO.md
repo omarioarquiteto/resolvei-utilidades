@@ -22,6 +22,7 @@ O documento do CME descreve opções sobre futuros com payoff, prêmio e vencime
 - `trade_pro_auth.py`: login IQ Option e sessões isoladas do TRADE-PRÓ. Não reutiliza nem modifica a sessão do Analista Bin.
 - `trade_pro_api.py`: endpoints de ativos, configuração e análise de candles.
 - `trade_pro_engine.py`: cálculo de EMAs, MACD, ATR, ADX, largura de Bollinger, rompimentos, relação de volume, confluência e duração sugerida.
+- `trade_pro_ai.py`: prompt técnico e validação da segunda leitura do Gemini; a IA pode vetar um sinal, mas não inverter a direção nem liberar entradas sem sinal-base aprovado.
 - `trade-pro.js` / `trade-pro.css`: interface, login, análise manual ou periódica e histórico de sinais confirmados.
 - `server.py`: registra os dois routers da ferramenta.
 - `index.html` / `app.js`: inclui os arquivos e adiciona a ferramenta ao catálogo Investimentos.
@@ -46,6 +47,7 @@ O documento do CME descreve opções sobre futuros com payoff, prêmio e vencime
 - `GET /api/trade-pro/assets`
 - `GET /api/trade-pro/config`
 - `POST /api/trade-pro/analyze`
+- `POST /api/trade-pro/analyze-ai` — exige `Authorization: Bearer` da conta Resolvei e `X-IQ-Session`; usa o Gemini conectado em Minha Conta.
 
 Para endpoints exceto login, envie o cabeçalho `X-IQ-Session` com o identificador retornado no login.
 
@@ -58,3 +60,8 @@ python -m unittest discover -s tests -p "test_trade_pro_engine.py"
 ```
 
 Os testes automatizados cobrem rejeição de candles insuficientes, timeframes inválidos, bloqueio de volume constante, explicação de ausência de sinal e cenários sintéticos altista/baixista com filtros satisfeitos. Antes de qualquer uso real, verifique a qualidade de candles/volume e execute avaliações históricas fora da amostra. Confluência é apenas a saída de regras determinísticas, não uma probabilidade estatística calibrada de acerto; nenhuma mudança garante rentabilidade.
+
+
+## Segunda leitura pelo Gemini
+
+O botão **Analisar com Gemini** envia os indicadores, os filtros e a qualidade dos candles obtidos na sessão IQ Option do próprio TRADE-PRÓ ao Gemini vinculado à conta Resolvei (ou à chave Gemini geral configurada no servidor). Não é necessário inserir uma nova chave na ferramenta. O Gemini pode confirmar a direção já validada pelo motor ou recomendar aguardar; não pode inverter COMPRA/VENDA nem liberar uma operação quando não existe sinal-base válido. Se o candle estiver desatualizado, a consulta é bloqueada. A nota qualitativa da IA não é probabilidade estatística de lucro. A ferramenta permanece somente analítica e não envia ordens.

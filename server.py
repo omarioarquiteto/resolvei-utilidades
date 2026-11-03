@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import tempfile
@@ -30,6 +31,7 @@ from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, Response
 from pydantic import BaseModel, Field
+from trade_pro_ai import build_trade_pro_ai_prompt, parse_trade_pro_ai_response
 
 
 load_dotenv()
@@ -83,7 +85,7 @@ from consultor_senior_auth import router as consultor_senior_auth_router
 from consultor_senior_api import router as consultor_senior_router
 from documents_api import router as documents_router
 from trade_pro_auth import router as trade_pro_auth_router
-from trade_pro_api import router as trade_pro_router
+from trade_pro_api import router as trade_pro_router, TradeProAnalyzeRequest, run as trade_pro_run
 from altos_lucros_api import router as altos_lucros_router
 app.include_router(consultor_senior_auth_router)
 app.include_router(analista_bin_router)
@@ -444,6 +446,64 @@ def _provider_call(provider: str, api_key: str, model: str, message: str) -> str
         return resp.json()["choices"][0]["message"]["content"]
     raise HTTPException(status_code=400,detail="Provedor de IA não suportado.")
 
+@app.post("/api/trade-pro/analyze-ai")
+async def trade_pro_analyze_with_gemini(
+    req: TradeProAnalyzeRequest,
+    authorization: str | None = Header(default=None),
+    x_iq_session: str | None = Header(default=None),
+) -> dict[str, Any]:
+    """Consulta o Gemini da conta Resolvei com a leitura atual do TRADE-PRÓ.
+
+    A análise determinística continua sendo a barreira de segurança: o Gemini
+    pode confirmar COMPRA/VENDA ou vetar o sinal, mas nunca inverter a direção
+    nem liberar entradas sem candles atuais e filtros aprovados.
+    """
+    provider, api_key, model = _resolve_ai_credentials(authorization, "gemini")
+    if provider != "gemini":
+        raise HTTPException(status_code=400, detail="A conexão Gemini não está disponível para esta conta.")
+
+    # Reutiliza a análise real do Trade Pro e a sessão IQ Option exclusiva.
+    base = await trade_pro_run(req, x_iq_session)
+    quality = base.get("data_quality") or {}
+    if quality.get("stale"):
+        age = quality.get("last_candle_age_seconds")
+        note = "O último candle está desatualizado. O Gemini não foi consultado para evitar uma recomendação baseada em dados antigos."
+        return {
+            "ok": True,
+            "provider": "gemini",
+            "ai_used": False,
+            "recommendation": "AGUARDAR",
+            "confidence": 100,
+            "summary": note,
+            "reasons": [note],
+            "risks": ["A leitura pode não representar as condições atuais do mercado."],
+            "entry_condition": "Aguarde a IQ Option disponibilizar candles fechados e atualizados.",
+            "expiration_minutes": None,
+            "note": note,
+            "base_analysis": base,
+        }
+
+    prompt = build_trade_pro_ai_prompt(base)
+    try:
+        raw = await asyncio.to_thread(_provider_call, provider, api_key, model, prompt)
+        ai_result = parse_trade_pro_ai_response(raw, base)
+    except HTTPException:
+        raise
+    except ValueError as exc:
+        raise HTTPException(status_code=502, detail="O Gemini retornou uma análise em formato inválido. Tente novamente.") from exc
+    except Exception as exc:
+        detail = str(exc).strip()[:240] or type(exc).__name__
+        raise HTTPException(status_code=502, detail=f"Não foi possível concluir a análise pelo Gemini: {detail}") from exc
+
+    return {
+        "ok": True,
+        "provider": "gemini",
+        "ai_used": True,
+        **ai_result,
+        "base_analysis": base,
+    }
+
+
 @app.get("/api/ai/diagnose")
 def ai_diagnose(authorization: str | None = Header(default=None)) -> dict[str, Any]:
     _verify_firebase_token(authorization)
@@ -534,6 +594,7 @@ def ai_chat_public(req: AIPublicChatRequest):
     provider=req.provider.lower().strip()
     if provider not in {"gemini","openai","anthropic","openrouter"}:
         raise HTTPException(status_code=400,detail="Provedor de IA não suportado.")
+
     api_key=req.api_key.strip()
     message=req.message.strip()
     if not api_key:
