@@ -1,4 +1,4 @@
-"""API somente-leitura do VIBE LUCRO, reutilizando sessões IQ Option existentes."""
+"""API somente-leitura do VIBE LUCRO, com sessão IQ Option exclusiva."""
 from __future__ import annotations
 
 import asyncio
@@ -115,7 +115,7 @@ async def run_analysis(
             detail=f"Não foi possível concluir a análise dos candles de {symbol}: {type(exc).__name__}: {str(exc)[:180]}",
         ) from exc
 
-    analysis["source"] = "IQ Option · sessão existente do Resolvei · motor quantitativo VIBE LUCRO"
+    analysis["source"] = "IQ Option · sessão exclusiva do VIBE LUCRO · motor quantitativo"
     analysis["connection_reused"] = False
     analysis["exclusive_session"] = True
     analysis["vibe_trading_review"] = await asyncio.to_thread(
