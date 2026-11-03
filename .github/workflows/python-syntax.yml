@@ -29,5 +29,6 @@ jobs:
         with:
           node-version: "22"
       - name: Check Consultor Sênior frontend syntax
-        run: node --check consultor-senior.js
+        run: |
+          node --check consultor-senior.js
           node --check vibe-lucro.js
