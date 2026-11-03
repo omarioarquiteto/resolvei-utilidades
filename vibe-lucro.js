@@ -2,13 +2,7 @@
   "use strict";
 
   const API = "/api/vibe-lucro";
-  const SESSION_KEYS = [
-    "resolvei_visao_opcoes_session",
-    "resolvei_iqoption_session",
-    "resolvei_trade_pro_session",
-    "resolvei_consultor_senior_iq_session",
-    "resolvei_analista_bin_session"
-  ];
+  const SESSION_KEY = "resolvei_vibe_lucro_session";
   const $ = id => document.getElementById(id);
   const esc = value => String(value ?? "").replace(/[&<>"']/g, char => ({
     "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
@@ -16,46 +10,87 @@
   const money = value => Number.isFinite(Number(value))
     ? Number(value).toLocaleString("pt-BR", { maximumFractionDigits: 6 })
     : "—";
-  const candidates = () => SESSION_KEYS.map(key => sessionStorage.getItem(key) || "").filter(Boolean);
+  const sid = () => sessionStorage.getItem(SESSION_KEY) || "";
   let loadedAssets = [];
   let activeAnalysis = null;
   let loading = false;
 
-  async function request(path, options = {}) {
-    const sessions = candidates();
-    if (!sessions.length) throw new Error("Nenhuma sessão IQ Option disponível nesta aba.");
-    let lastError = null;
-    for (const session of sessions) {
-      const headers = { "Content-Type": "application/json", ...(options.headers || {}), "X-IQ-Session": session };
-      try {
-        const response = await fetch(API + path, { ...options, headers });
-        let data = {};
-        try { data = await response.json(); } catch (_) {}
-        if (response.status === 401) {
-          lastError = new Error(data.detail || "Sessão expirada.");
-          continue;
-        }
-        if (!response.ok) throw new Error(data.detail || "Falha ao consultar o VIBE LUCRO.");
-        return data;
-      } catch (error) {
-        if (error instanceof TypeError) throw new Error("Não foi possível acessar o servidor do Resolvei.");
-        lastError = error;
-        if (!(error && /sessão|session/i.test(error.message))) throw error;
-      }
+  async function request(path, options = {}, token = sid()) {
+    const headers = { "Content-Type": "application/json", ...(options.headers || {}) };
+    if (token) headers["X-IQ-Session"] = token;
+    let response;
+    try {
+      response = await fetch(API + path, { ...options, headers });
+    } catch (error) {
+      if (error instanceof TypeError) throw new Error("Não foi possível acessar o servidor do Resolvei.");
+      throw error;
     }
-    throw lastError || new Error("A sessão IQ Option não está mais ativa. Reconecte pela Visão Opções.");
+    let data = {};
+    try { data = await response.json(); } catch (_) {}
+    if (response.status === 401 && path !== "/login") {
+      sessionStorage.removeItem(SESSION_KEY);
+    }
+    if (!response.ok) throw new Error(data.detail || "Falha ao consultar o VIBE LUCRO.");
+    return data;
   }
 
   function loginShell(message = "") {
     return '<section class="vl-login">' +
       '<div class="vl-brand-mark">VL</div><span class="vl-eyebrow">RESOLVEI · INVESTIMENTOS</span>' +
       '<h1>VIBE <span>LUCRO</span></h1>' +
-      '<p>Use a conexão IQ Option já aberta em outra ferramenta do Resolvei. O VIBE LUCRO não cria uma segunda autenticação.</p>' +
-      '<div class="vl-login-state">🔐 <strong>Conexão IQ Option necessária</strong><small>Na mesma aba, entre pela Visão Opções. Depois volte ao VIBE LUCRO.</small></div>' +
-      '<a class="vl-primary-link" href="#/ferramenta/visao-opcoes">ABRIR VISÃO OPÇÕES →</a>' +
-      (message ? '<div class="vl-error">' + esc(message) + '</div>' : '') +
-      '<p class="vl-footnote">A sessão permanece no armazenamento temporário do navegador e é validada pelo servidor do Resolvei.</p>' +
+      '<p>Conecte a IQ Option diretamente nesta ferramenta. Esta conexão é independente das demais ferramentas do Resolvei.</p>' +
+      '<form id="vlLoginForm" class="vl-login-form">' +
+      '<label>E-MAIL DA IQ OPTION<input id="vlEmail" type="email" autocomplete="username" required placeholder="seu@email.com"></label>' +
+      '<label>SENHA DA IQ OPTION<input id="vlPassword" type="password" autocomplete="current-password" required placeholder="Sua senha"></label>' +
+      '<button id="vlLoginButton" class="vl-primary-link" type="submit">CONECTAR AO VIBE LUCRO</button>' +
+      '</form>' +
+      '<div id="vlLoginMessage" class="vl-error" role="status">' + esc(message) + '</div>' +
+      '<p class="vl-footnote">As credenciais são usadas somente para abrir esta sessão temporária. Não são salvas no Resolvei. O VIBE LUCRO não compartilha nem encerra o login das outras ferramentas.</p>' +
       '</section>';
+  }
+
+  function bindLogin() {
+    $("vlLoginForm")?.addEventListener("submit", async event => {
+      event.preventDefault();
+      const button = $("vlLoginButton");
+      const message = $("vlLoginMessage");
+      const email = $("vlEmail")?.value.trim() || "";
+      const password = $("vlPassword")?.value || "";
+      if (!email || !password) {
+        if (message) message.textContent = "Informe o e-mail e a senha da IQ Option.";
+        return;
+      }
+      if (button) { button.disabled = true; button.textContent = "CONECTANDO…"; }
+      if (message) message.textContent = "";
+      try {
+        const result = await request("/login", {
+          method: "POST",
+          body: JSON.stringify({ email, password })
+        }, "");
+        if (!result.session_id) throw new Error("O servidor não devolveu o token exclusivo do VIBE LUCRO.");
+        sessionStorage.setItem(SESSION_KEY, result.session_id);
+        await render();
+      } catch (error) {
+        if (message) message.textContent = "⚠️ " + error.message;
+      } finally {
+        if ($("vlLoginButton")) {
+          $("vlLoginButton").disabled = false;
+          $("vlLoginButton").textContent = "CONECTAR AO VIBE LUCRO";
+        }
+      }
+    });
+  }
+
+  async function logout() {
+    const token = sid();
+    try {
+      if (token) await request("/logout", { method: "POST" }, token);
+    } catch (_) {
+      // Always clear only the local VIBE LUCRO token, even after a server timeout.
+    }
+    sessionStorage.removeItem(SESSION_KEY);
+    activeAnalysis = null;
+    render();
   }
 
   function assetOptions() {
@@ -72,7 +107,7 @@
     return '<div class="vl-app">' +
       '<header class="vl-header"><div><span class="vl-eyebrow">RESOLVEI · IQ OPTION · SOMENTE LEITURA</span>' +
       '<h1>VIBE <span>LUCRO</span></h1><p>Leitura multi-timeframe e pontos de atenção para opções de 1, 5 ou 15 minutos.</p></div>' +
-      '<div class="vl-connection"><i></i><span>IQ OPTION CONECTADA</span><button id="vlRefreshAssets" type="button">↻ ATUALIZAR</button></div></header>' +
+      '<div class="vl-connection"><i></i><span>SESSÃO EXCLUSIVA · IQ OPTION</span><button id="vlRefreshAssets" type="button">↻ ATUALIZAR</button><button id="vlLogout" type="button">SAIR</button></div></header>' +
       '<section class="vl-controls">' +
       '<label>ATIVO<select id="vlSymbol">' + assetOptions() + '</select></label>' +
       '<label>EXPIRAÇÃO<select id="vlExpiry"><option value="1">1 minuto</option><option value="5" selected>5 minutos</option><option value="15">15 minutos</option></select></label>' +
@@ -182,16 +217,22 @@
     const host = $("vibeLucroToolHost");
     if (!host) return;
     loading = false;
+    if (!sid()) {
+      host.innerHTML = loginShell();
+      bindLogin();
+      return;
+    }
     try {
       const connectionStatus = await request("/status");
       await loadAssets();
       host.innerHTML = shell(
-        "Conexão existente reconhecida. Nenhum novo login foi aberto.",
+        "Sessão própria do VIBE LUCRO reconhecida. As outras ferramentas não são afetadas.",
         connectionStatus.vibe_trading_agent || {}
       );
       $("vlSymbol").innerHTML = assetOptions();
       if ([...$("vlSymbol").options].some(option => option.value === "EURUSD")) $("vlSymbol").value = "EURUSD";
       $("vlAnalyze")?.addEventListener("click", analyzeNow);
+      $("vlLogout")?.addEventListener("click", logout);
       $("vlRefreshAssets")?.addEventListener("click", async () => {
         const status = $("vlStatus");
         if (status) status.textContent = "Atualizando catálogo da IQ Option…";
@@ -205,6 +246,7 @@
       });
     } catch (error) {
       host.innerHTML = loginShell(error.message);
+      if (!sid()) bindLogin();
     }
   }
 
