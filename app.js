@@ -43,10 +43,7 @@ const tools = [
   {id:'laboratorio-estatistico',cat:'dinheiro',icon:'🧠',title:'Laboratório estatístico de opções',desc:'Valide taxa de acerto, payout, valor esperado, amostra, sizing conservador, drawdown e circuito de proteção.',tags:'opções binárias estatística probabilidade payout valor esperado EV kelly risco banca drawdown backtest laboratório'},
   {id:'gerador-de-senhas',cat:'outros',icon:'🔐',title:'Gerador de senhas',desc:'Crie senhas fortes, frases-senha e PINs usando geração criptograficamente segura no navegador.',tags:'senha senhas password gerador segurança pin frase-senha criptografia segurança online'},
   {id:'guru-dos-sinais-iqoption',cat:'dinheiro',icon:'🧙‍♂️',title:'GURÚ DOS SINAIS IQOPTION',desc:'Analista técnico automático conectado aos candles da IQ Option, incluindo mercado OTC.',tags:'guru sinais iqoption iq option OTC opções binárias call put análise técnica candles forex'},
-  {id:'visao-opcoes',cat:'investimentos',icon:'🔭',title:'VISÃO OPÇÕES',desc:'Terminal de análise de pares com dados da IQ Option, radar de mercado e fatos relevantes da Biquote.',tags:'visão opções iqoption pares radar análise técnica candles OTC biquote fatos relevantes calendário econômico call put'},
   {id:'analista-bin',cat:'investimentos',icon:'📡',title:'ANALISTA BIN',desc:'Motor técnico ponderado para confluência de 30 indicadores em pares da IQ Option.',tags:'analista bin iqoption opções binárias call put tendência rompimento reversão indicadores score confluência'},
-  {id:'trade-pro',cat:'investimentos',icon:'⚡',title:'TRADE-PRÓ',desc:'Classificação de regime de mercado, confluência técnica e expiração sugerida a partir de candles da IQ Option.',tags:'trade pro trading call put compra venda sinais regime altista baixista expansão volatilidade consolidação expiração CME confluência'},
-  {id:'consultor-senior',cat:'investimentos',icon:'🧠',title:'CONSULTOR SÊNIOR',desc:'Analista de mercado com Gemini e candles da IQ Option para identificar contexto, gatilhos e pontos de entrada.',tags:'consultor senior gemini iqoption opções binárias call put análise de mercado price action suporte resistência tendência entrada'},
   {id:'monitor-precos',cat:'compras',icon:'🛍️',title:'Monitor de Preços',desc:'Acompanhe o histórico de preços e compare ofertas em lojas online.',tags:'monitor preço preços histórico produto comparar lojas oferta promoção economia rastrear'},
   {id:'tabela-fipe',cat:'carro',icon:'📊',title:'Consulta à Tabela FIPE',desc:'Consulte preços de carros, motos e caminhões e veja a evolução mensal do valor FIPE.',tags:'tabela fipe preço carro moto caminhão veículo valor histórico evolução preço usado marca modelo ano combustível'},
   {id:'combustivel-viagem',cat:'carro',icon:'⛽',title:'Combustível da viagem',desc:'Estime litros necessários e custo da viagem.',tags:'gasolina etanol combustível viagem litros km'},
@@ -150,7 +147,7 @@ const ACTIVE_TOOL_IDS = new Set([
   'gerador-de-senhas','combustivel-viagem','tinta','piso','concreto','iluminacao','ar-condicionado','placas-solares',
   'conversor-arquivos','conversor-unidades','idade','datas-e-horarios','somar-horas','rescisao-clt','clt-vs-pj',
   'receita','custo-receita','por-quanto-vender','churrasco','festa','lista-compras',
-  'gerenciamento-risco','visao-opcoes','analista-bin','trade-pro','consultor-senior','monitor-precos'
+  'gerenciamento-risco','analista-bin','monitor-precos'
 ]);
 for(let i=tools.length-1;i>=0;i--){if(!ACTIVE_TOOL_IDS.has(tools[i].id))tools.splice(i,1);}
 const popular = ['monitor-precos','porcentagem','combustivel-viagem','piso','tinta','financiamento','juros-compostos','lista-compras'];
@@ -1454,14 +1451,11 @@ function toolsPage(list=tools,title='Todas as ferramentas',sub='Escolha uma ferr
 }
 function categoriesPage(){return `<div class="section-head"><div><h1 style="margin:0;letter-spacing:-.04em">Categorias</h1><p>Explore o Resolvei por assunto.</p></div></div><div class="category-grid">${Object.entries(CATS).map(categoryCard).join('')}</div>`}
 function toolPage(id){
-  if(id==='guru-dos-sinais-iqoption'||id==='laboratorio-estatistico')return '<div class="tool-page"><div class="card panel"><span class="eyebrow">DESCONTINUADA</span><h1>Esta ferramenta foi retirada do Resolvei.</h1><p>O catálogo foi enxugado para priorizar utilidades de uso cotidiano.</p><div class="actions"><a class="btn primary" href="#/ferramentas">Voltar às ferramentas</a></div></div></div>';
+  if(['guru-dos-sinais-iqoption','laboratorio-estatistico','visao-opcoes','trade-pro','consultor-senior'].includes(id))return '<div class="tool-page"><div class="card panel"><span class="eyebrow">DESCONTINUADA</span><h1>Esta ferramenta foi retirada do Resolvei.</h1><p>O catálogo foi enxugado para priorizar utilidades de uso cotidiano.</p><div class="actions"><a class="btn primary" href="#/ferramentas">Voltar às ferramentas</a></div></div></div>';
   if(id==='monitor-precos')return '<div id="monitorPrecosToolHost"></div>';
   if(id==='tabela-fipe')return '<div id="tabelaFipeToolHost"></div>';
-  if(id==='visao-opcoes')return '<div id="visaoOpcoesToolHost"></div>';
   if(id==='analista-bin')return '<div id="analistaBinToolHost"></div>';
-  if(id==='trade-pro')return '<div id="tradeProToolHost"></div>';
   if(id==='altos-lucros')return '<div id="altosLucrosToolHost"></div>';
-  if(id==='consultor-senior')return '<div id="consultorSeniorToolHost"></div>';
   if(id==='financiamento')return '<div class="tool-page"><div class="breadcrumb"><a href="#/">Início</a> / <a href="#/categoria/dinheiro">Dinheiro</a> / Financiamento</div><div id="financiamentoToolHost"></div></div>';
   const redirects={
     'emprestimo':'#/ferramenta/financiamento','gorjeta':'#/ferramenta/dividir-conta','posicao-solar':'#/ferramenta/placas-solares',
