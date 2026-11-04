@@ -44,6 +44,7 @@ const tools = [
   {id:'gerador-de-senhas',cat:'outros',icon:'🔐',title:'Gerador de senhas',desc:'Crie senhas fortes, frases-senha e PINs usando geração criptograficamente segura no navegador.',tags:'senha senhas password gerador segurança pin frase-senha criptografia segurança online'},
   {id:'guru-dos-sinais-iqoption',cat:'dinheiro',icon:'🧙‍♂️',title:'GURÚ DOS SINAIS IQOPTION',desc:'Analista técnico automático conectado aos candles da IQ Option, incluindo mercado OTC.',tags:'guru sinais iqoption iq option OTC opções binárias call put análise técnica candles forex'},
   {id:'analista-bin',cat:'investimentos',icon:'📡',title:'ANALISTA BIN',desc:'Motor técnico ponderado para confluência de 30 indicadores em pares da IQ Option.',tags:'analista bin iqoption opções binárias call put tendência rompimento reversão indicadores score confluência'},
+  {id:'opcoes-digitais',cat:'investimentos',icon:'📈',title:'OPÇÕES DIGITAIS',desc:'Cópia independente do motor técnico do Analista Bin, com estratégias e indicadores ponderados para ativos da IQ Option.',tags:'opções digitais iqoption opções binárias call put tendência rompimento reversão indicadores análise técnica'},
   {id:'monitor-precos',cat:'compras',icon:'🛍️',title:'Monitor de Preços',desc:'Acompanhe o histórico de preços e compare ofertas em lojas online.',tags:'monitor preço preços histórico produto comparar lojas oferta promoção economia rastrear'},
   {id:'tabela-fipe',cat:'carro',icon:'📊',title:'Consulta à Tabela FIPE',desc:'Consulte preços de carros, motos e caminhões e veja a evolução mensal do valor FIPE.',tags:'tabela fipe preço carro moto caminhão veículo valor histórico evolução preço usado marca modelo ano combustível'},
   {id:'combustivel-viagem',cat:'carro',icon:'⛽',title:'Combustível da viagem',desc:'Estime litros necessários e custo da viagem.',tags:'gasolina etanol combustível viagem litros km'},
@@ -147,7 +148,7 @@ const ACTIVE_TOOL_IDS = new Set([
   'gerador-de-senhas','combustivel-viagem','tinta','piso','concreto','iluminacao','ar-condicionado','placas-solares',
   'conversor-arquivos','conversor-unidades','idade','datas-e-horarios','somar-horas','rescisao-clt','clt-vs-pj',
   'receita','custo-receita','por-quanto-vender','churrasco','festa','lista-compras',
-  'gerenciamento-risco','analista-bin','monitor-precos'
+  'gerenciamento-risco','analista-bin','opcoes-digitais','monitor-precos'
 ]);
 for(let i=tools.length-1;i>=0;i--){if(!ACTIVE_TOOL_IDS.has(tools[i].id))tools.splice(i,1);}
 const popular = ['monitor-precos','porcentagem','combustivel-viagem','piso','tinta','financiamento','juros-compostos','lista-compras'];
@@ -1455,6 +1456,7 @@ function toolPage(id){
   if(id==='monitor-precos')return '<div id="monitorPrecosToolHost"></div>';
   if(id==='tabela-fipe')return '<div id="tabelaFipeToolHost"></div>';
   if(id==='analista-bin')return '<div id="analistaBinToolHost"></div>';
+  if(id==='opcoes-digitais')return '<div id="opcoesDigitaisToolHost"></div>';
   if(id==='altos-lucros')return '<div id="altosLucrosToolHost"></div>';
   if(id==='financiamento')return '<div class="tool-page"><div class="breadcrumb"><a href="#/">Início</a> / <a href="#/categoria/dinheiro">Dinheiro</a> / Financiamento</div><div id="financiamentoToolHost"></div></div>';
   const redirects={

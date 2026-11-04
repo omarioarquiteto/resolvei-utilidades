@@ -81,6 +81,10 @@ from financiamento_api import router as financiamento_router
 from documents_api import router as documents_router
 from altos_lucros_api import router as altos_lucros_router
 app.include_router(analista_bin_router)
+from opcoes_digitais_auth import router as opcoes_digitais_auth_router
+app.include_router(opcoes_digitais_auth_router)
+from opcoes_digitais_api import router as opcoes_digitais_router
+app.include_router(opcoes_digitais_router)
 app.include_router(financiamento_router)
 app.include_router(documents_router)
 app.include_router(altos_lucros_router)
