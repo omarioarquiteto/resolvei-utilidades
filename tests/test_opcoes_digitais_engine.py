@@ -8,6 +8,7 @@ from opcoes_digitais_engine import (
     _ema,
     _parabolic_sar,
     _resample_context,
+    _group_support,
     analyze,
     clean,
 )
@@ -71,6 +72,11 @@ class OpcoesDigitaisEngineTests(unittest.TestCase):
         self.assertIn("higherDirection", result)
         self.assertGreaterEqual(result["score"], 0)
         self.assertLessEqual(result["score"], 100)
+
+    def test_neutral_indicators_do_not_inflate_group_consensus(self):
+        self.assertEqual(_group_support([1, 0, 0, 0], 1), 0.25)
+        self.assertEqual(_group_support([1, 1, 0, 0], 1), 0.50)
+        self.assertEqual(_group_support([1, -1, 0, 0], 1), 0.25)
 
     def test_flat_market_does_not_force_a_signal(self):
         candles = make_candles(mode="flat")

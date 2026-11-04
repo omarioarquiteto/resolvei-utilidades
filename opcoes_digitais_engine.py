@@ -261,10 +261,11 @@ def _support_resistance(
 
 
 def _group_support(votes: list[int], direction: int) -> float:
-    active = [value for value in votes if value != 0]
-    if not active:
+    # Votos neutros não confirmam direção e, portanto, não podem desaparecer
+    # do denominador nem transformar um único indicador em 100% de consenso.
+    if not votes:
         return 0.0
-    return sum(1 for value in active if value == direction) / len(active)
+    return sum(1 for value in votes if value == direction) / len(votes)
 
 
 def analyze(
@@ -531,14 +532,18 @@ def analyze(
             "put": round(_group_support(votes, -1) * GROUP_WEIGHTS[group], 1),
             "activeVotes": sum(1 for value in votes if value != 0),
         }
+    # Condições de mercado são um filtro obrigatório, não pontos direcionais.
+    # Os três grupos de evidência somam 80 pontos; normalizamos para 0–100.
     scores["conditions"] = {
-        "call": float(GROUP_WEIGHTS["conditions"] if quality_ok else 0),
-        "put": float(GROUP_WEIGHTS["conditions"] if quality_ok else 0),
+        "call": 0.0,
+        "put": 0.0,
         "activeVotes": 1 if quality_ok else 0,
     }
 
-    call_score = sum(group["call"] for group in scores.values())
-    put_score = sum(group["put"] for group in scores.values())
+    raw_call_score = sum(group["call"] for key, group in scores.items() if key != "conditions")
+    raw_put_score = sum(group["put"] for key, group in scores.items() if key != "conditions")
+    call_score = raw_call_score * 100 / 80
+    put_score = raw_put_score * 100 / 80
     direction = "CALL" if call_score > put_score else "PUT" if put_score > call_score else "NONE"
     score = max(call_score, put_score)
     selected_score = call_score if direction == "CALL" else put_score

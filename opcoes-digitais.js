@@ -333,11 +333,17 @@
       trend: "TENDÊNCIA · 30%",
       momentum: "MOMENTUM · 25%",
       structure: "ESTRUTURA · 25%",
-      conditions: "CONDIÇÕES · 20%"
+      conditions: "CONDIÇÕES · FILTRO"
     };
     const groups = data.groupScores || {};
     $("odGroupScores").innerHTML = Object.entries(labels).map(([key, label]) => {
       const group = groups[key] || {};
+      if (key === "conditions") {
+        return '<div class="od-group-score"><span>' + label + '</span><b class="' +
+          (group.activeVotes ? "win" : "loss") + '">' +
+          (group.activeVotes ? "APROVADO" : "BLOQUEADO") +
+          '</b><small>Filtro não soma pontos direcionais</small></div>';
+      }
       return '<div class="od-group-score"><span>' + label + '</span><b>CALL ' +
         Number(group.call || 0).toFixed(0) + '</b><b>PUT ' +
         Number(group.put || 0).toFixed(0) + "</b></div>";
