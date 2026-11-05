@@ -85,6 +85,10 @@ from opcoes_digitais_auth import router as opcoes_digitais_auth_router
 app.include_router(opcoes_digitais_auth_router)
 from opcoes_digitais_api import router as opcoes_digitais_router
 app.include_router(opcoes_digitais_router)
+from heikin_ashi_auth import router as heikin_ashi_auth_router
+app.include_router(heikin_ashi_auth_router)
+from heikin_ashi_api import router as heikin_ashi_router
+app.include_router(heikin_ashi_router)
 app.include_router(financiamento_router)
 app.include_router(documents_router)
 app.include_router(altos_lucros_router)
