@@ -22,9 +22,7 @@ function riskDefaults(){
       entryPct: 0.5,
       payout: 85,
       chances: 7,
-      goal: 10000,
-      winRate: 80,
-      maxExposurePct: 20
+      goal: 10000
     },
     session: {
       capital: 500,
@@ -38,12 +36,19 @@ function riskDefaults(){
   };
 }
 
+function riskNormalizeConfig(raw={}){
+  const config={...riskDefaults().config,...(raw||{})};
+  delete config.winRate;
+  delete config.maxExposurePct;
+  return config;
+}
+
 function riskLoad(){
   try{
     const raw = JSON.parse(localStorage.getItem(RISK_STORAGE_KEY) || 'null');
     if(!raw) return riskDefaults();
     return {
-      config: {...riskDefaults().config,...(raw.config||{})},
+      config: riskNormalizeConfig(raw.config||{}),
       session: {...riskDefaults().session,...(raw.session||{})},
       history: Array.isArray(raw.history) ? raw.history.slice(-80) : []
     };
@@ -73,9 +78,7 @@ async function riskFillConfigInputs(){
     riskEntryPct:cfg.entryPct,
     riskPayout:cfg.payout,
     riskChances:cfg.chances,
-    riskGoal:cfg.goal,
-    riskWinRate:cfg.winRate,
-    riskMaxExposurePct:cfg.maxExposurePct
+    riskGoal:cfg.goal
   };
   Object.entries(values).forEach(([id,value])=>{
     const el=document.getElementById(id);
@@ -137,7 +140,7 @@ async function riskHydrateFromCloud(){
     const localOwner=localStorage.getItem(RISK_STORAGE_KEY+'_owner');
     if(data.exists && data.state && typeof data.state==='object'){
       resolveiRiskState={
-        config:{...riskDefaults().config,...(data.state.config||{})},
+        config:riskNormalizeConfig(data.state.config||{}),
         session:{...riskDefaults().session,...(data.state.session||{})},
         history:Array.isArray(data.state.history)?data.state.history.slice(-80):[]
       };
@@ -170,13 +173,76 @@ function riskHydratingDone(){
 
 function riskConfigFromDOM(){
   const initial = Math.max(0.01, riskRead('riskInitialCapital') || 500);
-  const entryPct = Math.min(50, Math.max(0.001, riskRead('riskEntryPct') || 0.5));
+  const entryPct = Math.min(100, Math.max(1e-120, riskRead('riskEntryPct') || 0.5));
   const payout = Math.min(100, Math.max(0.01, riskRead('riskPayout') || 85));
   const chances = Math.min(30, Math.max(1, Math.round(riskRead('riskChances') || 7)));
   const goal = Math.max(initial, riskRead('riskGoal') || initial);
-  const winRate = Math.min(100, Math.max(0, riskRead('riskWinRate') || 80));
-  const maxExposurePct = Math.min(100, Math.max(0.1, riskRead('riskMaxExposurePct') || 20));
-  return {initialCapital:initial,entryPct,payout,chances,goal,winRate,maxExposurePct};
+  return {initialCapital:initial,entryPct,payout,chances,goal};
+}
+
+function riskEntryPctForChances(chances,payoutPct){
+  const count=Math.min(30,Math.max(1,Math.round(Number(chances)||1)));
+  const payout=Math.min(1,Math.max(0.0001,(Number(payoutPct)||85)/100));
+  let accumulated=1;
+  for(let i=2;i<=count;i++) accumulated += 1 + accumulated/payout;
+  return 100/accumulated;
+}
+
+function riskChancesForEntryPct(entryPct,payoutPct){
+  const basePct=Math.min(100,Math.max(1e-120,Number(entryPct)||0.5));
+  const base=basePct/100;
+  const payout=Math.min(1,Math.max(0.0001,(Number(payoutPct)||85)/100));
+  let accumulated=0;
+  let count=0;
+  for(let i=1;i<=30;i++){
+    const stake=i===1?base:(base+accumulated/payout);
+    const next=accumulated+Math.max(0,stake);
+    if(next>1+1e-9) break;
+    accumulated=next;
+    count=i;
+    if(accumulated>=1-1e-9) break;
+  }
+  return Math.max(1,count);
+}
+
+function riskFormatInputNumber(value){
+  return Number.isFinite(value)?Number(value.toPrecision(12)).toString():'';
+}
+
+let riskLastEditedField='entry';
+
+function riskReconcileInputs(source){
+  const entry=document.getElementById('riskEntryPct');
+  const chances=document.getElementById('riskChances');
+  const payoutEl=document.getElementById('riskPayout');
+  if(!entry||!chances||!payoutEl) return false;
+  const payout=Number(payoutEl.value);
+  if(!Number.isFinite(payout)||payout<=0) return false;
+
+  if(source==='entry'){
+    const value=Number(entry.value);
+    if(!Number.isFinite(value)||value<=0) return false;
+    const normalized=Math.min(100,Math.max(1e-120,value));
+    entry.value=riskFormatInputNumber(normalized);
+    chances.value=String(riskChancesForEntryPct(normalized,payout));
+    riskLastEditedField='entry';
+  }else if(source==='chances'){
+    const value=Number(chances.value);
+    if(!Number.isFinite(value)||value<=0) return false;
+    const normalized=Math.min(30,Math.max(1,Math.round(value)));
+    chances.value=String(normalized);
+    entry.value=riskFormatInputNumber(riskEntryPctForChances(normalized,payout));
+    riskLastEditedField='chances';
+  }else if(riskLastEditedField==='entry'){
+    const value=Number(entry.value);
+    if(!Number.isFinite(value)||value<=0) return false;
+    chances.value=String(riskChancesForEntryPct(value,payout));
+  }else{
+    const value=Number(chances.value);
+    if(!Number.isFinite(value)||value<=0) return false;
+    entry.value=riskFormatInputNumber(riskEntryPctForChances(value,payout));
+  }
+  return true;
 }
 
 function riskMakeSection(baseCapital, cfg){
@@ -186,7 +252,7 @@ function riskMakeSection(baseCapital, cfg){
   for(let i=1;i<=cfg.chances;i++){
     let stake;
     if(i === 1) stake = baseCapital * (cfg.entryPct/100);
-    else stake = (target - (baseCapital - accumulated)) / (cfg.payout/100);
+    else stake = baseCapital * (cfg.entryPct/100) + accumulated / (cfg.payout/100);
     stake = Math.max(0, stake);
     const capitalLoss = baseCapital - accumulated - stake;
     const capitalWin = baseCapital - accumulated + stake * (cfg.payout/100);
@@ -443,13 +509,10 @@ function riskProjectionSvg(plan){
 }
 
 function riskSummaryHtml(plan,current,currentRow){
-  const worst=current.remainingAfterAllLosses;
-  const worstPct=current.maxDrawdownPct;
+  const remaining=current.remainingAfterAllLosses;
+  const exposurePct=current.maxDrawdownPct;
   const growthPct=plan.cfg.entryPct/100*(plan.cfg.payout/100)*100;
   const status=resolveiRiskState.session.status;
-  const pLossAll=Math.pow(Math.max(0,Math.min(1,1-plan.cfg.winRate/100)),plan.cfg.chances);
-  const pAdvance=1-pLossAll;
-  const exposureFlag=worstPct>plan.cfg.maxExposurePct;
   const history=resolveiRiskState.history||[];
   const last=history.length?history[history.length-1]:null;
   const latestLabel=last?`${last.result==='WIN'?'✅ WIN':'❌ LOSS'} registrado em ${last.at} · capital ${riskMoney(last.after)}`:'Nenhum resultado registrado ainda.';
@@ -457,19 +520,15 @@ function riskSummaryHtml(plan,current,currentRow){
     <div class="risk-kpi risk-kpi-primary"><span>Capital atual</span><strong>${riskMoney(resolveiRiskState.session.capital)}</strong><small>Seção ${resolveiRiskState.session.section} · chance ${status==='busted'?'encerrada':resolveiRiskState.session.chance}</small></div>
     <div class="risk-kpi"><span>Entrada agora</span><strong>${status==='active'&&currentRow?riskMoney(currentRow.stake):'—'}</strong><small>${status==='active'?(`Chance ${resolveiRiskState.session.chance} de ${plan.cfg.chances}`):'Seção encerrada'}</small></div>
     <div class="risk-kpi"><span>Próximo alvo</span><strong>${riskMoney(current.target)}</strong><small>Lucro-alvo: ${riskMoney(current.growth)}</small></div>
-    <div class="risk-kpi"><span>Exposição máxima</span><strong>${riskPct(worstPct)}</strong><small>Sobra após ${plan.cfg.chances} LOSS: ${riskMoney(worst)}</small></div>
+    <div class="risk-kpi"><span>Exposição da seção</span><strong>${riskPct(exposurePct)}</strong><small>Saldo após ${plan.cfg.chances} LOSS: ${riskMoney(remaining)}</small></div>
   </div>
   <div class="risk-latest-result"><span>Último movimento</span><strong>${latestLabel}</strong></div>
-  <div class="risk-alert ${exposureFlag?'risk-alert-high':'risk-alert-low'}">
-    <strong>${exposureFlag?'⚠️ Acima do limite de exposição':'✓ Dentro do limite configurado'}</strong>
-    <span>O plano pode expor até ${riskPct(worstPct)} do capital-base nesta seção. Seu limite de referência está em ${riskPct(plan.cfg.maxExposurePct)}.</span>
-  </div>
   <div class="risk-mini-grid">
     <div><span>Crescimento por seção</span><strong>+${riskPct(growthPct)}</strong></div>
-    <div><span>Chance estimada de avançar</span><strong>${riskPct(pAdvance*100)}</strong><small>Com taxa de acerto de ${riskPct(plan.cfg.winRate)}</small></div>
-    <div><span>Perder todas as chances</span><strong>${riskPct(pLossAll*100)}</strong><small>Modelo probabilístico, não previsão</small></div>
+    <div><span>Entrada-base</span><strong>${riskPct(plan.cfg.entryPct)}</strong></div>
+    <div><span>Payout considerado</span><strong>${riskPct(plan.cfg.payout)}</strong></div>
   </div>
-  <div class="risk-note"><strong>Como a planilha trabalha:</strong> a vitória em qualquer chance leva o capital da seção ao mesmo próximo alvo. As probabilidades são apenas aritmética baseada na taxa informada; não estimam desempenho futuro nem garantem resultados.</div>`;
+  <div class="risk-note"><strong>Calculadora de banca:</strong> ao alterar a entrada-base, a ferramenta calcula quantas entradas completas cabem no capital atual. Ao alterar as chances por seção, calcula a entrada-base para que a última perda utilize o saldo disponível. Não há estimativa de probabilidade ou simulação de resultados.</div>`;
 }
 
 function riskEvolutionRowsHtml(plan){
@@ -496,7 +555,7 @@ function riskEvolutionUI(){
       <div>
         <div class="risk-eyebrow">PLANEJAMENTO DE BANCA</div>
         <h1>Gerenciamento de risco e evolução de capital</h1>
-        <p>Controle a entrada atual, registre o resultado e acompanhe a evolução da sua banca sem precisar percorrer uma página longa.</p>
+        <p>Calcule as entradas da seção, registre resultados reais e acompanhe a evolução do capital.</p>
       </div>
       <div class="risk-title-meta"><span>Plano ativo</span><small>Dados locais + sincronização da conta</small></div>
     </div>
@@ -519,29 +578,27 @@ function riskEvolutionUI(){
 
       <details class="risk-config-card card">
         <summary>
-          <div><strong>⚙️ Configuração do plano</strong><small>Capital, entrada-base, payout, chances, taxa e meta</small></div>
+          <div><strong>⚙️ Configuração do plano</strong><small>Capital, entrada-base, payout, chances e meta</small></div>
           <span class="risk-summary-action">Editar</span>
         </summary>
         <div class="risk-config-content">
-          <div class="notice"><strong>Modelo da sua planilha.</strong> Cada seção tem um número definido de chances. A primeira entrada usa o capital da seção; as seguintes recuperam perdas anteriores e ainda buscam o próximo alvo.</div>
+          <div class="notice"><strong>Calculadora da sua planilha.</strong> A primeira entrada usa a entrada-base sobre o capital atual; as seguintes consideram as perdas anteriores e buscam o próximo alvo.</div>
           <div class="form-grid risk-form-grid">
             <div class="field"><label for="riskInitialCapital">Capital inicial</label><div class="input-wrap"><span class="prefix">R$</span><input id="riskInitialCapital" type="number" step="0.01" min="0.01" value="${cfg.initialCapital}"></div></div>
-            <div class="field"><label for="riskEntryPct">Entrada-base</label><div class="input-wrap"><input id="riskEntryPct" type="number" step="0.01" min="0.001" max="50" value="${cfg.entryPct}"><span class="suffix">%</span></div></div>
+            <div class="field"><label for="riskEntryPct">Entrada-base</label><div class="input-wrap"><input id="riskEntryPct" type="number" step="any" min="0" max="100" value="${cfg.entryPct}"><span class="suffix">%</span></div><small>Ao alterar, a quantidade de chances é recalculada para caber no capital atual.</small></div>
             <div class="field"><label for="riskPayout">Payout / retorno líquido</label><div class="input-wrap"><input id="riskPayout" type="number" step="0.1" min="0.1" max="100" value="${cfg.payout}"><span class="suffix">%</span></div><small>85% = lucro de R$ 0,85 por R$ 1,00 em uma vitória.</small></div>
-            <div class="field"><label for="riskChances">Chances por seção</label><div class="input-wrap"><input id="riskChances" type="number" step="1" min="1" max="30" value="${cfg.chances}"></div><small>Padrão: 7.</small></div>
-            <div class="field"><label for="riskWinRate">Taxa de acerto para simulação</label><div class="input-wrap"><input id="riskWinRate" type="number" step="0.1" min="0" max="100" value="${cfg.winRate}"><span class="suffix">%</span></div><small>Somente para probabilidades matemáticas.</small></div>
-            <div class="field"><label for="riskMaxExposurePct">Limite de exposição de referência</label><div class="input-wrap"><input id="riskMaxExposurePct" type="number" step="1" min="0.1" max="100" value="${cfg.maxExposurePct}"><span class="suffix">%</span></div><small>Não altera entradas; apenas gera um alerta.</small></div>
+            <div class="field"><label for="riskChances">Chances por seção</label><div class="input-wrap"><input id="riskChances" type="number" step="1" min="1" max="30" value="${cfg.chances}"></div><small>Ao alterar, a entrada-base é recalculada para utilizar o capital disponível.</small></div>
             <div class="field full"><label for="riskGoal">Meta de patrimônio</label><div class="input-wrap"><span class="prefix">R$</span><input id="riskGoal" type="number" step="0.01" min="0.01" value="${cfg.goal}"></div></div>
           </div>
           <div class="actions">
-            <button class="btn primary" id="riskApplyBtn" type="button">Recalcular plano</button>
+            <button class="btn primary" id="riskApplyBtn" type="button">Aplicar configurações</button>
             <button class="btn ghost" id="riskResetBtn" type="button">Zerar plano</button>
           </div>
           <div class="risk-formula">
             <strong>Fórmula central</strong>
-            <span>Entrada 1 = capital × entrada-base</span>
+            <span>Entrada 1 = capital atual × entrada-base</span>
             <span>Entrada seguinte = (alvo − capital restante após perdas) ÷ payout</span>
-            <span>Alvo da seção = capital + lucro da entrada-base vencedora</span>
+            <span>Ao definir as chances, a entrada-base ajusta a exposição total ao capital disponível</span>
           </div>
         </div>
       </details>
@@ -558,7 +615,7 @@ function riskEvolutionUI(){
 
       <section class="risk-chart-card card">
         <div class="risk-section-head">
-          <div><h2>📈 Evolução projetada</h2><p>Alvos sucessivos definidos pelo plano.</p></div>
+          <div><h2>📈 Evolução calculada</h2><p>Alvos sucessivos calculados pelo plano.</p></div>
         </div>
         <div id="riskProjection"></div>
       </section>
@@ -641,7 +698,19 @@ function statusActive(){return resolveiRiskState.session.status==='active';}
 
 function riskApplyConfig(){
   const cfg=riskConfigFromDOM();
-  riskSyncSessionToConfig(cfg,false);
+  const previous=resolveiRiskState.session||riskDefaults().session;
+  const hasProgress=(resolveiRiskState.history||[]).length>0
+    || Number(previous.section)>1
+    || Number(previous.chance)>1
+    || Math.abs((Number(previous.capital)||0)-(Number(previous.baseCapital)||0))>1e-9;
+  const capital=hasProgress?Math.max(0,Number(previous.capital)||0):cfg.initialCapital;
+  const section=hasProgress?Math.max(1,Math.round(Number(previous.section)||1)):1;
+  resolveiRiskState.config=cfg;
+  resolveiRiskState.session={
+    capital,section,chance:1,baseCapital:capital,accumulatedLoss:0,
+    status:capital>0?'active':'busted'
+  };
+  riskSave();
   riskCloudScheduleSave();
   riskRender();
 }
@@ -666,6 +735,18 @@ function riskExportCsv(){
 }
 
 function bindRiskEvolutionTool(){
+  const entry=document.getElementById('riskEntryPct');
+  if(entry) entry.addEventListener('change',()=>{
+    if(riskReconcileInputs('entry')) riskApplyConfig();
+  });
+  const chances=document.getElementById('riskChances');
+  if(chances) chances.addEventListener('change',()=>{
+    if(riskReconcileInputs('chances')) riskApplyConfig();
+  });
+  const payout=document.getElementById('riskPayout');
+  if(payout) payout.addEventListener('change',()=>{
+    if(riskReconcileInputs('payout')) riskApplyConfig();
+  });
   const apply=document.getElementById('riskApplyBtn');
   if(apply) apply.addEventListener('click',riskApplyConfig);
   const reset=document.getElementById('riskResetBtn');
