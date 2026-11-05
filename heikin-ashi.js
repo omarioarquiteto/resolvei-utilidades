@@ -208,8 +208,8 @@
       '<label>EXPIRAÇÃO<select id="haTf"><option value="1m">1 MINUTO · M1</option><option value="5m">5 MINUTOS · M5</option><option value="15m">15 MINUTOS · M15</option></select></label>',
       '<label>ESTRATÉGIA<select id="haStrategy"><option value="auto">AUTOMÁTICA</option><option value="trend">CONTINUAÇÃO DE TENDÊNCIA</option><option value="reversal">REVERSÃO DE TENDÊNCIA</option></select></label>',
       '<button id="haAnalyze" type="button">ANALISAR AGORA</button>',
-      '<button id="haScan" class="ha-scan-button" type="button">BUSCAR ENTRADA</button>',
       '</section>',
+      '<p class="ha-scan-hint">Ao clicar em “Analisar agora”, o Resolvei analisa o gráfico e monitora os próximos candles até encontrar uma entrada validada.</p>',
       '<section id="haFavorites" class="ha-favorites" hidden aria-label="Ativos favoritos"></section>',
       '<div id="haError" class="ha-error" role="status"></div>',
       '<section class="ha-top-grid">',
@@ -252,8 +252,7 @@
       if (scanActive) analyze(true);
     };
     $("haFavoriteToggle").onclick = toggleFavorite;
-    $("haAnalyze").onclick = () => analyze(false);
-    $("haScan").onclick = toggleScan;
+    $("haAnalyze").onclick = toggleAnalysis;
     await loadAssets();
   }
 
@@ -274,10 +273,12 @@
 
   async function analyze(silent) {
     if (requestBusy || !$("haPair")) return;
+    clearTimeout(scanTimer);
+    scanTimer = null;
     requestBusy = true;
     const button = $("haAnalyze");
     const error = $("haError");
-    if (button && !silent) {
+    if (button && !silent && !scanActive) {
       button.disabled = true;
       button.textContent = "ANALISANDO…";
     }
@@ -294,7 +295,9 @@
         })
       });
       show(data);
-      if (data.direction !== "NONE" && scanActive) stopScan("Sinal identificado. Monitoramento pausado para evitar sinais repetidos.");
+      if (data.direction !== "NONE" && scanActive) {
+        stopScan("Sinal identificado. Monitoramento pausado para evitar sinais repetidos.");
+      }
     } catch (exception) {
       if (error) error.textContent = "⚠️ " + exception.message;
       if (!sid()) login();
@@ -302,37 +305,46 @@
       requestBusy = false;
       if (button) {
         button.disabled = false;
-        button.textContent = "ANALISAR AGORA";
+        if (!scanActive) {
+          button.textContent = "ANALISAR AGORA";
+          button.classList.remove("is-scanning");
+        }
       }
-      if (scanActive && lastData && lastData.direction === "NONE") {
+      // Enquanto não houver sinal, continua verificando candles fechados.
+      // Se ocorrer uma falha transitória, tenta novamente enquanto a sessão estiver válida.
+      if (scanActive && sid() && (!lastData || lastData.direction === "NONE")) {
         clearTimeout(scanTimer);
         scanTimer = setTimeout(() => analyze(true), 9000);
       }
     }
   }
 
-  function toggleScan() {
+  function toggleAnalysis() {
     if (scanActive) {
-      stopScan("Busca automática interrompida.");
+      stopScan("Busca de entrada interrompida pelo usuário.");
       return;
     }
     scanActive = true;
-    const button = $("haScan");
+    const button = $("haAnalyze");
     if (button) {
-      button.textContent = "PARAR BUSCA";
+      button.textContent = "PARAR ANÁLISE";
       button.classList.add("is-scanning");
     }
+    clearAnalysis("Analisando o gráfico e procurando uma entrada validada...");
     const foot = $("haSignalFoot");
-    if (foot) foot.textContent = "Monitorando novos fechamentos de vela…";
+    if (foot) foot.textContent = "Analisando candles fechados e buscando confluência...";
+    if ($("haError")) $("haError").textContent = "";
     analyze(true);
   }
+
   function stopScan(message) {
     clearTimeout(scanTimer);
     scanTimer = null;
     scanActive = false;
-    const button = $("haScan");
+    const button = $("haAnalyze");
     if (button) {
-      button.textContent = "BUSCAR ENTRADA";
+      button.disabled = false;
+      button.textContent = "ANALISAR AGORA";
       button.classList.remove("is-scanning");
     }
     if (message && $("haSignalFoot") && (!lastData || lastData.direction === "NONE")) {
