@@ -1976,7 +1976,15 @@ async function resolveiGeminiDiagnose(){
  const m=document.getElementById("aiMsg"); if(m){m.hidden=false;m.textContent="🔎 Testando chave, modelos e generateContent…";}
  try{const token=await resolveiToken();const r=await fetch("/api/ai/diagnose",{headers:{Authorization:"Bearer "+token}});const d=await r.json();if(!r.ok)throw new Error(d.detail||"Falha no diagnóstico.");
    if(d.test?.ok){m.textContent="🟢 Gemini funcionando. Modelo testado: "+d.test.model+" | Modelos disponíveis: "+(d.models||[]).join(", ");}
-   else{m.textContent="🔴 Gemini não respondeu. "+(d.test?.error||"Erro desconhecido")+" | Modelos encontrados: "+(d.models||[]).join(", ");}
+   else{
+     const geminiError=String(d.test?.error||"");
+     const creditsDepleted=/402\\s+RESOURCE_EXHAUSTED|prepayment credits are depleted/i.test(geminiError);
+     if(creditsDepleted){
+       m.textContent="🔴 O PROJETO ESTÁ SEM CRÉDITOS NA API GEMINI. Adicione créditos no Google AI Studio para voltar a utilizar a inteligência artificial.";
+     }else{
+       m.textContent="🔴 Gemini não respondeu. "+(d.test?.error||"Erro desconhecido")+" | Modelos encontrados: "+(d.models||[]).join(", ");
+     }
+   }
  }catch(e){if(m){m.hidden=false;m.textContent="🔴 "+e.message;}}
 }
 async function resolveiRefreshStatuses(){
