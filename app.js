@@ -1748,6 +1748,8 @@ var resolveiLayoutMode=localStorage.getItem("resolvei_layout")==="modern"?"moder
 function resolveiApplyLayoutMode(){
   const mode=resolveiLayoutMode==="modern"?"modern":"classic";
   document.documentElement.dataset.layout=mode;
+  const layoutSelect=document.getElementById("preferenceLayout");
+  if(layoutSelect)layoutSelect.value=mode;
   const route=resolveiCurrentAppRoute();
   const active=route==="ferramentas"?"ferramentas":route==="categorias"||route.startsWith("categoria/")?"categorias":route==="favoritos"?"favoritos":route==="conta"?"conta":route.startsWith("ferramenta/")?"ferramentas":route==="games"?"games":"inicio";
   document.querySelectorAll("[data-modern-route]").forEach(link=>{
