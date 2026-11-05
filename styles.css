@@ -1211,3 +1211,148 @@ html[data-layout="modern"] .app-shell>.tool-page,html[data-layout="modern"] .too
   .risk-overview-card .risk-live-box{grid-template-columns:1fr}
   .risk-actions .risk-result-btn{font-size:18px}
 }
+
+
+
+/* Gerenciamento de risco — reprodução fiel da composição de referência */
+.risk-tool-shell.risk-reference-layout{display:grid;gap:9px;width:100%;max-width:none}
+.risk-reference-layout .risk-hero-banner{min-height:132px;height:clamp(132px,19.8vw,190px);padding:17px 24px;border-radius:17px;gap:12px;background:linear-gradient(108deg,#080e35 0%,#11155e 43%,#06278f 72%,#02b9d6 100%);box-shadow:0 9px 22px rgba(20,36,114,.13)}
+.risk-reference-layout .risk-hero-banner:before{background:radial-gradient(circle at 8% 100%,rgba(142,38,255,.78),transparent 25%),radial-gradient(circle at 92% 18%,rgba(0,208,255,.28),transparent 31%)}
+.risk-reference-layout .risk-hero-copy{max-width:68%}
+.risk-reference-layout .risk-hero-copy h1{font-size:clamp(23px,3.1vw,34px);line-height:1.02;letter-spacing:-.055em}
+.risk-reference-layout .risk-hero-copy p{font-size:clamp(10px,1.18vw,13px);line-height:1.35;margin-top:8px}
+.risk-reference-layout .risk-hero-art{flex:0 0 28%;height:100%;min-height:92px}
+.risk-reference-layout .risk-hero-shield{width:clamp(66px,10vw,94px);height:clamp(77px,12vw,105px);border-radius:26px 26px 33px 33px;font-size:clamp(47px,7vw,65px)}
+.risk-reference-layout .risk-hero-bars{right:0;bottom:0;height:92%;gap:5px}
+.risk-reference-layout .risk-hero-bars i{width:clamp(4px,.8vw,8px)}
+.risk-reference-layout .risk-hero-arrow{right:1px;top:-4px;font-size:clamp(42px,7vw,60px)}
+.risk-reference-layout .risk-reference-grid{display:grid;grid-template-columns:minmax(0,2.53fr) minmax(0,1fr);gap:8px;align-items:start}
+.risk-reference-layout .risk-primary-column,.risk-reference-layout .risk-aside-column{display:grid;gap:7px;min-width:0}
+.risk-reference-layout .risk-overview-card,.risk-reference-layout .risk-chart-card,.risk-reference-layout .risk-control-card,.risk-reference-layout .risk-config-card,.risk-reference-layout .risk-history-card{min-width:0;padding:10px;border:1px solid #e0e4fb;border-radius:16px;background:rgba(255,255,255,.92);box-shadow:0 5px 17px rgba(49,59,137,.075)}
+html[data-theme="dark"] .risk-reference-layout .risk-overview-card,
+html[data-theme="dark"] .risk-reference-layout .risk-chart-card,
+html[data-theme="dark"] .risk-reference-layout .risk-control-card,
+html[data-theme="dark"] .risk-reference-layout .risk-config-card,
+html[data-theme="dark"] .risk-reference-layout .risk-history-card{background:var(--surface);border-color:var(--line)}
+.risk-reference-heading{display:flex;align-items:center;gap:8px;min-height:24px;margin-bottom:7px}
+.risk-reference-heading h2{margin:0!important;font-size:clamp(12px,1.6vw,15px)!important;line-height:1.15;letter-spacing:-.035em}
+.risk-reference-heading-icon,.risk-chart-heading-icon,.risk-config-heading-icon,.risk-history-title-icon{display:grid;place-items:center;flex:0 0 27px;width:27px;height:27px;border-radius:50%;background:linear-gradient(135deg,#7d20ff,#3d0ec4);color:#fff;font-size:18px;font-weight:900}
+.risk-period-pill{display:inline-flex;align-items:center;gap:8px;margin-left:auto;padding:5px 8px;border:1px solid #e3e6fb;border-radius:20px;background:#f0f1ff;color:#121b4c;font-size:9px;font-weight:750;white-space:nowrap}
+.risk-period-pill b{font-size:12px;color:#4d3cc8}
+.risk-reference-layout .risk-overview-card .risk-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
+.risk-reference-layout .risk-overview-card .risk-kpi{position:relative;display:flex;flex-direction:column;justify-content:flex-start;min-width:0;min-height:89px;padding:8px 8px 7px;border:1px solid transparent;border-radius:12px;overflow:hidden}
+.risk-reference-layout .risk-kpi-icon{display:block;margin-bottom:2px;font-size:18px;font-weight:900;line-height:1}
+.risk-reference-layout .risk-kpi-label{display:block;font-size:clamp(8px,1vw,10px);font-weight:650;line-height:1.2}
+.risk-reference-layout .risk-overview-card .risk-kpi strong{display:block;margin:3px 0 1px;font-size:clamp(13px,1.7vw,19px);line-height:1.06;letter-spacing:-.045em;overflow-wrap:anywhere}
+.risk-reference-layout .risk-overview-card .risk-kpi small{display:block;font-size:clamp(8px,.95vw,9px);line-height:1.25;opacity:.9}
+.risk-reference-layout .risk-kpi-primary{background:linear-gradient(145deg,#e1f9e9,#d0f4df)!important;border-color:#c8efd5!important;color:#075d35}
+.risk-reference-layout .risk-kpi-primary .risk-kpi-icon{color:#0a9c54}
+.risk-reference-layout .risk-kpi-entry{background:linear-gradient(145deg,#e9f2ff,#dce9ff)!important;border-color:#cddfff!important;color:#123e91}
+.risk-reference-layout .risk-kpi-entry .risk-kpi-icon{color:#1686ff}
+.risk-reference-layout .risk-kpi-target{background:linear-gradient(145deg,#f2eaff,#e8dcff)!important;border-color:#e1d2ff!important;color:#5122ae}
+.risk-reference-layout .risk-kpi-target .risk-kpi-icon{color:#5b19df}
+.risk-reference-layout .risk-kpi-exposure{background:linear-gradient(145deg,#e6f9ed,#d6f3e1)!important;border-color:#c9efd7!important;color:#08643b}
+.risk-reference-layout .risk-kpi-exposure .risk-kpi-icon{color:#079b51}
+.risk-reference-layout .risk-positive{color:#068749!important;font-weight:800}
+.risk-reference-layout .risk-negative{color:#c62835!important;font-weight:800}
+.risk-reference-layout .risk-indicator-details,.risk-reference-layout .risk-section-detail{margin-top:6px;border-top:1px solid #edf0fb}
+.risk-reference-layout .risk-indicator-details summary,.risk-reference-layout .risk-section-detail summary{display:flex;justify-content:space-between;padding:5px 1px 0;color:var(--muted);font-size:9px;cursor:pointer;list-style:none}
+.risk-reference-layout .risk-indicator-details summary::-webkit-details-marker,.risk-reference-layout .risk-section-detail summary::-webkit-details-marker{display:none}
+.risk-reference-layout .risk-indicator-details .risk-mini-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+.risk-reference-layout .risk-chart-card{padding:9px 11px 6px}
+.risk-reference-layout .risk-chart-heading{margin-bottom:2px}
+.risk-reference-layout .risk-chart-heading-icon{background:transparent;color:#5520de;font-size:23px}
+.risk-reference-layout .risk-chart-heading h2{font-size:clamp(13px,1.7vw,16px)!important}
+.risk-reference-layout .risk-chart-legend{display:flex;align-items:center;gap:5px;margin-left:auto;color:#3525a5;font-size:9px;font-weight:750}
+.risk-reference-layout .risk-chart-legend i{display:block;width:8px;height:8px;border-radius:50%;background:#145cff}
+.risk-reference-layout #riskProjection{width:100%;min-width:0}
+.risk-reference-layout .risk-chart-projection{display:block;width:100%;height:auto;max-height:132px;overflow:visible;border:0;border-radius:0;background:transparent}
+.risk-reference-layout .risk-control-card{padding:8px 10px}
+.risk-reference-layout .risk-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:0}
+.risk-reference-layout .risk-actions .risk-result-btn{display:flex;justify-content:center;align-items:center;gap:8px;min-width:0;min-height:44px;padding:6px;border:0;border-radius:13px;color:#fff;font-size:clamp(16px,2vw,20px);font-weight:900;letter-spacing:-.035em;box-shadow:0 6px 12px rgba(10,32,76,.13)}
+.risk-reference-layout .risk-actions .risk-result-btn span{font-size:clamp(20px,2.5vw,27px)}
+.risk-reference-layout .risk-actions .risk-win-btn{background:linear-gradient(110deg,#08ad4e,#007f39)}
+.risk-reference-layout .risk-actions .risk-loss-btn{background:linear-gradient(110deg,#fa4141,#d90a1c)}
+.risk-reference-layout .risk-actions .risk-result-btn:disabled{opacity:.4}
+.risk-reference-layout .risk-control-subline{display:flex;justify-content:space-between;gap:8px;align-items:center;margin-top:5px;color:var(--muted);font-size:8px}
+.risk-reference-layout .risk-cloud-status{font-size:8px;line-height:1.2}
+.risk-reference-layout .risk-config-card{padding:10px}
+.risk-config-heading{display:flex;align-items:center;gap:7px;margin-bottom:8px}
+.risk-config-heading-icon{flex:0 0 24px;width:24px;height:24px;background:transparent;color:#5120dc;font-size:20px}
+.risk-config-heading h2{margin:0;font-size:clamp(11px,1.4vw,13px);line-height:1.1;letter-spacing:-.04em;white-space:nowrap}
+.risk-config-heading .risk-summary-action{margin-left:auto;padding:4px 7px;border:1px solid #ded6ff;border-radius:18px;background:#f0eaff;color:#5124ce;font-size:8px;font-weight:850;cursor:pointer}
+.risk-reference-layout .risk-plan-tiles{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px}
+.risk-reference-layout .risk-plan-tiles>div{display:flex;flex-direction:column;justify-content:center;min-width:0;min-height:46px;padding:7px 8px;border-radius:10px;background:linear-gradient(145deg,#f0efff,#e9e7ff);color:#121b4c}
+.risk-reference-layout .risk-plan-tiles span{font-size:8px;line-height:1.2}
+.risk-reference-layout .risk-plan-tiles strong{margin-top:4px;font-size:clamp(11px,1.45vw,15px);line-height:1.05;letter-spacing:-.035em;overflow-wrap:anywhere}
+.risk-reference-layout .risk-config-fields{margin-top:8px;padding-top:7px;border-top:1px solid var(--line)}
+.risk-reference-layout .risk-config-fields[hidden]{display:none}
+.risk-reference-layout .risk-config-fields .notice{font-size:9px}
+.risk-reference-layout .risk-config-fields .field label{font-size:10px}
+.risk-reference-layout .risk-config-fields .field small{font-size:8px}
+.risk-reference-layout .risk-config-fields input{min-height:34px;font-size:13px}
+.risk-reference-layout .risk-config-fields .actions{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.risk-reference-layout .risk-config-fields .btn{min-height:34px;padding:6px 9px;font-size:9px}
+.risk-reference-layout .risk-tip-card{position:relative;display:flex;align-items:flex-start;gap:8px;min-height:91px;padding:12px;border-radius:14px;background:linear-gradient(125deg,#a522ff,#4e12cf 68%,#260b83);color:#fff;box-shadow:0 8px 16px rgba(86,18,193,.18)}
+.risk-reference-layout .risk-tip-icon{display:grid;place-items:center;flex:0 0 28px;width:28px;height:28px;border-radius:9px;background:rgba(255,255,255,.14);font-size:22px}
+.risk-reference-layout .risk-tip-card small{font-size:8px;font-weight:950;letter-spacing:.06em;color:#e6d8ff}
+.risk-reference-layout .risk-tip-card h3{margin:3px 0;color:#fff;font-size:clamp(10px,1.3vw,12px);line-height:1.15}
+.risk-reference-layout .risk-tip-card p{margin:0;color:#f4ebff;font-size:8px;line-height:1.35}
+.risk-reference-layout .risk-tip-arrow{position:absolute;right:9px;bottom:7px;display:grid;place-items:center;width:22px;height:22px;border-radius:50%;background:rgba(13,5,76,.3);font-size:15px}
+.risk-reference-layout .risk-ready-card{position:relative;overflow:hidden;min-height:119px;padding:12px;border-radius:14px;background:linear-gradient(135deg,#05b7ed,#0877e8 62%,#0641c3);color:#fff;box-shadow:0 8px 16px rgba(0,109,224,.18)}
+.risk-reference-layout .risk-ready-rocket{display:grid;place-items:center;width:31px;height:28px;border-radius:9px;background:rgba(255,255,255,.16);font-size:22px}
+.risk-reference-layout .risk-ready-card h3{margin:5px 0 2px;color:#fff;font-size:clamp(11px,1.45vw,13px);line-height:1.15}
+.risk-reference-layout .risk-ready-card p{margin:0 0 7px;color:#eefaff;font-size:8px;line-height:1.35}
+.risk-reference-layout .risk-ready-card button{display:flex;align-items:center;justify-content:center;gap:8px;width:90%;min-height:27px;margin:0 auto;padding:4px 9px;border:0;border-radius:20px;background:#fff;color:#0b285f;font-size:8px;font-weight:900;cursor:pointer}
+.risk-reference-layout .risk-ready-card button span{font-size:12px}
+.risk-reference-layout .risk-history-card{padding:10px;border-radius:16px}
+.risk-reference-layout .risk-history-heading{display:flex;align-items:center;gap:8px;min-height:27px;padding:0 1px 7px;border-bottom:1px solid #e9ecfa}
+.risk-reference-layout .risk-history-title-icon{flex-basis:24px;width:24px;height:24px;background:transparent;color:#101d66;font-size:23px}
+.risk-reference-layout .risk-history-heading h2{margin:0;font-size:clamp(13px,1.7vw,16px);letter-spacing:-.035em}
+.risk-reference-layout .risk-history-heading button{display:flex;align-items:center;gap:5px;margin-left:auto;padding:5px 8px;border:1px solid #dfe2fb;border-radius:18px;background:#f0f1ff;color:#121b4c;font-size:8px;font-weight:800;white-space:nowrap;cursor:pointer}
+.risk-reference-layout #riskHistory{display:grid;gap:0;max-height:92px;overflow:hidden;margin-top:7px;padding:0 9px;border:1px solid #e2e5fa;border-radius:12px;background:linear-gradient(145deg,#f5f4ff,#efefff)}
+.risk-reference-layout #riskHistory.is-expanded{max-height:520px;overflow:auto}
+.risk-reference-layout #riskHistory .empty{display:grid;place-items:center;align-content:center;min-height:80px;padding:10px;text-align:center;border:0;background:transparent;color:var(--muted);font-size:9px}
+.risk-reference-layout #riskHistory .empty:before{content:"▥";display:block;margin-bottom:3px;color:#8580d7;font-size:30px;font-weight:900;line-height:1}
+.risk-reference-layout #riskHistory .empty strong{color:var(--text);font-size:12px}
+.risk-reference-layout .risk-history-row{grid-template-columns:1.2fr 1fr 1fr 1fr;gap:7px;padding:7px 5px;border-bottom:1px solid #dfe3f8;font-size:9px}
+.risk-reference-layout .risk-history-row span{font-size:8px}
+.risk-reference-layout .risk-advanced-details{margin-top:7px;border-top:1px solid var(--line)}
+.risk-reference-layout .risk-advanced-details>summary{padding:6px 1px 0;color:var(--muted);font-size:9px;cursor:pointer;list-style:none}
+.risk-reference-layout .risk-advanced-details>summary::-webkit-details-marker{display:none}
+.risk-reference-layout .risk-advanced-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:10px 0}
+.risk-reference-layout .risk-advanced-grid h3{margin:0 0 7px;font-size:12px}
+.risk-reference-layout .risk-advanced-grid .risk-chart-empty{min-height:120px}
+.risk-reference-layout .risk-advanced-actions{display:flex;flex-wrap:wrap;gap:7px;padding:5px 0}
+.risk-reference-layout .risk-advanced-actions .btn{min-height:34px;padding:6px 9px;font-size:9px}
+.risk-reference-layout .risk-evolution-table{max-height:270px}
+.risk-reference-layout .risk-bottom-grid{display:none}
+@media(max-width:560px){
+  .risk-reference-layout .risk-hero-banner{height:auto;min-height:126px;padding:15px 14px}
+  .risk-reference-layout .risk-hero-copy{max-width:76%}
+  .risk-reference-layout .risk-hero-copy h1{font-size:clamp(20px,6vw,26px)}
+  .risk-reference-layout .risk-hero-copy p{font-size:10px}
+  .risk-reference-layout .risk-banner-break{display:none}
+  .risk-reference-layout .risk-hero-art{flex-basis:22%;min-height:80px}
+  .risk-reference-layout .risk-hero-shield{width:58px;height:70px;font-size:43px}
+  .risk-reference-layout .risk-reference-grid{grid-template-columns:1fr}
+  .risk-reference-layout .risk-primary-column,.risk-reference-layout .risk-aside-column{grid-template-columns:1fr}
+  .risk-reference-layout .risk-overview-card .risk-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .risk-reference-layout .risk-overview-card .risk-kpi{min-height:92px}
+  .risk-reference-layout .risk-overview-card .risk-kpi strong{font-size:18px}
+  .risk-reference-layout .risk-aside-column{gap:8px}
+  .risk-reference-layout .risk-plan-tiles>div{min-height:53px}
+  .risk-reference-layout .risk-actions .risk-result-btn{min-height:54px;font-size:20px}
+  .risk-reference-layout .risk-control-subline{font-size:9px}
+  .risk-reference-layout .risk-advanced-grid{grid-template-columns:1fr}
+}
+@media(min-width:561px) and (max-width:760px){
+  .risk-reference-layout .risk-hero-banner{height:132px}
+  .risk-reference-layout .risk-overview-card .risk-kpi{min-height:89px;padding:7px 6px}
+  .risk-reference-layout .risk-overview-card .risk-kpi strong{font-size:clamp(12px,2vw,16px)}
+  .risk-reference-layout .risk-overview-card .risk-kpi small{font-size:8px}
+  .risk-reference-layout .risk-reference-heading h2{font-size:12px!important}
+  .risk-reference-layout .risk-plan-tiles>div{min-height:46px;padding:6px}
+  .risk-reference-layout .risk-config-heading{gap:4px}
+  .risk-reference-layout .risk-config-heading h2{font-size:11px}
+}
