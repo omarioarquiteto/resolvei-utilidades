@@ -1978,7 +1978,7 @@ async function resolveiGeminiDiagnose(){
    if(d.test?.ok){m.textContent="🟢 Gemini funcionando. Modelo testado: "+d.test.model+" | Modelos disponíveis: "+(d.models||[]).join(", ");}
    else{
      const geminiError=String(d.test?.error||"");
-     const creditsDepleted=/402\\s+RESOURCE_EXHAUSTED|prepayment credits are depleted/i.test(geminiError);
+     const creditsDepleted=/402\s+RESOURCE_EXHAUSTED|prepayment credits are depleted/i.test(geminiError);
      if(creditsDepleted){
        m.textContent="🔴 O PROJETO ESTÁ SEM CRÉDITOS NA API GEMINI. Adicione créditos no Google AI Studio para voltar a utilizar a inteligência artificial.";
      }else{
