@@ -1509,7 +1509,7 @@ function render(){
   else if(parts[0]==='sobre') html=aboutPage();
   else if(parts[0]==='privacidade') html=privacyPage();
   else html=home();
-  document.getElementById('app').innerHTML=html; updateFavCount(); bind();
+  document.getElementById('app').innerHTML=html; updateFavCount(); bind(); resolveiApplyLayoutMode();
   const t=parts[0]==='ferramenta'?tools.find(x=>x.id===parts[1]):null;
   document.title=t?`${t.title} | Resolvei`:parts[0]==='categoria'&&CATS[parts[1]]?`${CATS[parts[1]].name} | Resolvei`:'Resolvei — Ferramentas úteis para o dia a dia';
   window.scrollTo({top:0,behavior:'auto'});
@@ -1563,6 +1563,24 @@ function bind(){
   const submitGlobalSearch=()=>{const q=gs?.value?.trim()||'';location.hash=q?'#/ferramentas?q='+encodeURIComponent(q):'#/ferramentas';};
   if(gs)gs.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();submitGlobalSearch();}});
   document.getElementById('globalSearchSubmit')?.addEventListener('click',submitGlobalSearch);
+  const modernForm=document.getElementById('modernSearchForm');
+  if(modernForm&&modernForm.dataset.bound!=="1"){
+    modernForm.dataset.bound="1";
+    modernForm.addEventListener("submit",e=>{
+      e.preventDefault();
+      const q=document.getElementById("modernGlobalSearch")?.value?.trim()||"";
+      location.hash=q?"#/ferramentas?q="+encodeURIComponent(q):"#/ferramentas";
+    });
+  }
+  const modernThemeButton=document.getElementById("modernThemeToggle");
+  if(modernThemeButton&&modernThemeButton.dataset.bound!=="1"){
+    modernThemeButton.dataset.bound="1";
+    modernThemeButton.addEventListener("click",()=>{
+      const dark=document.documentElement.dataset.theme==="dark";
+      document.documentElement.dataset.theme=dark?"":"dark";
+      localStorage.setItem("resolvei_theme",dark?"light":"dark");
+    });
+  }
   document.querySelectorAll('[data-search]').forEach(b=>b.addEventListener('click',()=>{location.hash='#/ferramentas?q='+encodeURIComponent(b.dataset.search)}));
   bindHomeFavoriteDrag();
   const ls=document.getElementById('listSearch');
@@ -1726,10 +1744,29 @@ function resolveiCurrentAppRoute(){
   if(!route||route==='index.html')route=(location.hash||'').replace(/^#\/?/,'');
   return route.split('?')[0];
 }
+var resolveiLayoutMode=localStorage.getItem("resolvei_layout")==="modern"?"modern":"classic";
+function resolveiApplyLayoutMode(){
+  const mode=resolveiLayoutMode==="modern"?"modern":"classic";
+  document.documentElement.dataset.layout=mode;
+  const route=resolveiCurrentAppRoute();
+  const active=route==="ferramentas"?"ferramentas":route==="categorias"||route.startsWith("categoria/")?"categorias":route==="favoritos"?"favoritos":route==="conta"?"conta":route.startsWith("ferramenta/")?"ferramentas":route==="games"?"games":"inicio";
+  document.querySelectorAll("[data-modern-route]").forEach(link=>{
+    const selected=link.dataset.modernRoute===active;
+    link.classList.toggle("active",selected);
+    if(selected)link.setAttribute("aria-current","page");else link.removeAttribute("aria-current");
+  });
+  const count=document.getElementById("modernFavCount");
+  if(count){const fav=document.getElementById("favCount");count.textContent=fav?.textContent||"0";}
+  const accountText=document.getElementById("modernAccountText");
+  if(accountText)accountText.textContent=typeof resolveiUser!=="undefined"&&resolveiUser?"Minha conta":"Entrar";
+  const accountLink=document.getElementById("modernAccountLink");
+  if(accountLink)accountLink.setAttribute("aria-label",typeof resolveiUser!=="undefined"&&resolveiUser?"Minha conta":"Entrar na conta");
+}
 async function resolveiLoadHomeToolPreferences(user){
   if(!user){
     resolveiPrefsUid=null;resolveiAccountToolFavorites=null;resolveiHomeToolOrder=[];
     resolveiPrefsLoading=false;resolveiHomePrefsError='';
+    resolveiApplyLayoutMode();
     return;
   }
   const uid=user.uid;
@@ -1739,6 +1776,7 @@ async function resolveiLoadHomeToolPreferences(user){
     resolveiAccountToolFavorites=normalizeToolIds(readLocalFavs());
     resolveiHomeToolOrder=normalizeToolIds(readLocalHomeOrder());
     resolveiPrefsLoading=false;
+    resolveiApplyLayoutMode();
     return;
   }
   try{
@@ -1746,6 +1784,11 @@ async function resolveiLoadHomeToolPreferences(user){
     const snapshot=await ref.get();
     if(!resolveiUser||resolveiUser.uid!==uid)return;
     const data=snapshot.exists?(snapshot.data()||{}):{};
+    if(data.uiLayout==="modern"||data.uiLayout==="classic"){
+      resolveiLayoutMode=data.uiLayout;
+      localStorage.setItem("resolvei_layout",data.uiLayout);
+    }
+    resolveiApplyLayoutMode();
     const favorites=Array.isArray(data.homepageToolFavorites)
       ?normalizeToolIds(data.homepageToolFavorites)
       :normalizeToolIds(readLocalFavs());
@@ -1823,6 +1866,7 @@ async function resolveiToken(){if(!resolveiUser)throw new Error("Faça login no 
 function resolveiAccountPage(){
  if(!resolveiUser)return `<div class="tool-layout"><section class="card panel auth-card"><span class="eyebrow">CONTA RESOLVEI</span><h1>Entre para usar as funções de IA</h1><p>Use Google ou seu e-mail e senha. Ao entrar com Google, o Gemini do Resolvei fica disponível sem você precisar colar uma chave pessoal.</p><button class="btn primary full" id="googleLogin">Continuar com Google</button><div class="auth-divider"><span>ou</span></div><div class="form-grid"><div class="field"><label for="authEmail">E-mail</label><input id="authEmail" type="email"></div><div class="field"><label for="authPassword">Senha</label><input id="authPassword" type="password" autocomplete="current-password"></div></div><div class="row-actions"><button type="button" class="btn primary" id="emailLogin">Entrar</button><button type="button" class="btn" id="emailSignup">Criar conta</button></div><div id="authMsg" class="notice" hidden></div></section></div>`;
  const savedTheme=localStorage.getItem("resolvei_theme")||"light";
+ const savedLayout=resolveiLayoutMode==="modern"?"modern":"classic";
  return `<div class="account-page">
   <aside class="account-sidebar">
    <div class="account-profile"><div class="account-avatar">👤</div><div><strong>${esc(resolveiUser.displayName||"Minha conta")}</strong><span>${esc(resolveiUser.email||"")}</span></div></div>
@@ -1853,6 +1897,7 @@ function resolveiAccountPage(){
      <div class="preference-list">
       <label class="preference-option"><span><strong>Tema escuro</strong><small>Ative o modo escuro do Resolvei.</small></span><input id="preferenceDark" type="checkbox" ${savedTheme==="dark"?"checked":""}></label>
      </div>
+     <div class="field preference-layout-field"><label for="preferenceLayout">Layout do Resolvei</label><select id="preferenceLayout"><option value="classic" ${savedLayout==="classic"?"selected":""}>CLÁSSICO — manter o visual atual</option><option value="modern" ${savedLayout==="modern"?"selected":""}>MODERNO — menu lateral e visual renovado</option></select><small>Você pode alternar entre os dois layouts sempre que quiser. A escolha é sincronizada com sua conta quando estiver conectado.</small></div>
      <div class="row-actions"><button class="btn primary" id="savePreferencesBtn">Salvar preferências</button></div>
      <div id="preferencesMsg" class="notice" hidden></div>
     </section>
@@ -1885,11 +1930,22 @@ function resolveiBindAccountSections(){
    finally{saveProfile.disabled=false;saveProfile.textContent="Salvar perfil";}
  });
  const savePrefs=root.querySelector("#savePreferencesBtn");
- if(savePrefs)savePrefs.addEventListener("click",()=>{
+ if(savePrefs)savePrefs.addEventListener("click",async()=>{
    const dark=!!root.querySelector("#preferenceDark")?.checked;
+   const layout=root.querySelector("#preferenceLayout")?.value==="modern"?"modern":"classic";
    document.documentElement.dataset.theme=dark?"dark":"";
    localStorage.setItem("resolvei_theme",dark?"dark":"light");
-   const msg=root.querySelector("#preferencesMsg"); if(msg){msg.hidden=false;msg.textContent="✅ Preferências salvas.";setTimeout(()=>{msg.hidden=true;},2200);}
+   resolveiLayoutMode=layout;
+   localStorage.setItem("resolvei_layout",layout);
+   resolveiApplyLayoutMode();
+   const msg=root.querySelector("#preferencesMsg");
+   try{
+     if(resolveiUser&&resolveiDb)await resolveiPersistToolPreferences(resolveiUser.uid,{uiLayout:layout});
+     if(msg){msg.hidden=false;msg.textContent="✅ Preferências salvas.";setTimeout(()=>{msg.hidden=true;},2200);}
+   }catch(error){
+     console.warn("Não foi possível sincronizar o layout com a conta:",error);
+     if(msg){msg.hidden=false;msg.textContent="Layout aplicado neste navegador, mas a sincronização com sua conta falhou. Tente salvar novamente.";}
+   }
  });
  show("ia");
 }

@@ -1016,3 +1016,198 @@ button, input, select { font: inherit; }
   color:var(--accent);font-size:9px;font-weight:900;letter-spacing:.08em;
 }
 .al-tool-featured .tool-icon{background:color-mix(in srgb,var(--accent) 14%,var(--surface))}
+
+
+
+/* Resolvei moderno — camada global opt-in */
+.modern-sidebar,.modern-topbar{display:none}
+html[data-layout="modern"]{
+  --bg:#f3f4ff;--surface:#fff;--surface-2:#eef0ff;--text:#101943;--muted:#687394;
+  --line:#dfe3fb;--brand:#111b46;--brand-2:#34416e;--accent:#5528ef;--accent-soft:#eee9ff;
+  --success:#078b45;--danger:#e91e2b;--shadow:0 12px 30px rgba(39,47,111,.09);--radius:20px;
+}
+html[data-theme="dark"][data-layout="modern"]{
+  --bg:#0b1022;--surface:#121a33;--surface-2:#1b2542;--text:#f4f6ff;--muted:#a7b1d0;
+  --line:#293657;--brand:#f4f6ff;--brand-2:#c5cee8;--accent:#9b83ff;--accent-soft:#2b2451;
+  --success:#22c77a;--danger:#ff5264;--shadow:0 18px 40px rgba(0,0,0,.25);
+}
+html[data-layout="modern"] body{background:radial-gradient(ellipse at 36% -8%,rgba(190,196,255,.55),transparent 42%),var(--bg);color:var(--text)}
+html[data-layout="modern"] .site-header{display:none}
+html[data-layout="modern"] .modern-sidebar{display:flex;position:fixed;z-index:90;inset:0 auto 0 0;width:238px;min-height:100vh;flex-direction:column;padding:22px 14px 18px;background:linear-gradient(165deg,#101832 0%,#09132e 58%,#071128 100%);color:#f7f8ff;box-shadow:10px 0 34px rgba(8,15,42,.12)}
+.modern-brand{display:flex;align-items:center;gap:10px;padding:2px 14px 34px;color:#fff;font-size:21px;font-weight:900;letter-spacing:-.05em}
+.modern-brand-mark{display:grid;place-items:center;width:39px;height:39px;border-radius:13px;background:#fff;color:#15234c;font-size:28px;box-shadow:0 5px 18px rgba(255,255,255,.16)}
+.modern-side-nav{display:grid;gap:7px}
+.modern-side-nav a{position:relative;display:flex;align-items:center;gap:13px;min-height:48px;padding:0 13px;border-radius:13px;color:#c3cbe1;font-size:13px;font-weight:650;transition:background .18s ease,color .18s ease,transform .18s ease}
+.modern-side-nav a>span{display:grid;place-items:center;width:25px;font-size:21px;color:#d1d9ef}
+.modern-side-nav a small{font-size:13px}
+.modern-side-nav a:hover{background:rgba(255,255,255,.08);color:#fff;transform:translateX(2px)}
+.modern-side-nav a.active{background:linear-gradient(110deg,#4612dc,#7651ff);color:#fff;box-shadow:0 8px 22px rgba(83,47,245,.32)}
+.modern-side-nav a.active>span{color:#fff}
+.modern-side-nav a b{margin-left:auto;display:grid;place-items:center;min-width:21px;height:21px;padding:0 5px;border-radius:99px;background:#8b5cf6;color:#fff;font-size:10px}
+.modern-sidebar-promo{margin-top:auto;padding:17px 15px 15px;border:1px solid rgba(163,176,255,.16);border-radius:17px;background:linear-gradient(145deg,rgba(89,58,224,.3),rgba(13,30,74,.42))}
+.modern-promo-icon{display:grid;place-items:center;width:34px;height:34px;margin-bottom:11px;border-radius:12px;background:linear-gradient(135deg,#8c4cff,#3f1bb8);font-size:20px}
+.modern-sidebar-promo strong{display:block;font-size:13px;line-height:1.35;color:#fff}
+.modern-sidebar-promo p{margin:7px 0 13px;color:#c3cbea;font-size:11px;line-height:1.5}
+.modern-sidebar-promo button{display:flex;justify-content:space-between;align-items:center;width:100%;min-height:34px;padding:0 11px;border:0;border-radius:10px;background:#5424e9;color:#fff;font-size:9px;font-weight:900;letter-spacing:.06em;cursor:pointer}
+.modern-sidebar-foot{padding:16px 8px 0;color:#8e9abc;font-size:10px;text-align:center}
+.modern-sidebar-foot span{color:#b38aff}
+html[data-layout="modern"] .modern-topbar{display:flex;position:fixed;z-index:85;top:0;right:0;left:238px;min-height:76px;align-items:center;justify-content:space-between;gap:22px;padding:12px clamp(20px,3vw,42px);border-bottom:1px solid rgba(204,211,247,.55);background:rgba(246,247,255,.86);backdrop-filter:blur(18px)}
+html[data-layout="modern"][data-theme="dark"] .modern-topbar{background:rgba(13,20,42,.88);border-bottom-color:var(--line)}
+.modern-search{display:flex;align-items:center;gap:12px;width:min(680px,70%);height:46px;padding:0 12px 0 17px;border:1px solid #e0e3f5;border-radius:999px;background:rgba(255,255,255,.92);box-shadow:0 4px 18px rgba(48,57,119,.035)}
+html[data-layout="modern"][data-theme="dark"] .modern-search{background:var(--surface);border-color:var(--line)}
+.modern-search>span{font-size:27px;line-height:1;color:#18245a}
+.modern-search input{width:100%;min-width:0;border:0;outline:0;background:transparent;color:var(--text);font-size:13px}
+.modern-search button{width:29px;height:29px;border:0;border-radius:50%;background:#eeeaff;color:#5425e8;font-size:16px;cursor:pointer}
+.modern-topbar-actions{display:flex;align-items:center;gap:13px}
+.modern-icon-button{width:40px;height:40px;border:1px solid var(--line);border-radius:50%;background:var(--surface);color:var(--text);font-size:20px;cursor:pointer}
+.modern-user-button{display:flex;align-items:center;gap:9px;min-height:42px;padding:3px 10px 3px 4px;border:1px solid var(--line);border-radius:999px;background:var(--surface);color:var(--text);font-size:12px;font-weight:800}
+.modern-user-button>span{display:grid;place-items:center;width:34px;height:34px;border-radius:50%;background:#e7eaff;color:#17265c;font-size:20px}
+.modern-user-button b{font-size:15px;color:var(--muted)}
+html[data-layout="modern"] #app.app-shell{width:calc(100% - 238px);max-width:1660px;min-height:calc(100vh - 100px);margin:0 0 0 238px;padding:100px clamp(18px,2.2vw,38px) 42px}
+html[data-layout="modern"] .site-footer{margin-left:238px;padding:28px clamp(18px,2.2vw,38px) 18px;border-top:1px solid var(--line);background:transparent}
+html[data-layout="modern"] .site-footer .container{width:100%;max-width:1660px;margin:0}
+html[data-layout="modern"] .card,html[data-layout="modern"] .panel{border-radius:19px;border-color:var(--line);box-shadow:var(--shadow)}
+html[data-layout="modern"] .tool-card,html[data-layout="modern"] .category-card{border-radius:18px;box-shadow:0 8px 22px rgba(37,46,112,.055)}
+html[data-layout="modern"] .tool-card:hover,html[data-layout="modern"] .category-card:hover{transform:translateY(-3px);box-shadow:0 14px 28px rgba(37,46,112,.11)}
+html[data-layout="modern"] .section-head h1,html[data-layout="modern"] .section-head h2{letter-spacing:-.04em}
+html[data-layout="modern"] .btn{border-radius:12px;font-weight:750}
+html[data-layout="modern"] .mobile-bottom-nav{display:none}
+html[data-layout="modern"] .app-shell>.tool-page,html[data-layout="modern"] .tool-page{max-width:100%}
+@media(max-width:1000px) and (min-width:701px){
+  html[data-layout="modern"] .modern-sidebar{width:190px;padding-left:10px;padding-right:10px}
+  html[data-layout="modern"] .modern-topbar{left:190px}
+  html[data-layout="modern"] #app.app-shell{width:calc(100% - 190px);margin-left:190px;padding-left:18px;padding-right:18px}
+  html[data-layout="modern"] .site-footer{margin-left:190px}
+  .modern-brand{padding-left:8px}
+  .modern-side-nav a{gap:9px;padding:0 9px}
+}
+@media(max-width:700px){
+  html[data-layout="modern"] .modern-sidebar{display:none}
+  html[data-layout="modern"] .modern-topbar{left:0;right:0;min-height:64px;padding:9px 12px;gap:10px}
+  .modern-search{width:100%;height:42px;padding-left:12px}
+  .modern-search>span{font-size:23px}
+  .modern-search input{font-size:12px}
+  .modern-topbar-actions{gap:7px}
+  .modern-icon-button{width:36px;height:36px}
+  .modern-user-button{width:38px;height:38px;padding:2px}
+  .modern-user-button small,.modern-user-button b{display:none}
+  .modern-user-button>span{width:32px;height:32px}
+  html[data-layout="modern"] #app.app-shell{width:100%;max-width:none;margin:0;padding:78px 12px 28px;min-height:calc(100vh - 80px)}
+  html[data-layout="modern"] .site-footer{margin:0;padding:24px 14px calc(88px + env(safe-area-inset-bottom))}
+  html[data-layout="modern"] .site-footer .container{width:100%}
+  html[data-layout="modern"] .mobile-bottom-nav{display:grid;background:rgba(12,22,51,.96);border-top:1px solid rgba(255,255,255,.08);box-shadow:0 -8px 24px rgba(5,12,36,.2)}
+  html[data-layout="modern"] .mobile-bottom-nav a{color:#bfc8e2}
+  html[data-layout="modern"] .mobile-bottom-nav a:active,html[data-layout="modern"] .mobile-bottom-nav a:focus-visible{color:#fff;background:#4b25c8}
+}
+/* Gerenciamento de risco — novo painel na linha visual da referência */
+.risk-tool-shell{display:grid;gap:17px;max-width:100%}
+.risk-hero-banner{position:relative;display:flex;justify-content:space-between;align-items:center;gap:24px;min-height:188px;padding:28px 34px;overflow:hidden;border-radius:23px;background:linear-gradient(110deg,#07143c 0%,#101b67 48%,#063fba 76%,#03b9d6 100%);color:#fff;box-shadow:0 16px 34px rgba(19,34,115,.18)}
+.risk-hero-banner:before{content:"";position:absolute;inset:0;background:radial-gradient(circle at 14% 110%,rgba(140,35,255,.68),transparent 30%),radial-gradient(circle at 88% 18%,rgba(0,207,255,.3),transparent 30%);pointer-events:none}
+.risk-hero-copy{position:relative;z-index:2;max-width:690px}
+.risk-hero-kicker{display:inline-flex;margin-bottom:10px;color:#a9dfff;font-size:10px;font-weight:950;letter-spacing:.14em}
+.risk-hero-banner h1{max-width:700px;margin:0;color:#fff;font-size:clamp(26px,3vw,39px);line-height:1.05;letter-spacing:-.05em}
+.risk-hero-banner h1 em{font-style:normal;color:#67dcff}
+.risk-hero-banner p{max-width:630px;margin:10px 0 0;color:#e3eaff;font-size:14px;line-height:1.55}
+.risk-hero-art{position:relative;z-index:1;display:flex;align-items:center;justify-content:center;flex:0 0 235px;height:145px}
+.risk-hero-shield{display:grid;place-items:center;width:105px;height:115px;border:2px solid rgba(137,227,255,.75);border-radius:34px 34px 42px 42px;background:linear-gradient(145deg,#12b9ff,#2844c7 70%,#15145c);box-shadow:0 0 35px rgba(0,208,255,.4),inset 0 0 24px rgba(255,255,255,.18);color:#fff;font-size:73px;font-weight:900;transform:rotate(-9deg)}
+.risk-hero-bars{position:absolute;right:0;bottom:15px;display:flex;align-items:end;gap:7px;height:108px;opacity:.8}
+.risk-hero-bars i{display:block;width:9px;height:var(--bar-h,55px);border-radius:5px 5px 0 0;background:linear-gradient(#45e3ff,#1372ff);box-shadow:0 0 13px rgba(38,203,255,.35)}
+.risk-hero-bars i:nth-child(1){--bar-h:24px}.risk-hero-bars i:nth-child(2){--bar-h:44px}.risk-hero-bars i:nth-child(3){--bar-h:35px}.risk-hero-bars i:nth-child(4){--bar-h:63px}.risk-hero-bars i:nth-child(5){--bar-h:80px}.risk-hero-bars i:nth-child(6){--bar-h:96px}.risk-hero-bars i:nth-child(7){--bar-h:108px}
+.risk-hero-arrow{position:absolute;right:0;top:-8px;color:#38e4ff;font-size:66px;font-weight:900;transform:rotate(-12deg);text-shadow:0 0 18px rgba(0,221,255,.55)}
+.risk-reference-grid{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(290px,.74fr);gap:16px;align-items:start}
+.risk-primary-column,.risk-aside-column{display:grid;gap:15px;min-width:0}
+.risk-overview-card,.risk-chart-card,.risk-control-card,.risk-extra-card{padding:19px}
+.risk-overview-card{background:linear-gradient(145deg,var(--surface),color-mix(in srgb,var(--accent-soft) 30%,var(--surface)))}
+.risk-overview-card .risk-section-head{align-items:center}
+.risk-overview-card .risk-section-head h2,.risk-chart-card .risk-section-head h2{margin:2px 0 3px;font-size:18px;letter-spacing:-.035em}
+.risk-overview-card .risk-section-head p,.risk-chart-card .risk-section-head p{margin:0;color:var(--muted);font-size:11px}
+.risk-overview-card .risk-kpis{grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.risk-overview-card .risk-kpi{min-height:106px;padding:13px 12px;border-radius:14px}
+.risk-overview-card .risk-kpi:nth-child(1){background:linear-gradient(145deg,#e1faeb,#d3f5e2);border-color:#c0efd2;color:#075b33}
+.risk-overview-card .risk-kpi:nth-child(2){background:linear-gradient(145deg,#e5f0ff,#d8e6ff);border-color:#cbdfff;color:#113c94}
+.risk-overview-card .risk-kpi:nth-child(3){background:linear-gradient(145deg,#f1eaff,#e7dcff);border-color:#dfd0ff;color:#5522b9}
+.risk-overview-card .risk-kpi:nth-child(4){background:linear-gradient(145deg,#e2f9eb,#d4f3df);border-color:#c3efd1;color:#075b33}
+.risk-overview-card .risk-kpi span,.risk-overview-card .risk-kpi small{color:inherit;opacity:.82;font-size:10px}
+.risk-overview-card .risk-kpi strong{font-size:clamp(16px,1.55vw,23px);overflow-wrap:anywhere}
+.risk-overview-card .risk-kpi-primary strong{color:#075b33}
+.risk-overview-card .risk-mini-grid{margin-top:10px}
+.risk-overview-card .risk-latest-result{margin-top:8px}
+.risk-overview-card .risk-live-box{grid-template-columns:repeat(2,minmax(0,1fr))}
+.risk-chart-card .risk-chart{height:225px;border:0;background:linear-gradient(180deg,var(--surface),var(--surface-2))}
+.risk-control-card{border:1px solid color-mix(in srgb,var(--accent) 15%,var(--line));background:linear-gradient(145deg,var(--surface),var(--accent-soft))}
+.risk-control-heading{display:flex;justify-content:space-between;gap:14px;align-items:center}
+.risk-control-heading h2{margin:2px 0 3px;font-size:17px;letter-spacing:-.03em}
+.risk-control-heading p{margin:0;color:var(--muted);font-size:11px}
+.risk-control-live{padding:6px 9px;border-radius:999px;background:#e6f8ed;color:#08783e;font-size:10px;font-weight:900;white-space:nowrap}
+.risk-actions{display:grid;grid-template-columns:1fr 1fr;gap:11px;margin-top:16px}
+.risk-actions .risk-result-btn{display:flex;justify-content:center;align-items:center;gap:12px;min-height:67px;border:0;border-radius:16px;color:#fff;font-size:24px;letter-spacing:-.03em;box-shadow:0 9px 18px rgba(12,40,82,.14)}
+.risk-actions .risk-result-btn span{font-size:31px}
+.risk-actions .risk-win-btn{background:linear-gradient(110deg,#08a84e,#007d38)}
+.risk-actions .risk-loss-btn{background:linear-gradient(110deg,#fb4444,#d80d20)}
+.risk-actions .risk-result-btn:disabled{opacity:.42}
+.risk-control-bottom{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:10px}
+.risk-control-bottom #riskRestartBtn{font-size:11px}
+.risk-cloud-status{margin:0!important;padding:7px 10px!important;font-size:10px!important}
+.risk-aside-column .risk-config-card{padding:18px}
+.risk-aside-column .risk-config-card>summary strong{font-size:15px}
+.risk-aside-column .risk-config-card .field small{font-size:10px}
+.risk-tip-card{display:flex;gap:13px;padding:19px;border-radius:18px;background:linear-gradient(130deg,#9d28ff,#4810c9 67%,#24106f);color:#fff;box-shadow:0 12px 26px rgba(91,25,194,.2)}
+.risk-tip-icon{display:grid;place-items:center;flex:0 0 38px;height:38px;border-radius:13px;background:rgba(255,255,255,.16);font-size:23px}
+.risk-tip-card small{font-size:9px;font-weight:950;letter-spacing:.13em;color:#e3ceff}
+.risk-tip-card h3{margin:5px 0 6px;color:#fff;font-size:16px;line-height:1.2}
+.risk-tip-card p{margin:0;color:#f1eaff;font-size:11px;line-height:1.55}
+.risk-ready-card{position:relative;overflow:hidden;padding:20px;border-radius:18px;background:linear-gradient(135deg,#03b8ef,#0870e8 58%,#073db6);color:#fff;box-shadow:0 12px 26px rgba(0,112,235,.19)}
+.risk-ready-rocket{display:grid;place-items:center;width:43px;height:43px;border-radius:15px;background:rgba(255,255,255,.17);font-size:26px}
+.risk-ready-card h3{margin:12px 0 5px;color:#fff;font-size:17px}
+.risk-ready-card p{margin:0 0 14px;color:#e9f7ff;font-size:11px;line-height:1.5}
+.risk-ready-card button{display:flex;justify-content:space-between;align-items:center;width:100%;min-height:38px;padding:0 13px;border:0;border-radius:999px;background:#fff;color:#09265f;font-size:11px;font-weight:900;cursor:pointer}
+.risk-ready-card button:hover{transform:translateY(-1px)}
+.risk-projection-card .risk-chart{height:160px}
+.risk-bottom-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:15px;align-items:start}
+.risk-bottom-grid .risk-extra-card{min-width:0}
+.risk-bottom-grid .risk-history-card{background:linear-gradient(145deg,var(--surface),var(--accent-soft))}
+.risk-history-card[open]>summary{padding-bottom:13px;border-bottom:1px solid var(--line)}
+.risk-bottom-grid .risk-extra-card>summary strong{font-size:14px}
+.risk-bottom-grid .risk-extra-card>summary small{font-size:10px}
+.risk-bottom-grid .risk-history-row{grid-template-columns:1.1fr 1fr 1fr 1fr}
+@media(max-width:1160px){
+  .risk-reference-grid{grid-template-columns:minmax(0,1.25fr) minmax(270px,.8fr)}
+  .risk-overview-card .risk-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(max-width:920px){
+  .risk-reference-grid{grid-template-columns:1fr}
+  .risk-aside-column{grid-template-columns:repeat(2,minmax(0,1fr));align-items:start}
+  .risk-aside-column .risk-config-card,.risk-aside-column .risk-projection-card{grid-column:span 2}
+}
+@media(max-width:700px){
+  .risk-hero-banner{min-height:160px;padding:22px 20px}
+  .risk-hero-banner h1{font-size:27px;max-width:490px}
+  .risk-hero-banner p{max-width:430px;font-size:12px}
+  .risk-hero-art{flex-basis:100px;height:100px;margin-right:-14px}
+  .risk-hero-shield{width:65px;height:75px;font-size:48px;border-radius:22px}
+  .risk-hero-bars{gap:4px;height:70px}
+  .risk-hero-bars i{width:5px}
+  .risk-hero-arrow{font-size:42px;right:-8px}
+  .risk-reference-grid{grid-template-columns:1fr}
+  .risk-aside-column{grid-template-columns:1fr}
+  .risk-aside-column .risk-config-card,.risk-aside-column .risk-projection-card{grid-column:auto}
+  .risk-overview-card,.risk-chart-card,.risk-control-card,.risk-extra-card{padding:14px}
+  .risk-overview-card .risk-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .risk-overview-card .risk-kpi{min-height:95px;padding:10px}
+  .risk-overview-card .risk-kpi strong{font-size:18px}
+  .risk-overview-card .risk-live-box{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .risk-control-heading{align-items:flex-start}
+  .risk-actions{gap:8px}
+  .risk-actions .risk-result-btn{min-height:60px;font-size:21px}
+  .risk-control-bottom{align-items:flex-start;flex-direction:column}
+  .risk-bottom-grid{grid-template-columns:1fr}
+}
+@media(max-width:400px){
+  .risk-hero-banner{padding:19px 16px}
+  .risk-hero-art{flex-basis:78px}
+  .risk-hero-banner h1{font-size:23px}
+  .risk-overview-card .risk-kpis{gap:6px}
+  .risk-overview-card .risk-kpi strong{font-size:16px}
+  .risk-overview-card .risk-live-box{grid-template-columns:1fr}
+  .risk-actions .risk-result-btn{font-size:18px}
+}

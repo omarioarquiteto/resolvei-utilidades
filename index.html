@@ -9,7 +9,8 @@
   <link rel="canonical" href="https://resolvei.com.br/">
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <link rel="manifest" href="manifest.webmanifest">
-  <link rel="stylesheet" href="styles.css?v=20261030-altos-lucros-2">
+  <script>try{document.documentElement.dataset.layout=localStorage.getItem("resolvei_layout")==="modern"?"modern":"classic";}catch(e){}</script>
+  <link rel="stylesheet" href="styles.css?v=20261105-modern-layout-1">
   <link rel="stylesheet" href="documents-tools.css?v=20261012-1">
   <link rel="stylesheet" href="analista-bin.css?v=20261002-1">
   <link rel="stylesheet" href="opcoes-digitais.css?v=20261104-3">
@@ -25,6 +26,36 @@
     <nav class="nav-links" aria-label="Principal"><a href="#/">Início</a><a href="#/ferramentas">Ferramentas</a><a href="#/categorias">Categorias</a><a href="/games.html" aria-label="Abrir Resolvei Games">🎮 Games</a><a href="#/favoritos">Favoritos <span id="favCount" class="nav-badge">0</span></a><a href="#/conta" id="accountNav">👤 Entrar</a><a href="#" class="donation-nav-link" data-donation-open>💚 Valeu!</a></nav>
     <button id="themeToggle" class="icon-btn" type="button" aria-label="Alternar tema">☼</button>
   </div></header>
+
+  <aside class="modern-sidebar" id="modernSidebar" aria-label="Navegação principal">
+    <a class="modern-brand" href="#/" aria-label="Resolvei, início"><span class="modern-brand-mark">✓</span><span>Resolvei</span></a>
+    <nav class="modern-side-nav">
+      <a href="#/" data-modern-route="inicio"><span>⌂</span><small>Início</small></a>
+      <a href="#/ferramentas" data-modern-route="ferramentas"><span>⚒</span><small>Ferramentas</small></a>
+      <a href="#/categorias" data-modern-route="categorias"><span>▦</span><small>Categorias</small></a>
+      <a href="/games.html" data-modern-route="games"><span>🎮</span><small>Games</small></a>
+      <a href="#/favoritos" data-modern-route="favoritos"><span>♡</span><small>Favoritos</small><b id="modernFavCount">0</b></a>
+      <a href="#/conta" data-modern-route="conta"><span>♙</span><small id="modernAccountText">Minha conta</small></a>
+    </nav>
+    <div class="modern-sidebar-promo">
+      <span class="modern-promo-icon">✦</span>
+      <strong>Resolvei simplifica seu dia.</strong>
+      <p>Ferramentas práticas para transformar dúvidas em soluções.</p>
+      <button type="button" data-donation-open>APOIAR O PROJETO <span>→</span></button>
+    </div>
+    <div class="modern-sidebar-foot">Feito para resolver. <span>♥</span></div>
+  </aside>
+  <div class="modern-topbar" id="modernTopbar">
+    <form class="modern-search" id="modernSearchForm" role="search">
+      <span aria-hidden="true">⌕</span>
+      <input id="modernGlobalSearch" type="search" placeholder="Buscar ferramentas..." autocomplete="off" aria-label="Buscar ferramentas">
+      <button type="submit" aria-label="Buscar">↵</button>
+    </form>
+    <div class="modern-topbar-actions">
+      <button type="button" class="modern-icon-button" id="modernThemeToggle" aria-label="Alternar tema" title="Alternar tema">☼</button>
+      <a class="modern-user-button" id="modernAccountLink" href="#/conta" aria-label="Minha conta"><span>♙</span><small>Minha conta</small><b>⌄</b></a>
+    </div>
+  </div>
   <nav class="mobile-bottom-nav" aria-label="Navegação rápida">
     <a href="#/" aria-label="Início"><span aria-hidden="true">⌂</span><small>Início</small></a>
     <a href="#/ferramentas" aria-label="Ferramentas"><span aria-hidden="true">▦</span><small>Ferramentas</small></a>
@@ -49,14 +80,14 @@
   <script src="https://www.gstatic.com/firebasejs/11.0.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/11.0.2/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore-compat.js"></script>
-  <script src="risk-evolution-tool.js" defer></script>
+  <script src="risk-evolution-tool.js?v=20261105-modern-risk-1" defer></script>
   <script src="donation.js" defer></script>
   <script src="shopping-list.js?v=20260928-5" defer></script>
   <script src="password-generator.js?v=20260929-1" defer></script>
   <script src="/ferramenta/financiamento/financiamento.js?v=20261006" defer></script>
   <script src="monitor-precos.js?v=20261014-1" defer></script>
   <script src="tabela-fipe.js?v=20261022-1" defer></script>
-  <script src="app.js?v=20261105-heikin-ashi-2" defer></script>
+  <script src="app.js?v=20261105-modern-layout-1" defer></script>
   <script src="documents-tools.js?v=20261012-1" defer></script>
   <script src="analista-bin.js?v=20261002-1" defer></script>
   <script src="opcoes-digitais.js?v=20261104-3" defer></script>
