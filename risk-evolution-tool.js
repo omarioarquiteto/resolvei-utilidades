@@ -833,7 +833,7 @@ function bindRiskEvolutionTool(){
   if(viewHistory) viewHistory.addEventListener('click',()=>{
     const history=document.getElementById('riskHistory');
     if(history) history.classList.toggle('is-expanded');
-    if(advanced) advanced.open=true;
+    if(advanced) advanced.open=!!history?.classList.contains('is-expanded');
     viewHistory.innerHTML=history?.classList.contains('is-expanded')?'Recolher histórico <span>↑</span>':'Ver histórico completo <span>→</span>';
     if(advanced) advanced.scrollIntoView({behavior:'smooth',block:'nearest'});
   });
