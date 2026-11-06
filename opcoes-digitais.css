@@ -33,3 +33,50 @@
 .od-history-empty{margin:8px 0;color:#7b8799;font-size:11px}
 .od-history-note{margin:10px 0 0;color:#69788d;font-size:9px;line-height:1.5}
 @media(max-width:720px){.od-context{grid-template-columns:1fr}.od-group-scores{grid-template-columns:repeat(2,minmax(0,1fr))}.od-app{margin:8px auto 24px}.od-card{padding:15px}.od-app h1{font-size:27px}}
+
+
+/* Radar contínuo de força de tendência — Opções Digitais */
+.od-trend-radar{margin:0 0 14px;padding:18px 20px;background:linear-gradient(145deg,#111a25,#0b1119);border-color:#27384a}
+.od-trend-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}
+.od-trend-head h2{font-size:19px;line-height:1.2;margin:5px 0;color:#eef5fc;letter-spacing:-.35px}
+.od-trend-head p{margin:4px 0 0;color:#8b9aac;font-size:12px}
+.od-trend-status{display:inline-flex;align-items:center;gap:7px;white-space:nowrap;padding:8px 10px;border:1px solid #344252;border-radius:30px;color:#9eacbc;font-size:9px;font-weight:900;letter-spacing:.08em}
+.od-trend-status i{display:block;width:7px;height:7px;border-radius:50%;background:#738093}
+.od-trend-status.is-live{color:#74e7b4;border-color:#1d7252;background:#0b241b}
+.od-trend-status.is-live i{background:#36dc91;box-shadow:0 0 10px #36dc91;animation:odTrendPulse 1.5s infinite}
+@keyframes odTrendPulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.45;transform:scale(.72)}}
+.od-trend-meta{display:flex;justify-content:space-between;align-items:center;gap:12px;margin:16px 0 10px;padding:10px 0;border-top:1px solid #1d2b3a;border-bottom:1px solid #1d2b3a}
+.od-trend-meta>b{font-size:12px;color:#e9f1fa}
+.od-trend-meta>span{font-size:10px;color:#8090a2}
+.od-trend-list{display:grid;gap:7px}
+.od-trend-row{display:grid;grid-template-columns:minmax(105px,1fr) minmax(160px,1.5fr) 70px 88px;align-items:center;gap:14px;padding:11px 12px;border:1px solid #203042;border-radius:11px;background:#0b121b;transition:border-color .2s,transform .2s}
+.od-trend-row:hover{border-color:#3b607a;transform:translateY(-1px)}
+.od-trend-asset{display:flex;flex-direction:column;gap:4px;min-width:0}
+.od-trend-asset strong{color:#f2f6fb;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.od-trend-asset small,.od-trend-adx small{color:#8191a4;font-size:9px;letter-spacing:.06em}
+.od-trend-force{min-width:0}
+.od-trend-force>div{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+.od-trend-force b{font-size:15px;font-weight:900;font-variant-numeric:tabular-nums}
+.od-trend-force small{font-size:8px;color:#8292a5;font-weight:800;letter-spacing:.08em}
+.od-trend-force>span{display:block;height:6px;overflow:hidden;border-radius:10px;background:#1c2937}
+.od-trend-force>span i{display:block;height:100%;border-radius:10px;transition:width .45s ease}
+.od-trend-force.up b{color:#36dc91}
+.od-trend-force.up>span i{background:linear-gradient(90deg,#159b68,#4be5a3)}
+.od-trend-force.down b{color:#ff7086}
+.od-trend-force.down>span i{background:linear-gradient(90deg,#c33e59,#ff7086)}
+.od-trend-adx{display:flex;flex-direction:column;gap:2px;text-align:right}
+.od-trend-adx b{font-size:13px;color:#dce7f2;font-variant-numeric:tabular-nums}
+.od-trend-adx small:last-child{font-size:8px;letter-spacing:0}
+.od-trend-analyze{height:32px;border:1px solid #33566d;border-radius:8px;background:#112536;color:#a9e3ff;font-size:9px;font-weight:900;letter-spacing:.06em;cursor:pointer}
+.od-trend-analyze:hover{background:#17364d;border-color:#55d6ff}
+.od-trend-empty{padding:22px 16px;text-align:center;color:#91a1b3;border:1px dashed #2a3a4b;border-radius:10px;background:#0b121a;font-size:12px;line-height:1.6}
+.od-trend-disclaimer{margin:12px 0 0;color:#74869a;font-size:9px;line-height:1.5}
+@media(max-width:700px){
+  .od-trend-radar{padding:14px}
+  .od-trend-head{flex-direction:column;gap:10px}
+  .od-trend-head h2{font-size:17px}
+  .od-trend-meta{align-items:flex-start;flex-direction:column;gap:5px}
+  .od-trend-row{grid-template-columns:minmax(90px,1fr) minmax(115px,1.2fr) 50px;gap:8px;padding:10px}
+  .od-trend-adx{display:none}
+  .od-trend-analyze{grid-column:1/-1;width:100%;height:34px}
+}
