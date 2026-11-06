@@ -526,7 +526,7 @@ async def _publish_trend_score(
         analyze_trend_strength, rows[-TREND_CANDLE_COUNT:]
     )
     if (
-        float(trend.get("strength") or 0) >= TREND_THRESHOLD
+        float(trend.get("strength") or 0) > TREND_THRESHOLD
         and trend.get("direction") in ("CALL", "PUT")
     ):
         state["results"][symbol] = {
