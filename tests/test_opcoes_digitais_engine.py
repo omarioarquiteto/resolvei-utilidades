@@ -78,7 +78,7 @@ class OpcoesDigitaisEngineTests(unittest.TestCase):
         result = analyze_trend_strength(make_candles(mode="up"))
         self.assertEqual(result["direction"], "CALL")
         self.assertEqual(result["trendLabel"], "ALTA")
-        self.assertGreaterEqual(result["strength"], 85)
+        self.assertGreater(result["strength"], 85)
         self.assertLessEqual(result["strength"], 100)
 
     def test_trend_radar_detects_very_strong_downtrend(self):
