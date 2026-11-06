@@ -490,64 +490,158 @@ def _trend_snapshot(state: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _normalize_trend_candle(
+    candle: dict[str, Any],
+    previous: dict[str, Any] | None = None,
+) -> dict[str, Any] | None:
+    try:
+        candle_time = float(candle.get("from", candle.get("time", candle.get("to", 0))))
+        close_price = float(candle["close"])
+        open_price = float(candle.get("open", previous["open"] if previous else close_price))
+        high_value = float(candle.get("max", candle.get("high", previous["high"] if previous else max(open_price, close_price))))
+        low_value = float(candle.get("min", candle.get("low", previous["low"] if previous else min(open_price, close_price))))
+        volume_value = candle.get("volume", previous.get("volume") if previous else None)
+        if candle_time <= 0:
+            return None
+        return {
+            "time": candle_time,
+            "open": open_price,
+            "high": max(high_value, open_price, close_price),
+            "low": min(low_value, open_price, close_price),
+            "close": close_price,
+            "volume": float(volume_value) if volume_value is not None else None,
+        }
+    except (TypeError, ValueError, KeyError):
+        return None
+
+
+async def _publish_trend_score(
+    state: dict[str, Any],
+    symbol: str,
+    rows: list[dict[str, Any]],
+) -> None:
+    if len(rows) < 110:
+        state["results"].pop(symbol, None)
+        return
+    trend = await asyncio.to_thread(
+        analyze_trend_strength, rows[-TREND_CANDLE_COUNT:]
+    )
+    if (
+        float(trend.get("strength") or 0) >= TREND_THRESHOLD
+        and trend.get("direction") in ("CALL", "PUT")
+    ):
+        state["results"][symbol] = {
+            "symbol": symbol,
+            "strength": float(trend["strength"]),
+            "direction": trend["direction"],
+            "trendLabel": trend["trendLabel"],
+            "adx": float(trend.get("adx") or 0),
+            "updatedAt": time.time(),
+        }
+    else:
+        # Remove assim que a força cair abaixo do limite configurado.
+        state["results"].pop(symbol, None)
+
+
 async def _trend_scan_loop(item: dict[str, Any], state: dict[str, Any]) -> None:
     interval = INTERVALS[state["timeframe"]]
-    semaphore = asyncio.Semaphore(TREND_SCAN_CONCURRENCY)
+    history_semaphore = asyncio.Semaphore(TREND_SCAN_CONCURRENCY)
+    state["scanInProgress"] = True
+    state["scanStartedAt"] = time.time()
 
-    async def scan_asset(asset: dict[str, Any]) -> None:
+    catalog = await _load_assets(item)
+    assets_by_symbol = {}
+    for group in (catalog.get("groups") or {}).values():
+        for asset in group or []:
+            symbol = str(asset.get("symbol") or "").strip()
+            if symbol:
+                assets_by_symbol[symbol] = asset
+    assets = list(assets_by_symbol.values())
+    state["totalAssets"] = len(assets)
+
+    async def monitor_asset(asset: dict[str, Any]) -> None:
         symbol = str(asset.get("symbol") or "").strip()
         if not symbol:
             state["scannedAssets"] += 1
             return
 
-        async with semaphore:
+        counted = False
+        while True:
+            iterator = None
             try:
-                now = time.time()
-                raw = await asyncio.wait_for(
-                    item["client"].get_candles(
-                        symbol, interval, TREND_CANDLE_COUNT, int(now)
-                    ),
-                    timeout=TREND_CANDLE_TIMEOUT,
-                )
+                async with history_semaphore:
+                    now = time.time()
+                    raw = await asyncio.wait_for(
+                        item["client"].get_candles(
+                            symbol, interval, TREND_CANDLE_COUNT, int(now)
+                        ),
+                        timeout=TREND_CANDLE_TIMEOUT,
+                    )
 
                 rows = []
                 for candle in raw or []:
-                    try:
-                        volume_value = candle.get("volume")
-                        rows.append({
-                            "time": float(candle.get("from", candle.get("to", 0))),
-                            "open": float(candle["open"]),
-                            "high": float(candle.get("max", candle.get("high"))),
-                            "low": float(candle.get("min", candle.get("low"))),
-                            "close": float(candle["close"]),
-                            "volume": float(volume_value) if volume_value is not None else None,
-                        })
-                    except (TypeError, ValueError, KeyError):
-                        continue
-
+                    row = _normalize_trend_candle(candle)
+                    if row is not None:
+                        rows.append(row)
                 rows.sort(key=lambda row: row["time"])
-                # Usa também a vela em formação para que a força acompanhe o mercado.
-                # Dados sem atualização recente indicam ativo fechado ou sem cotação.
-                if len(rows) < 110 or now - rows[-1]["time"] > max(interval * 3, 180):
+                if len(rows) < 110 or not rows or time.time() - rows[-1]["time"] > max(interval * 3, 180):
                     state["results"].pop(symbol, None)
+                    if not counted:
+                        counted = True
+                        state["scannedAssets"] += 1
                     return
 
-                trend = await asyncio.to_thread(
-                    analyze_trend_strength, rows[-TREND_CANDLE_COUNT:]
-                )
-                if float(trend.get("strength") or 0) >= TREND_THRESHOLD and trend.get("direction") in ("CALL", "PUT"):
-                    state["results"][symbol] = {
-                        "symbol": symbol,
-                        "strength": float(trend["strength"]),
-                        "direction": trend["direction"],
-                        "trendLabel": trend["trendLabel"],
-                        "adx": float(trend.get("adx") or 0),
-                        "updatedAt": time.time(),
-                    }
-                else:
-                    # Remove imediatamente quando a força cai abaixo de 85%.
-                    state["results"].pop(symbol, None)
+                rows = rows[-TREND_CANDLE_COUNT:]
+                await _publish_trend_score(state, symbol, rows)
 
+                if not counted:
+                    counted = True
+                    state["scannedAssets"] += 1
+                    if state["scannedAssets"] >= state["totalAssets"]:
+                        state["scanInProgress"] = False
+                        state["scanCompletedAt"] = time.time()
+
+                # O feed candle-generated entrega alterações do candle em formação.
+                # Assim a pontuação muda junto com as atualizações enviadas pela corretora.
+                await asyncio.sleep(0.04)
+                stream = item["client"].stream_candles(symbol, interval)
+                iterator = stream.__aiter__()
+                last_evaluation = 0.0
+
+                while True:
+                    update = await asyncio.wait_for(
+                        iterator.__anext__(),
+                        timeout=max(interval * 3, 180),
+                    )
+                    latest_time = float(update.get("from", update.get("time", 0)) or 0)
+                    previous = next(
+                        (row for row in reversed(rows) if row["time"] == latest_time),
+                        None,
+                    )
+                    row = _normalize_trend_candle(update, previous)
+                    if row is None:
+                        continue
+
+                    existing_index = next(
+                        (index for index in range(len(rows) - 1, -1, -1) if rows[index]["time"] == row["time"]),
+                        None,
+                    )
+                    if existing_index is not None:
+                        rows[existing_index] = row
+                    elif not rows or row["time"] > rows[-1]["time"]:
+                        rows.append(row)
+                        if len(rows) > TREND_CANDLE_COUNT:
+                            rows = rows[-TREND_CANDLE_COUNT:]
+                    else:
+                        continue
+
+                    monotonic_now = asyncio.get_running_loop().time()
+                    if monotonic_now - last_evaluation >= 3.0:
+                        await _publish_trend_score(state, symbol, rows)
+                        last_evaluation = monotonic_now
+
+            except StopAsyncIteration:
+                await asyncio.sleep(2.0)
             except asyncio.CancelledError:
                 raise
             except Exception:
@@ -555,50 +649,30 @@ async def _trend_scan_loop(item: dict[str, Any], state: dict[str, Any]) -> None:
                 previous = state["results"].get(symbol)
                 if previous and time.time() - float(previous.get("updatedAt") or 0) > max(interval * 3, 180):
                     state["results"].pop(symbol, None)
+                if not counted:
+                    counted = True
+                    state["scannedAssets"] += 1
+                    if state["scannedAssets"] >= state["totalAssets"]:
+                        state["scanInProgress"] = False
+                        state["scanCompletedAt"] = time.time()
+                await asyncio.sleep(8.0)
             finally:
-                state["scannedAssets"] = int(state.get("scannedAssets") or 0) + 1
+                if iterator is not None:
+                    try:
+                        await iterator.aclose()
+                    except Exception:
+                        pass
 
     try:
-        while True:
-            state["scanInProgress"] = True
-            state["scanStartedAt"] = time.time()
-            state["scannedAssets"] = 0
-            state["scanErrors"] = 0
-
-            try:
-                await _ensure_connection(item)
-                catalog = await _load_assets(item)
-                assets_by_symbol = {}
-                for group in (catalog.get("groups") or {}).values():
-                    for asset in group or []:
-                        symbol = str(asset.get("symbol") or "").strip()
-                        if symbol:
-                            assets_by_symbol[symbol] = asset
-                assets = list(assets_by_symbol.values())
-                state["totalAssets"] = len(assets)
-
-                await asyncio.gather(*(scan_asset(asset) for asset in assets))
-                state["scanCompletedAt"] = time.time()
-
-            except asyncio.CancelledError:
-                raise
-            except Exception as exc:
-                state["lastError"] = type(exc).__name__
-                state["scanErrors"] = int(state.get("scanErrors") or 0) + 1
-
-            finally:
-                state["scanInProgress"] = False
-
-            # Limpa pontuações antigas caso algum ativo pare de fornecer candles.
-            cutoff = time.time() - max(interval * 3, 180)
-            for symbol, result in list(state["results"].items()):
-                if float(result.get("updatedAt") or 0) < cutoff:
-                    state["results"].pop(symbol, None)
-
-            await asyncio.sleep(TREND_SCAN_PAUSE)
-
+        await _ensure_connection(item)
+        tasks = [asyncio.create_task(monitor_asset(asset)) for asset in assets]
+        await asyncio.gather(*tasks)
     except asyncio.CancelledError:
         state["scanInProgress"] = False
+        raise
+    except Exception as exc:
+        state["scanInProgress"] = False
+        state["lastError"] = type(exc).__name__
         raise
 
 
