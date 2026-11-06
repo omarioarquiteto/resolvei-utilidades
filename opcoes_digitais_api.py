@@ -16,7 +16,7 @@ from opcoes_digitais_analista_bin import ANALISTA_BIN_STRATEGIES, analyze_opcoes
 router = APIRouter(prefix="/api/opcoes-digitais", tags=["OPÇÕES DIGITAIS"])
 
 INTERVALS = {"1m": 60, "5m": 300}
-CANDLE_COUNT = 320
+CANDLE_COUNT = 260
 CANDLE_REQUEST_TIMEOUT = 12
 ASSET_CACHE_TTL = 60
 HISTORY_COLLECTION = "opcoesDigitaisSignals"
@@ -415,6 +415,9 @@ async def run(req: Req, x_iq_session: str | None = Header(default=None)):
         row for row in rows
         if row["time"] + interval <= now + 0.2
     ]
+    # Mantém a mesma tolerância de fechamento usada pelo endpoint do Analista Bin.
+    if len(closed) < MIN_CANDLES and len(rows) >= MIN_CANDLES:
+        closed = rows[:-1]
     if len(closed) < MIN_CANDLES:
         raise HTTPException(
             status_code=502,
