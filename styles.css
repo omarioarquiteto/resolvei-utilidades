@@ -1356,3 +1356,40 @@ html[data-theme="dark"] .risk-reference-layout .risk-history-card{background:var
   .risk-reference-layout .risk-config-heading{gap:4px}
   .risk-reference-layout .risk-config-heading h2{font-size:11px}
 }
+
+
+/* Gerenciamento de risco — gráfico real, fluido e responsivo */
+.risk-reference-layout .risk-chart-legend{gap:9px}
+.risk-reference-layout .risk-chart-legend>span{display:inline-flex;align-items:center;gap:4px}
+.risk-reference-layout .risk-chart-legend i{display:inline-block;flex:0 0 8px;width:8px;height:8px;border-radius:50%}
+.risk-reference-layout .risk-chart-legend .risk-legend-win{background:#07965b}
+.risk-reference-layout .risk-chart-legend .risk-legend-loss{background:#e04455}
+.risk-reference-layout .risk-main-chart-card #riskActualEvolution{width:100%;min-width:0}
+.risk-reference-layout .risk-main-chart-card .risk-chart-real{
+  display:block;
+  width:100%;
+  height:clamp(205px,27vw,270px);
+  max-height:none;
+  overflow:visible;
+  border:0;
+  border-radius:12px;
+  background:linear-gradient(180deg,rgba(66,104,232,.035),transparent 72%);
+}
+.risk-reference-layout .risk-main-chart-card .risk-chart-real .risk-history-segment{
+  stroke-dasharray:1;
+  animation:riskChartReveal .72s cubic-bezier(.2,.7,.2,1) both;
+}
+.risk-reference-layout .risk-main-chart-card .risk-chart-real .risk-history-point{
+  filter:drop-shadow(0 1px 2px rgba(25,35,90,.12));
+}
+@keyframes riskChartReveal{
+  from{stroke-dashoffset:1;opacity:.3}
+  to{stroke-dashoffset:0;opacity:1}
+}
+@media(max-width:560px){
+  .risk-reference-layout .risk-main-chart-card .risk-chart-real{height:220px}
+  .risk-reference-layout .risk-chart-legend{font-size:8px;gap:7px}
+}
+@media(prefers-reduced-motion:reduce){
+  .risk-reference-layout .risk-main-chart-card .risk-chart-real .risk-history-segment{animation:none;stroke-dashoffset:0}
+}
