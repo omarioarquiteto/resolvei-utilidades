@@ -265,9 +265,9 @@
       '<strong>AGUARDANDO</strong><span>Analise para identificar o regime e as confirmações.</span></article>' +
       '<article class="od-card"><small>CONFLUÊNCIA</small><div class="od-score"><b id="odScore">0</b>%</div>' +
       '<div class="od-meter"><i id="odMeter"></i></div><div class="od-clock">PRÓXIMA VELA <b id="odClock">--</b></div></article></section>' +
-      '<section class="od-context"><div><small>REGIME DE MERCADO</small><b id="odRegime">Aguardando análise</b></div>' +
-      '<div><small>CONFIRMAÇÃO SUPERIOR</small><b id="odHtf">--</b></div><div><small>GRUPOS CONFIRMADOS</small><b id="odGroups">--</b></div></section>' +
-      '<section class="od-card"><div class="od-title">CONFLUÊNCIA POR GRUPO <span id="odStrategyName">Automática</span></div>' +
+      '<section class="od-context"><div><small>ESTRATÉGIA UTILIZADA</small><b id="odRegime">Aguardando análise</b></div>' +
+      '<div><small>MOTOR DE ANÁLISE</small><b id="odHtf">ANALISTA BIN</b></div><div><small>INDICADORES ALINHADOS</small><b id="odGroups">--</b></div></section>' +
+      '<section class="od-card"><div class="od-title">PONTUAÇÃO DOS INDICADORES <span id="odStrategyName">Automática</span></div>' +
       '<div id="odGroupScores" class="od-group-scores"></div></section>' +
       '<section class="od-card"><div class="od-title">VERIFICAÇÕES TÉCNICAS <span id="odIndicatorCount">--</span></div>' +
       '<div id="odIndicators" class="od-indicators"></div><div id="odReasons" class="od-reasons"></div></section>' +
@@ -420,17 +420,21 @@
     card.querySelector("span").textContent = description;
     $("odScore").textContent = Number(data.score).toFixed(0);
     $("odMeter").style.width = Math.min(100, Number(data.score)) + "%";
-    $("odRegime").textContent = data.marketRegimeLabel || "--";
-    $("odHtf").textContent = (data.higherTimeframe || "--") + " · " + (data.higherDirection || "--");
-    $("odGroups").textContent = Number(data.confirmedGroups || 0) + " de 3";
-    $("odStrategyName").textContent = data.strategyLabel || "Automática";
-    $("odIndicatorCount").textContent = (data.indicators || []).length + " verificações";
+    $("odRegime").textContent = data.strategyLabel || "--";
+    $("odHtf").textContent = data.engine || "Analista Bin";
+    const indicators = Array.isArray(data.indicators) ? data.indicators : [];
+    const activeCount = indicators.filter((item) => item.active).length;
+    $("odGroups").textContent = activeCount + " / " + indicators.length;
+    $("odStrategyName").textContent = data.requestedStrategy === "auto"
+      ? "AUTOMÁTICA · 3 ESTRATÉGIAS"
+      : (data.strategyLabel || "Estratégia selecionada");
+    $("odIndicatorCount").textContent = indicators.length + " verificações";
 
     const labels = {
-      trend: "TENDÊNCIA · 30%",
-      momentum: "MOMENTUM · 25%",
-      structure: "ESTRUTURA · 25%",
-      conditions: "CONDIÇÕES · FILTRO"
+      trend: "TENDÊNCIA",
+      momentum: "MOMENTUM",
+      structure: "ESTRUTURA",
+      conditions: "VALIDAÇÃO DO SINAL"
     };
     const groups = data.groupScores || {};
     $("odGroupScores").innerHTML = Object.entries(labels).map(([key, label]) => {
@@ -438,8 +442,8 @@
       if (key === "conditions") {
         return '<div class="od-group-score"><span>' + label + '</span><b class="' +
           (group.activeVotes ? "win" : "loss") + '">' +
-          (group.activeVotes ? "APROVADO" : "BLOQUEADO") +
-          '</b><small>Filtro não soma pontos direcionais</small></div>';
+          (group.activeVotes ? "APROVADO" : "SEM SINAL") +
+          '</b><small>Critério final do motor compartilhado</small></div>';
       }
       return '<div class="od-group-score"><span>' + label + '</span><b>CALL ' +
         Number(group.call || 0).toFixed(0) + '</b><b>PUT ' +
@@ -452,15 +456,21 @@
       const cls = indicator.direction === 1 ? "call" : indicator.direction === -1 ? "put" : "off";
       return '<div class="od-ind ' + (matches ? "on " : "") + cls + '"><b>' +
         (matches ? "✓" : indicator.direction === 0 ? "·" : "↔") + '</b><span>' +
-        esc(indicator.name) + '<small>' + esc(indicator.group || "") + '</small></span><em>' +
+        esc(indicator.name) + '<small>' + esc(({trend:"TENDÊNCIA",momentum:"MOMENTUM",structure:"ESTRUTURA",conditions:"CONDIÇÃO"})[indicator.group] || indicator.group || "") + '</small></span><em>' +
         direction + "</em></div>";
     }).join("");
 
     const reasons = data.blockingReasons || [];
     const notes = [];
-    if (!data.volumeDataAvailable) notes.push("Volume não fornecido pela corretora; indicadores de volume foram desconsiderados.");
+    if (data.volumeDataAvailable === false) notes.push("A IQ Option não forneceu volume consistente; indicadores relacionados a volume podem ter confiabilidade reduzida.");
+    if (Array.isArray(data.strategyCandidates)) {
+      const summary = data.strategyCandidates.map((item) =>
+        item.strategyLabel + ": " + item.direction + " · " + Number(item.score || 0).toFixed(0) + " pts"
+      ).join(" | ");
+      notes.push("ESTRATÉGIAS AVALIADAS: " + summary);
+    }
     if (reasons.length) notes.push(...reasons);
-    if (!notes.length) notes.push("Filtros de mercado e confirmação aprovados.");
+    if (!notes.length) notes.push("Leitura técnica concluída pelo motor compartilhado do Analista Bin.");
     $("odReasons").innerHTML = notes.map((reason) => "<p>" + esc(reason) + "</p>").join("");
   }
 

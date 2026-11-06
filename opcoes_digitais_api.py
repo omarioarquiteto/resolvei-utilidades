@@ -10,12 +10,13 @@ from fastapi import APIRouter, Header, HTTPException
 from pydantic import BaseModel
 
 from opcoes_digitais_auth import _get_session
-from opcoes_digitais_engine import GROUP_WEIGHTS, MIN_CANDLES, STRATEGIES, analyze, analyze_trend_strength
+from opcoes_digitais_engine import MIN_CANDLES, STRATEGIES, analyze_trend_strength
+from opcoes_digitais_analista_bin import ANALISTA_BIN_STRATEGIES, analyze_opcoes_signal
 
 router = APIRouter(prefix="/api/opcoes-digitais", tags=["OPÇÕES DIGITAIS"])
 
 INTERVALS = {"1m": 60, "5m": 300}
-CANDLE_COUNT = 320
+CANDLE_COUNT = 260
 CANDLE_REQUEST_TIMEOUT = 12
 ASSET_CACHE_TTL = 60
 HISTORY_COLLECTION = "opcoesDigitaisSignals"
@@ -290,9 +291,12 @@ async def config(x_iq_session: str | None = Header(default=None)):
     _get_session(x_iq_session)
     return {
         "strategies": {key: value["name"] for key, value in STRATEGIES.items()},
-        "groupWeights": GROUP_WEIGHTS,
+        "strategyWeights": {
+            key: value["weights"] for key, value in ANALISTA_BIN_STRATEGIES.items()
+        },
         "supportedTimeframes": list(INTERVALS),
-        "analysisVersion": "2.0",
+        "analysisEngine": "Analista Bin",
+        "analysisVersion": "analista-bin-shared-v1",
     }
 
 
@@ -411,6 +415,9 @@ async def run(req: Req, x_iq_session: str | None = Header(default=None)):
         row for row in rows
         if row["time"] + interval <= now + 0.2
     ]
+    # Mantém a mesma tolerância de fechamento usada pelo endpoint do Analista Bin.
+    if len(closed) < MIN_CANDLES and len(rows) >= MIN_CANDLES:
+        closed = rows[:-1]
     if len(closed) < MIN_CANDLES:
         raise HTTPException(
             status_code=502,
@@ -423,11 +430,9 @@ async def run(req: Req, x_iq_session: str | None = Header(default=None)):
     candle_time = float(closed[-1]["time"])
     try:
         result = await asyncio.to_thread(
-            analyze,
+            analyze_opcoes_signal,
             closed[-CANDLE_COUNT:],
             req.strategy,
-            req.timeframe,
-            now,
         )
     except Exception as exc:
         raise HTTPException(
