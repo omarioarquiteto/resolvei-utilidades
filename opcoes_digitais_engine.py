@@ -639,3 +639,118 @@ def analyze(
         "expiryMinutes": int(interval / 60),
         "analysisVersion": "2.0",
     }
+
+
+def analyze_trend_strength(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    """Pontua a força estrutural da tendência usando somente candles e direção."""
+    data = clean(rows)
+    if len(data) < 110:
+        raise ValueError("Histórico insuficiente para medir a força da tendência.")
+
+    high = data["high"]
+    low = data["low"]
+    close = data["close"]
+    ema20 = _ema(close, 20)
+    ema50 = _ema(close, 50)
+    ema100 = _ema(close, 100)
+    atr = _atr(high, low, close)
+    adx, plus_di, minus_di = _adx(high, low, close)
+
+    price_now = _last(close)
+    ema20_now = _last(ema20)
+    ema50_now = _last(ema50)
+    ema100_now = _last(ema100)
+    ema20_previous = float(ema20.iloc[-6]) if len(ema20) >= 6 else ema20_now
+    atr_now = _last(atr)
+    adx_now = _last(adx)
+    plus_now = _last(plus_di)
+    minus_now = _last(minus_di)
+
+    if not all(np.isfinite(value) for value in (
+        price_now, ema20_now, ema50_now, ema100_now, atr_now,
+        adx_now, plus_now, minus_now,
+    )) or atr_now <= 0:
+        return {
+            "strength": 0.0,
+            "direction": "NONE",
+            "trendLabel": "SEM TENDÊNCIA",
+            "adx": 0.0,
+            "alignment": 0.0,
+            "slope": 0.0,
+            "persistence": 0.0,
+            "rSquared": 0.0,
+        }
+
+    if ema20_now > ema50_now and plus_now > minus_now:
+        direction = 1
+    elif ema20_now < ema50_now and minus_now > plus_now:
+        direction = -1
+    else:
+        direction = 0
+
+    if direction == 0:
+        return {
+            "strength": 0.0,
+            "direction": "NONE",
+            "trendLabel": "SEM TENDÊNCIA",
+            "adx": round(float(adx_now), 1),
+            "alignment": 0.0,
+            "slope": 0.0,
+            "persistence": 0.0,
+            "rSquared": 0.0,
+        }
+
+    if direction > 0:
+        alignment_checks = (
+            price_now > ema20_now,
+            ema20_now > ema50_now,
+            ema50_now > ema100_now,
+            ema20_now > ema20_previous,
+        )
+    else:
+        alignment_checks = (
+            price_now < ema20_now,
+            ema20_now < ema50_now,
+            ema50_now < ema100_now,
+            ema20_now < ema20_previous,
+        )
+
+    alignment_score = 100.0 * sum(bool(value) for value in alignment_checks) / len(alignment_checks)
+    adx_score = float(np.clip((adx_now - 10.0) / 35.0 * 100.0, 0.0, 100.0))
+    slope_distance = abs(ema20_now - ema20_previous) / atr_now
+    slope_score = float(np.clip(slope_distance / 0.9 * 100.0, 0.0, 100.0))
+
+    recent_close = close.tail(25).to_numpy(dtype=float)
+    changes = np.diff(recent_close)
+    persistence_score = (
+        100.0 * float(np.count_nonzero(direction * changes > 0)) / len(changes)
+        if len(changes) else 0.0
+    )
+
+    regression_values = close.tail(30).to_numpy(dtype=float)
+    regression_x = np.arange(len(regression_values), dtype=float)
+    correlation = float(np.corrcoef(regression_x, regression_values)[0, 1])
+    if np.isfinite(correlation) and correlation * direction > 0:
+        r_squared_score = float(np.clip(correlation * correlation * 100.0, 0.0, 100.0))
+    else:
+        r_squared_score = 0.0
+
+    strength = (
+        adx_score * 0.30
+        + alignment_score * 0.25
+        + slope_score * 0.20
+        + persistence_score * 0.15
+        + r_squared_score * 0.10
+    )
+    strength = float(np.clip(strength, 0.0, 100.0))
+
+    return {
+        "strength": round(strength, 1),
+        "direction": "CALL" if direction > 0 else "PUT",
+        "trendLabel": "ALTA" if direction > 0 else "BAIXA",
+        "adx": round(float(adx_now), 1),
+        "alignment": round(alignment_score, 1),
+        "slope": round(slope_score, 1),
+        "persistence": round(persistence_score, 1),
+        "rSquared": round(r_squared_score, 1),
+    }
