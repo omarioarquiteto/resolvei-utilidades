@@ -9,6 +9,14 @@ on:
       - "opcoes-digitais.css"
       - "tests/test_opcoes_digitais_engine.py"
       - ".github/workflows/opcoes-digitais-tests.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "opcoes_digitais_*.py"
+      - "opcoes-digitais.js"
+      - "opcoes-digitais.css"
+      - "tests/test_opcoes_digitais_engine.py"
+      - ".github/workflows/opcoes-digitais-tests.yml"
 
 jobs:
   verify:
