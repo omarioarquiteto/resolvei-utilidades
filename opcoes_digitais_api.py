@@ -10,7 +10,7 @@ from fastapi import APIRouter, Header, HTTPException
 from pydantic import BaseModel
 
 from opcoes_digitais_auth import _get_session
-from opcoes_digitais_engine import GROUP_WEIGHTS, MIN_CANDLES, STRATEGIES, analyze
+from opcoes_digitais_engine import GROUP_WEIGHTS, MIN_CANDLES, STRATEGIES, analyze, analyze_trend_strength
 
 router = APIRouter(prefix="/api/opcoes-digitais", tags=["OPÇÕES DIGITAIS"])
 
@@ -459,3 +459,193 @@ async def run(req: Req, x_iq_session: str | None = Header(default=None)):
         )
     )
     return result
+
+
+TREND_THRESHOLD = 85.0
+TREND_CANDLE_COUNT = 150
+TREND_SCAN_CONCURRENCY = 5
+TREND_CANDLE_TIMEOUT = 9.0
+TREND_SCAN_PAUSE = 4.0
+
+
+def _trend_snapshot(state: dict[str, Any]) -> dict[str, Any]:
+    task = state.get("task")
+    results = sorted(
+        list((state.get("results") or {}).values()),
+        key=lambda result: float(result.get("strength") or 0),
+        reverse=True,
+    )
+    return {
+        "ok": True,
+        "timeframe": state.get("timeframe", "1m"),
+        "threshold": TREND_THRESHOLD,
+        "isRunning": bool(task is not None and not task.done()),
+        "scanInProgress": bool(state.get("scanInProgress")),
+        "scannedAssets": int(state.get("scannedAssets") or 0),
+        "totalAssets": int(state.get("totalAssets") or 0),
+        "scanErrors": int(state.get("scanErrors") or 0),
+        "scanStartedAt": state.get("scanStartedAt"),
+        "scanCompletedAt": state.get("scanCompletedAt"),
+        "results": results,
+    }
+
+
+async def _trend_scan_loop(item: dict[str, Any], state: dict[str, Any]) -> None:
+    interval = INTERVALS[state["timeframe"]]
+    semaphore = asyncio.Semaphore(TREND_SCAN_CONCURRENCY)
+
+    async def scan_asset(asset: dict[str, Any]) -> None:
+        symbol = str(asset.get("symbol") or "").strip()
+        if not symbol:
+            state["scannedAssets"] += 1
+            return
+
+        async with semaphore:
+            try:
+                now = time.time()
+                raw = await asyncio.wait_for(
+                    item["client"].get_candles(
+                        symbol, interval, TREND_CANDLE_COUNT, int(now)
+                    ),
+                    timeout=TREND_CANDLE_TIMEOUT,
+                )
+
+                rows = []
+                for candle in raw or []:
+                    try:
+                        volume_value = candle.get("volume")
+                        rows.append({
+                            "time": float(candle.get("from", candle.get("to", 0))),
+                            "open": float(candle["open"]),
+                            "high": float(candle.get("max", candle.get("high"))),
+                            "low": float(candle.get("min", candle.get("low"))),
+                            "close": float(candle["close"]),
+                            "volume": float(volume_value) if volume_value is not None else None,
+                        })
+                    except (TypeError, ValueError, KeyError):
+                        continue
+
+                rows.sort(key=lambda row: row["time"])
+                # Usa também a vela em formação para que a força acompanhe o mercado.
+                # Dados sem atualização recente indicam ativo fechado ou sem cotação.
+                if len(rows) < 110 or now - rows[-1]["time"] > max(interval * 3, 180):
+                    state["results"].pop(symbol, None)
+                    return
+
+                trend = await asyncio.to_thread(
+                    analyze_trend_strength, rows[-TREND_CANDLE_COUNT:]
+                )
+                if float(trend.get("strength") or 0) >= TREND_THRESHOLD and trend.get("direction") in ("CALL", "PUT"):
+                    state["results"][symbol] = {
+                        "symbol": symbol,
+                        "strength": float(trend["strength"]),
+                        "direction": trend["direction"],
+                        "trendLabel": trend["trendLabel"],
+                        "adx": float(trend.get("adx") or 0),
+                        "updatedAt": time.time(),
+                    }
+                else:
+                    # Remove imediatamente quando a força cai abaixo de 85%.
+                    state["results"].pop(symbol, None)
+
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                state["scanErrors"] = int(state.get("scanErrors") or 0) + 1
+                previous = state["results"].get(symbol)
+                if previous and time.time() - float(previous.get("updatedAt") or 0) > max(interval * 3, 180):
+                    state["results"].pop(symbol, None)
+            finally:
+                state["scannedAssets"] = int(state.get("scannedAssets") or 0) + 1
+
+    try:
+        while True:
+            state["scanInProgress"] = True
+            state["scanStartedAt"] = time.time()
+            state["scannedAssets"] = 0
+            state["scanErrors"] = 0
+
+            try:
+                await _ensure_connection(item)
+                catalog = await _load_assets(item)
+                assets_by_symbol = {}
+                for group in (catalog.get("groups") or {}).values():
+                    for asset in group or []:
+                        symbol = str(asset.get("symbol") or "").strip()
+                        if symbol:
+                            assets_by_symbol[symbol] = asset
+                assets = list(assets_by_symbol.values())
+                state["totalAssets"] = len(assets)
+
+                await asyncio.gather(*(scan_asset(asset) for asset in assets))
+                state["scanCompletedAt"] = time.time()
+
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                state["lastError"] = type(exc).__name__
+                state["scanErrors"] = int(state.get("scanErrors") or 0) + 1
+
+            finally:
+                state["scanInProgress"] = False
+
+            # Limpa pontuações antigas caso algum ativo pare de fornecer candles.
+            cutoff = time.time() - max(interval * 3, 180)
+            for symbol, result in list(state["results"].items()):
+                if float(result.get("updatedAt") or 0) < cutoff:
+                    state["results"].pop(symbol, None)
+
+            await asyncio.sleep(TREND_SCAN_PAUSE)
+
+    except asyncio.CancelledError:
+        state["scanInProgress"] = False
+        raise
+
+
+@router.get("/trends")
+async def trends(
+    timeframe: str = "1m",
+    x_iq_session: str | None = Header(default=None),
+):
+    item = _get_session(x_iq_session)
+    if timeframe not in INTERVALS:
+        raise HTTPException(status_code=400, detail="Timeframe deve ser 1m ou 5m.")
+
+    catalog = await _load_assets(item)
+    state = item.get("trend_scanner")
+    task = state.get("task") if isinstance(state, dict) else None
+
+    if (
+        not isinstance(state, dict)
+        or state.get("timeframe") != timeframe
+        or task is None
+        or task.done()
+    ):
+        if task is not None and not task.done():
+            task.cancel()
+
+        state = {
+            "timeframe": timeframe,
+            "results": {},
+            "totalAssets": int(catalog.get("total") or 0),
+            "scannedAssets": 0,
+            "scanErrors": 0,
+            "scanInProgress": False,
+            "scanStartedAt": None,
+            "scanCompletedAt": None,
+            "task": None,
+        }
+        item["trend_scanner"] = state
+        state["task"] = asyncio.create_task(_trend_scan_loop(item, state))
+
+    return _trend_snapshot(state)
+
+
+@router.post("/trends/stop")
+async def stop_trends(x_iq_session: str | None = Header(default=None)):
+    item = _get_session(x_iq_session)
+    state = item.get("trend_scanner") or {}
+    task = state.get("task")
+    if task is not None and not task.done():
+        task.cancel()
+    return {"ok": True}
