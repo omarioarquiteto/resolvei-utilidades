@@ -10,6 +10,7 @@ from opcoes_digitais_engine import (
     _resample_context,
     _group_support,
     analyze,
+    analyze_trend_strength,
     clean,
 )
 
@@ -72,6 +73,25 @@ class OpcoesDigitaisEngineTests(unittest.TestCase):
         self.assertIn("higherDirection", result)
         self.assertGreaterEqual(result["score"], 0)
         self.assertLessEqual(result["score"], 100)
+
+    def test_trend_radar_detects_very_strong_uptrend(self):
+        result = analyze_trend_strength(make_candles(mode="up"))
+        self.assertEqual(result["direction"], "CALL")
+        self.assertEqual(result["trendLabel"], "ALTA")
+        self.assertGreaterEqual(result["strength"], 85)
+        self.assertLessEqual(result["strength"], 100)
+
+    def test_trend_radar_detects_very_strong_downtrend(self):
+        result = analyze_trend_strength(make_candles(mode="down"))
+        self.assertEqual(result["direction"], "PUT")
+        self.assertEqual(result["trendLabel"], "BAIXA")
+        self.assertGreaterEqual(result["strength"], 85)
+        self.assertLessEqual(result["strength"], 100)
+
+    def test_trend_radar_does_not_classify_flat_market_as_strong(self):
+        result = analyze_trend_strength(make_candles(mode="flat"))
+        self.assertEqual(result["direction"], "NONE")
+        self.assertLess(result["strength"], 85)
 
     def test_neutral_indicators_do_not_inflate_group_consensus(self):
         self.assertEqual(_group_support([1, 0, 0, 0], 1), 0.25)

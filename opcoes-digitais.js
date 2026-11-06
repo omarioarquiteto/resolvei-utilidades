@@ -4,6 +4,8 @@
   const FAVORITES_KEY = "resolvei_opcoes_digitais_favorites";
   let clockTimer = null;
   let historyTimer = null;
+  let trendTimer = null;
+  let trendPollInFlight = false;
   const $ = (id) => document.getElementById(id);
   const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (char) => ({
     "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;"
@@ -113,6 +115,7 @@
   function login() {
     const host = $("opcoesDigitaisToolHost");
     if (!host) return;
+    clearInterval(trendTimer);
     clearInterval(clockTimer);
     host.innerHTML =
       '<div class="od-login"><small>RESOLVEI / IQ OPTION</small>' +
@@ -239,6 +242,7 @@
       return;
     }
 
+    clearInterval(trendTimer);
     clearInterval(clockTimer);
     host.innerHTML =
       '<div class="od-app"><header><div><small>RESOLVEI / TRADING ANALYTICS</small>' +
@@ -251,6 +255,12 @@
       '<label>TIMEFRAME<select id="odTf"><option value="1m">M1 · EXPIRAÇÃO 1 MIN</option><option value="5m">M5 · EXPIRAÇÃO 5 MIN</option></select></label>' +
       '<button id="odAnalyze" type="button">ANALISAR</button></section>' +
       '<section id="odFavorites" class="od-favorites" hidden aria-label="Ativos favoritos"></section>' +
+      '<section id="odTrendRadar" class="od-card od-trend-radar">' +
+      '<div class="od-trend-head"><div><small>RADAR DE MERCADO · IQ OPTION</small><h2>Ativos com tendência forte</h2><p>Monitoramento contínuo de todos os ativos disponíveis na sua sessão.</p></div>' +
+      '<div id="odTrendStatus" class="od-trend-status"><i></i><span>INICIANDO RADAR</span></div></div>' +
+      '<div class="od-trend-meta"><b id="odTrendCount">0 ativos acima de 85%</b><span id="odTrendProgress">Preparando varredura…</span></div>' +
+      '<div id="odTrendList" class="od-trend-list"><div class="od-trend-empty">Conectando ao monitor de tendências…</div></div>' +
+      '<p class="od-trend-disclaimer">O percentual mede a força técnica da tendência, não a probabilidade de acerto. A pontuação acompanha o candle em formação e pode oscilar.</p></section>' +
       '<section class="od-grid"><article id="odSignal" class="od-card od-neutral"><small>DECISÃO</small>' +
       '<strong>AGUARDANDO</strong><span>Analise para identificar o regime e as confirmações.</span></article>' +
       '<article class="od-card"><small>CONFLUÊNCIA</small><div class="od-score"><b id="odScore">0</b>%</div>' +
@@ -265,6 +275,8 @@
       '<div id="odError"></div><p class="od-note">A pontuação representa confluência técnica, não probabilidade de acerto. Histórico baseado em simulação pela próxima vela fechada; não representa ordens executadas.</p></div>';
 
     $("odLogout").onclick = async () => {
+      clearInterval(trendTimer);
+      try { await call("/trends/stop", { method: "POST" }); } catch {}
       try { await call("/logout", { method: "POST" }); } catch {}
       clearSession();
       clearInterval(clockTimer);
@@ -274,9 +286,94 @@
     $("odAnalyze").onclick = analyze;
     $("odPair").onchange = () => { renderFavorites(); syncFavoriteToggle(); };
     $("odFavoriteToggle").onclick = toggleFavorite;
+    $("odTf").onchange = () => { void updateTrendScan(); };
 
     void loadHistory();
     await loadAssets();
+    startTrendMonitor();
+  }
+
+  function renderTrends(data) {
+    const host = $("odTrendList");
+    if (!host) return;
+    const results = Array.isArray(data.results) ? data.results : [];
+    const count = $("odTrendCount");
+    const progress = $("odTrendProgress");
+    const status = $("odTrendStatus");
+    if (count) count.textContent = results.length + " ativo" + (results.length === 1 ? "" : "s") + " acima de 85%";
+    if (progress) {
+      const scanned = Number(data.scannedAssets || 0);
+      const total = Number(data.totalAssets || 0);
+      const last = data.scanCompletedAt
+        ? new Date(Number(data.scanCompletedAt) * 1000).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" })
+        : "--:--";
+      progress.textContent = (total ? scanned + "/" + total + " ativos verificados" : "Carregando catálogo") + " · ciclo " + last;
+    }
+    if (status) {
+      const active = !!data.isRunning;
+      status.className = "od-trend-status" + (active ? " is-live" : "");
+      const label = data.scanInProgress
+        ? "VARREDURA EM ANDAMENTO"
+        : active ? "MONITORAMENTO ATIVO" : "RADAR PAUSADO";
+      status.innerHTML = "<i></i><span>" + label + "</span>";
+    }
+
+    if (!results.length) {
+      const message = Number(data.scannedAssets || 0) === 0
+        ? "Analisando os ativos da IQ Option. Os que atingirem 85% aparecerão automaticamente aqui."
+        : "Nenhum ativo está acima de 85% neste momento. O radar continuará monitorando e incluirá os ativos assim que a tendência ganhar força.";
+      host.innerHTML = '<div class="od-trend-empty">' + esc(message) + "</div>";
+      return;
+    }
+
+    host.innerHTML = results.map((asset) => {
+      const strength = Math.max(0, Math.min(100, Number(asset.strength) || 0));
+      const up = asset.direction === "CALL";
+      const direction = up ? "ALTA" : "BAIXA";
+      const cls = up ? "up" : "down";
+      const updated = asset.updatedAt
+        ? new Date(Number(asset.updatedAt) * 1000).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" })
+        : "--:--";
+      return '<div class="od-trend-row">' +
+        '<div class="od-trend-asset"><strong>' + esc(asset.symbol) + '</strong><small>' + direction + ' · ' + esc(data.timeframe || "1m") + '</small></div>' +
+        '<div class="od-trend-force ' + cls + '"><div><b>' + strength.toFixed(1) + '%</b><small>FORÇA</small></div><span><i style="width:' + strength + '%"></i></span></div>' +
+        '<div class="od-trend-adx"><small>ADX</small><b>' + Number(asset.adx || 0).toFixed(1) + '</b><small>' + updated + '</small></div>' +
+        '<button type="button" class="od-trend-analyze" data-trend-symbol="' + esc(asset.symbol) + '">ANALISAR</button>' +
+        '</div>';
+    }).join("");
+
+    host.querySelectorAll("[data-trend-symbol]").forEach((button) => {
+      button.onclick = () => {
+        const select = $("odPair");
+        if (!select) return;
+        select.value = button.dataset.trendSymbol;
+        renderFavorites();
+        syncFavoriteToggle();
+        void analyze();
+      };
+    });
+  }
+
+  async function updateTrendScan() {
+    if (trendPollInFlight || !sid() || !$("odTrendList")) return;
+    trendPollInFlight = true;
+    try {
+      const timeframe = $("odTf") ? $("odTf").value : "1m";
+      const data = await call("/trends?timeframe=" + encodeURIComponent(timeframe));
+      renderTrends(data);
+    } catch (error) {
+      const host = $("odTrendList");
+      if (host) host.innerHTML = '<div class="od-trend-empty">Radar temporariamente indisponível: ' + esc(error.message) + "</div>";
+      if (!sid()) login();
+    } finally {
+      trendPollInFlight = false;
+    }
+  }
+
+  function startTrendMonitor() {
+    clearInterval(trendTimer);
+    void updateTrendScan();
+    trendTimer = setInterval(updateTrendScan, 5000);
   }
 
   async function analyze() {
@@ -388,6 +485,10 @@
   }
   window.addEventListener("hashchange", () => {
     if ((location.hash || "").includes("/ferramenta/opcoes-digitais")) render();
-    else clearInterval(clockTimer);
+    else {
+      clearInterval(clockTimer);
+      clearInterval(trendTimer);
+      if (sid()) void call("/trends/stop", { method: "POST" }).catch(() => {});
+    }
   });
 })();

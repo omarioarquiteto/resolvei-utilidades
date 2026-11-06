@@ -33,6 +33,10 @@ def _cleanup() -> None:
     for sid, item in list(SESSIONS.items()):
         if item.get("last_used", 0) < cutoff:
             SESSIONS.pop(sid, None)
+            scanner = item.get("trend_scanner") or {}
+            task = scanner.get("task")
+            if task is not None and not task.done():
+                task.cancel()
             client = item.get("client")
             if client is not None:
                 try:
@@ -130,6 +134,10 @@ async def logout(x_iq_session: str | None = Header(default=None)) -> dict[str, A
     sid = (x_iq_session or "").strip()
     item = SESSIONS.pop(sid, None)
     if item:
+        scanner = item.get("trend_scanner") or {}
+        task = scanner.get("task")
+        if task is not None and not task.done():
+            task.cancel()
         try:
             await item["client"].close()
         except Exception:
