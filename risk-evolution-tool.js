@@ -442,51 +442,112 @@ function riskActualEvolutionSvg(){
     return `<div class="risk-chart-empty">
       <div class="risk-chart-empty-icon">↗</div>
       <strong>Seu gráfico começa aqui</strong>
-      <span>Registre o primeiro WIN ou LOSS para visualizar a evolução real do capital.</span>
+      <span>Registre um WIN ou LOSS para acompanhar a evolução real do capital, operação por operação.</span>
     </div>`;
   }
-  const series=[
-    {value:Number(resolveiRiskState.config.initialCapital)||0,result:'START',at:'Capital inicial'},
-    ...history.map(x=>({value:Number(x.after)||0,result:x.result,at:x.at,section:x.section,chance:x.chance,stake:Number(x.stake)||0}))
-  ];
-  const values=series.map(x=>x.value);
+
+  const firstCapital=Number(history[0].before);
+  const initial=Number.isFinite(firstCapital)?Math.max(0,firstCapital):(Number(resolveiRiskState.config.initialCapital)||0);
+  const series=[{value:initial,result:'START',at:'Capital inicial'}];
+  history.forEach(item=>{
+    const value=Number(item.after);
+    const previous=series[series.length-1].value;
+    series.push({
+      value:Number.isFinite(value)?Math.max(0,value):previous,
+      result:String(item.result||'').toUpperCase(),
+      at:item.at||'',
+      section:item.section,
+      chance:item.chance,
+      stake:Number(item.stake)||0
+    });
+  });
+
+  const values=series.map(item=>item.value);
   let min=Math.min(...values),max=Math.max(...values);
-  if(Math.abs(max-min)<0.01){min=Math.max(0,min-1);max=max+1;}
-  else{
-    const pad=Math.max(1,(max-min)*0.12);
-    min=Math.max(0,min-pad);max+=pad;
-  }
-  const width=760,height=260,left=48,right=22,top=20,bottom=42;
-  const innerW=width-left-right,innerH=height-top-bottom;
-  const xAt=i=>left+(series.length===1?innerW/2:(i/(series.length-1))*innerW);
-  const yAt=v=>top+((max-v)/(max-min))*innerH;
+  const padding=Math.max((max-min)*0.16,Math.max(Math.abs(max),1)*0.015,1);
+  min=Math.max(0,min-padding);
+  max+=padding;
+  if(max-min<0.01) max=min+1;
+
+  const width=900,height=300,left=88,right=24,top=30,bottom=48;
+  const plotW=width-left-right,plotH=height-top-bottom;
+  const xAt=i=>left+(series.length===1?plotW/2:(i/(series.length-1))*plotW);
+  const yAt=value=>top+((max-value)/(max-min))*plotH;
+  const coords=series.map((item,i)=>({x:xAt(i),y:yAt(item.value)}));
+  const axisMoney=value=>new Intl.NumberFormat('pt-BR',{
+    style:'currency',currency:'BRL',notation:'compact',maximumFractionDigits:1
+  }).format(value).replace(/\u00a0/g,' ');
+
   const grid=[0,1,2,3,4].map(i=>{
-    const y=top+(i/4)*innerH;
+    const y=top+(i/4)*plotH;
     const value=max-((max-min)*(i/4));
-    return `<line x1="${left}" y1="${y.toFixed(1)}" x2="${width-right}" y2="${y.toFixed(1)}" stroke="var(--line)" stroke-dasharray="3 5"/>
-      <text x="${left-8}" y="${(y+4).toFixed(1)}" fill="var(--muted)" text-anchor="end" font-size="10">${riskMoney(value)}</text>`;
+    return `<line x1="${left}" y1="${y.toFixed(1)}" x2="${width-right}" y2="${y.toFixed(1)}" stroke="var(--line)" stroke-width="1" stroke-dasharray="3 7" opacity=".9"/>
+      <text x="${left-13}" y="${(y+4).toFixed(1)}" fill="var(--muted)" text-anchor="end" font-size="12">${axisMoney(value)}</text>`;
   }).join('');
+
+  const segmentPath=i=>{
+    const p0=coords[i],p1=coords[i+1];
+    const previous=coords[Math.max(0,i-1)];
+    const next=coords[Math.min(coords.length-1,i+2)];
+    const tension=1/6;
+    const c1x=p0.x+(p1.x-previous.x)*tension;
+    const c1y=p0.y+(p1.y-previous.y)*tension;
+    const c2x=p1.x-(next.x-p0.x)*tension;
+    const c2y=p1.y-(next.y-p0.y)*tension;
+    return `M ${p0.x.toFixed(1)} ${p0.y.toFixed(1)} C ${c1x.toFixed(1)} ${c1y.toFixed(1)}, ${c2x.toFixed(1)} ${c2y.toFixed(1)}, ${p1.x.toFixed(1)} ${p1.y.toFixed(1)}`;
+  };
+
+  const smoothPath=coords.slice(1).map((_,i)=>segmentPath(i)).join(' ');
+  const areaPath=`${smoothPath} L ${coords[coords.length-1].x.toFixed(1)} ${(height-bottom).toFixed(1)} L ${coords[0].x.toFixed(1)} ${(height-bottom).toFixed(1)} Z`;
   const segments=series.slice(1).map((item,i)=>{
-    const a=series[i],b=item;
-    const stroke=item.result==='WIN'?'var(--success)':'var(--danger)';
-    return `<line x1="${xAt(i).toFixed(1)}" y1="${yAt(a.value).toFixed(1)}" x2="${xAt(i+1).toFixed(1)}" y2="${yAt(b.value).toFixed(1)}" stroke="${stroke}" stroke-width="4" stroke-linecap="round"/>`;
+    const win=item.result==='WIN';
+    const color=win?'#07965b':'#e04455';
+    return `<path class="risk-history-segment ${win?'risk-history-segment-win':'risk-history-segment-loss'}" d="${segmentPath(i)}" fill="none" stroke="${color}" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round" pathLength="1" stroke-dasharray="1" stroke-dashoffset="1"/>`;
   }).join('');
+
   const points=series.map((item,i)=>{
-    const color=item.result==='WIN'?'var(--success)':item.result==='LOSS'?'var(--danger)':'var(--accent)';
-    const label=item.result==='START'?'Capital inicial':`${item.result} · ${item.at}`;
-    return `<circle cx="${xAt(i).toFixed(1)}" cy="${yAt(item.value).toFixed(1)}" r="${i===series.length-1?6:4.5}" fill="${color}" stroke="var(--surface)" stroke-width="2"><title>${label} — ${riskMoney(item.value)}</title></circle>`;
+    const color=item.result==='WIN'?'#07965b':item.result==='LOSS'?'#e04455':'#315cda';
+    const x=coords[i].x.toFixed(1),y=coords[i].y.toFixed(1);
+    const isLast=i===series.length-1;
+    const title=item.result==='START'?'Capital inicial':`${item.result} · ${item.at}`;
+    return `<g class="risk-history-point">
+      <title>${title} — ${riskMoney(item.value)}</title>
+      <circle cx="${x}" cy="${y}" r="${isLast?10:7}" fill="var(--surface)" stroke="${color}" stroke-width="2.5"/>
+      <circle cx="${x}" cy="${y}" r="${isLast?4.5:3.2}" fill="${color}"/>
+    </g>`;
   }).join('');
+
   const labels=series.map((item,i)=>{
-    if(!(i===0 || i===series.length-1 || i%5===0)) return '';
-    const textLabel=i===0?'Início':`#${i}`;
-    return `<text x="${xAt(i).toFixed(1)}" y="${height-14}" fill="var(--muted)" text-anchor="${i===0?'start':i===series.length-1?'end':'middle'}" font-size="10">${textLabel}</text>`;
+    if(!(i===0||i===series.length-1||i%5===0)) return '';
+    const label=i===0?'INÍCIO':i===series.length-1?`#${i} ${item.result}`:`#${i}`;
+    const anchor=i===0?'start':i===series.length-1?'end':'middle';
+    return `<text x="${coords[i].x.toFixed(1)}" y="${height-15}" fill="var(--muted)" text-anchor="${anchor}" font-size="11" font-weight="700">${label}</text>`;
   }).join('');
+
   const last=series[series.length-1];
-  const delta=last.value-series[0].value;
-  return `<svg class="risk-chart risk-chart-real" viewBox="0 0 ${width} ${height}" role="img" aria-label="Evolução real do capital, com ganhos em verde e perdas em vermelho">
+  const lastPoint=coords[coords.length-1];
+  const bubbleWidth=158,bubbleHeight=30;
+  const bubbleX=Math.max(left,Math.min(width-right-bubbleWidth,lastPoint.x-bubbleWidth/2));
+  const bubbleY=Math.max(top,lastPoint.y-43);
+  const bubbleColor=last.result==='WIN'?'#087d50':last.result==='LOSS'?'#bd3445':'#315cda';
+
+  return `<svg class="risk-chart risk-chart-real" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" role="img" aria-label="Evolução real do capital após cada operação, com vitórias em verde e perdas em vermelho">
+    <defs>
+      <linearGradient id="riskActualAreaGradient" x1="0" x2="0" y1="0" y2="1">
+        <stop offset="0%" stop-color="#4268e8" stop-opacity=".19"/>
+        <stop offset="100%" stop-color="#4268e8" stop-opacity=".012"/>
+      </linearGradient>
+    </defs>
     ${grid}
-    <line x1="${left}" y1="${yAt(series[0].value).toFixed(1)}" x2="${width-right}" y2="${yAt(series[0].value).toFixed(1)}" stroke="var(--muted)" stroke-dasharray="6 6" opacity=".45"/>
-    ${segments}${points}${labels}
+    <path d="${areaPath}" fill="url(#riskActualAreaGradient)"/>
+    <line x1="${left}" y1="${yAt(initial).toFixed(1)}" x2="${width-right}" y2="${yAt(initial).toFixed(1)}" stroke="var(--muted)" stroke-width="1.2" stroke-dasharray="6 7" opacity=".55"/>
+    ${segments}
+    ${points}
+    ${labels}
+    <g>
+      <rect x="${bubbleX.toFixed(1)}" y="${bubbleY.toFixed(1)}" width="${bubbleWidth}" height="${bubbleHeight}" rx="15" fill="${bubbleColor}"/>
+      <text x="${(bubbleX+bubbleWidth/2).toFixed(1)}" y="${(bubbleY+20).toFixed(1)}" text-anchor="middle" fill="#fff" font-size="14" font-weight="800">${riskMoney(last.value)}</text>
+    </g>
   </svg>`;
 }
 
@@ -600,7 +661,7 @@ function riskEvolutionUI(){
           <div class="risk-reference-heading">
             <div class="risk-reference-heading-icon">◎</div>
             <h2>Sua estratégia em números</h2>
-            <span class="risk-period-pill">Últimos 30 dias <b>⌄</b></span>
+            <span class="risk-period-pill">Últimas 30 operações</span>
           </div>
           <div id="riskDashboard"></div>
           <span id="riskStatusPill" class="risk-status-pill" hidden>${resolveiRiskState.session.status==='active'?'EM ANDAMENTO':'SEÇÃO ENCERRADA'}</span>
@@ -614,9 +675,9 @@ function riskEvolutionUI(){
           <div class="risk-reference-heading risk-chart-heading">
             <div class="risk-chart-heading-icon">▥</div>
             <div><h2>Evolução do seu capital</h2></div>
-            <div class="risk-chart-legend"><i></i><span>Seu capital</span></div>
+            <div class="risk-chart-legend"><span><i class="risk-legend-win"></i>WIN</span><span><i class="risk-legend-loss"></i>LOSS</span></div>
           </div>
-          <div id="riskProjection"></div>
+          <div id="riskActualEvolution"></div>
         </section>
 
         <section class="risk-control-card card">
@@ -682,7 +743,7 @@ function riskEvolutionUI(){
         <summary>Mais ferramentas e informações <span>＋</span></summary>
         <div class="risk-advanced-grid">
           <section><h3>Plano completo das seções</h3><div class="risk-evolution-table"><div class="risk-section-row risk-section-header"><div>Seção</div><div>Capital-base</div><div>Lucro alvo</div><div>Próximo capital</div><div>Exposição máxima</div></div><div id="riskEvolutionRows"></div></div><div class="risk-note" id="riskGoalMessage"></div></section>
-          <section><h3>Evolução real das entradas</h3><div id="riskActualEvolution"></div></section>
+          <section><h3>Projeção de capital</h3><div id="riskProjection"></div></section>
         </div>
         <div class="risk-advanced-actions">
           <button class="btn ghost" id="riskRestartBtn" type="button">↻ Recomeçar com capital restante</button>
