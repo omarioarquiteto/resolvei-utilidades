@@ -266,7 +266,7 @@
       '<article class="od-card"><small>CONFLUÊNCIA</small><div class="od-score"><b id="odScore">0</b>%</div>' +
       '<div class="od-meter"><i id="odMeter"></i></div><div class="od-clock">PRÓXIMA VELA <b id="odClock">--</b></div></article></section>' +
       '<section class="od-context"><div><small>ESTRATÉGIA UTILIZADA</small><b id="odRegime">Aguardando análise</b></div>' +
-      '<div><small>MOTOR DE ANÁLISE</small><b id="odHtf">ANALISTA BIN</b></div><div><small>INDICADORES ATIVOS</small><b id="odGroups">--</b></div></section>' +
+      '<div><small>MOTOR DE ANÁLISE</small><b id="odHtf">ANALISTA BIN</b></div><div><small>INDICADORES ALINHADOS</small><b id="odGroups">--</b></div></section>' +
       '<section class="od-card"><div class="od-title">PONTUAÇÃO DOS INDICADORES <span id="odStrategyName">Automática</span></div>' +
       '<div id="odGroupScores" class="od-group-scores"></div></section>' +
       '<section class="od-card"><div class="od-title">VERIFICAÇÕES TÉCNICAS <span id="odIndicatorCount">--</span></div>' +
@@ -423,7 +423,7 @@
     $("odRegime").textContent = data.strategyLabel || "--";
     $("odHtf").textContent = data.engine || "Analista Bin";
     const indicators = Array.isArray(data.indicators) ? data.indicators : [];
-    const activeCount = indicators.filter((item) => Number(item.direction) !== 0).length;
+    const activeCount = indicators.filter((item) => item.active).length;
     $("odGroups").textContent = activeCount + " / " + indicators.length;
     $("odStrategyName").textContent = data.requestedStrategy === "auto"
       ? "AUTOMÁTICA · 3 ESTRATÉGIAS"
