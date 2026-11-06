@@ -465,7 +465,6 @@ TREND_THRESHOLD = 85.0
 TREND_CANDLE_COUNT = 150
 TREND_SCAN_CONCURRENCY = 5
 TREND_CANDLE_TIMEOUT = 9.0
-TREND_SCAN_PAUSE = 4.0
 
 
 def _trend_snapshot(state: dict[str, Any]) -> dict[str, Any]:
@@ -561,7 +560,8 @@ async def _trend_scan_loop(item: dict[str, Any], state: dict[str, Any]) -> None:
 
     async def monitor_asset(asset: dict[str, Any]) -> None:
         symbol = str(asset.get("symbol") or "").strip()
-        if not symbol:
+        active_id = asset.get("activeId")
+        if not symbol or active_id is None:
             state["scannedAssets"] += 1
             return
 
@@ -573,7 +573,7 @@ async def _trend_scan_loop(item: dict[str, Any], state: dict[str, Any]) -> None:
                     now = time.time()
                     raw = await asyncio.wait_for(
                         item["client"].get_candles(
-                            symbol, interval, TREND_CANDLE_COUNT, int(now)
+                            int(active_id), interval, TREND_CANDLE_COUNT, int(now)
                         ),
                         timeout=TREND_CANDLE_TIMEOUT,
                     )
@@ -604,7 +604,7 @@ async def _trend_scan_loop(item: dict[str, Any], state: dict[str, Any]) -> None:
                 # O feed candle-generated entrega alterações do candle em formação.
                 # Assim a pontuação muda junto com as atualizações enviadas pela corretora.
                 await asyncio.sleep(0.04)
-                stream = item["client"].stream_candles(symbol, interval)
+                stream = item["client"].stream_candles(int(active_id), interval)
                 iterator = stream.__aiter__()
                 last_evaluation = 0.0
 
