@@ -10,13 +10,14 @@ Extensão Manifest V3 para Chrome, Microsoft Edge e navegadores compatíveis com
 4. Clique em **Carregar sem compactação** e escolha `extension/monitor-precos`.
 5. Abra a página de detalhes de um produto e clique no ícone do Resolvei.
 6. Entre com a mesma conta usada no site do Resolvei.
-7. Defina meta, frequência e alcance de busca e clique em **Monitorar**.
+7. Informe uma **palavra-chave de busca** (ex.: `console PlayStation 5`), defina meta, frequência e alcance de busca e clique em **Monitorar**.
 
 ## Monitoramento ativo
 
 Ao monitorar um produto, escolha:
 
 - **Meta de preço:** por exemplo, R$ 3.500,00 para um PlayStation.
+- **Palavra-chave:** orienta a pesquisa nacional e permite encontrar anúncios com descrições diferentes, desde que correspondam aos termos escolhidos.
 - **Frequência:** 1, 5, 10, 30 ou 60 minutos.
 - **Onde procurar — Somente esta loja:** o servidor consulta a URL original e tenta extrair o preço de dados estruturados (JSON-LD/Offer), metadados ou campos de preço semântico publicados pela loja. Não depende do SerpApi, mas pode falhar quando a loja bloqueia acessos automáticos ou só renderiza o preço com JavaScript.
 - **Onde procurar — Internet brasileira:** consulta o Google Shopping Brasil e tenta confirmar o modelo antes de atualizar o menor preço. Essa busca depende de `SERPAPI_KEY` configurada no Render e da cota disponível. Não equivale a rastrear literalmente todos os sites da internet.

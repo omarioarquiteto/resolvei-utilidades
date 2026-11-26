@@ -372,6 +372,34 @@ function shortSource(offer) {
   try { return new URL(offer.url).hostname.replace(/^www\./, ""); } catch (_) { return "Loja"; }
 }
 
+function storeDisplayName(value) {
+  let host = "";
+  try { host = new URL(value).hostname.toLowerCase().replace(/^www\./, ""); } catch (_) { host = String(value || "").toLowerCase(); }
+  const labels = [
+    [/mercadolivre|mercado livre/, "Mercado Livre"],
+    [/amazon/, "Amazon"],
+    [/magazineluiza|magalu/, "Magazine Luiza"],
+    [/kabum/, "KaBuM!"],
+    [/casasbahia|casas bahia/, "Casas Bahia"],
+    [/shopee/, "Shopee"],
+    [/aliexpress/, "AliExpress"],
+    [/terabyteshop/, "TerabyteShop"],
+    [/pichau/, "Pichau"],
+    [/fastshop/, "Fast Shop"]
+  ];
+  for (const item of labels) if (item[0].test(host)) return item[1];
+  return host.split("/")[0] || "Loja";
+}
+
+function updateMonitorLocation() {
+  const line = document.getElementById("monitor-location");
+  if (!line || !currentProduct) return;
+  const scope = document.getElementById("search-scope").value || "store";
+  line.textContent = scope === "store"
+    ? "Monitoramento em " + storeDisplayName(currentProduct.url).toUpperCase()
+    : "Monitoramento na internet brasileira · Google Shopping";
+}
+
 function shippingLabel(offer) {
   if (offer && offer.free_shipping === true) return { text: "Frete grátis", kind: "good" };
   const delivery = String((offer && (offer.shipping_text || offer.delivery)) || "");
@@ -417,6 +445,7 @@ function renderProduct(product) {
   section.classList.remove("hidden");
   document.getElementById("product-title").textContent = product.title || "Produto sem nome";
   document.getElementById("product-store").textContent = product.source || shortSource(product);
+  updateMonitorLocation();
   document.getElementById("product-price").textContent = product.price ? money(product.price) : "Não detectado";
   document.getElementById("current-conditions").innerHTML = pageConditionChips(product);
   const image = document.getElementById("product-image");
@@ -469,6 +498,12 @@ async function monitorCurrentProduct() {
     setState("Abra uma página de produto antes de monitorar.", "error");
     return;
   }
+  const searchKeyword = document.getElementById("search-keyword").value.trim();
+  if (searchKeyword.length < 2) {
+    setState("Informe uma palavra-chave com pelo menos 2 caracteres. Ex.: console PlayStation 5.", "error");
+    document.getElementById("search-keyword").focus();
+    return;
+  }
   button.disabled = true;
   button.textContent = "Adicionando ao carrinho…";
   try {
@@ -478,6 +513,7 @@ async function monitorCurrentProduct() {
         title: currentProduct.title,
         url: currentProduct.url,
         price: currentProduct.price,
+        search_keyword: searchKeyword,
         target_price: parsePrice(document.getElementById("target-price").value),
         refresh_interval_minutes: Number(document.getElementById("refresh-interval").value || 60),
         search_scope: document.getElementById("search-scope").value || "store",
@@ -490,7 +526,9 @@ async function monitorCurrentProduct() {
     });
     button.textContent = "✓ No carrinho · monitorando";
     button.classList.add("added");
-    setState("Produto adicionado ao seu carrinho no Resolvei. O monitoramento continuará ativo.", "success");
+    const scope = document.getElementById("search-scope").value || "store";
+    const locationLabel = scope === "store" ? storeDisplayName(currentProduct.url).toUpperCase() : "GOOGLE SHOPPING BRASIL";
+    setState("Produto adicionado. Monitorando em " + locationLabel + " pela palavra-chave “" + searchKeyword + "”.", "success");
   } catch (error) {
     button.textContent = "＋ Monitorar";
     setState(error.message || "Não foi possível adicionar o produto ao carrinho.", "error");
@@ -864,6 +902,7 @@ function bindUI() {
   document.getElementById("monitor-product").addEventListener("click", function () {
     monitorCurrentProduct().catch(function () {});
   });
+  document.getElementById("search-scope").addEventListener("change", updateMonitorLocation);
 
   document.getElementById("history-panel").addEventListener("click", function (event) {
     const button = event.target.closest("[data-history-days]");

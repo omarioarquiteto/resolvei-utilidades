@@ -28,6 +28,7 @@ class ProductCreate(BaseModel):
     ean: str = Field(default="", max_length=32)
     image_url: str = Field(default="", max_length=2048)
     source: str = Field(default="Resolvei", max_length=80)
+    search_keyword: str = Field(default="", max_length=180)
     refresh_interval_minutes: int = Field(default=60, ge=1, le=60)
     search_scope: str = Field(default="store", max_length=16)
 
@@ -40,6 +41,7 @@ class TargetPriceUpdate(BaseModel):
 
 class ProductSettingsUpdate(BaseModel):
     target_price: float | None
+    search_keyword: str = Field(default="", max_length=180)
     refresh_interval_minutes: int = Field(ge=1, le=60)
     search_scope: str = Field(max_length=16)
 
@@ -201,6 +203,66 @@ def _search_scope(value, default="store"):
     if scope not in SEARCH_SCOPES:
         raise HTTPException(422, "Escolha entre monitorar somente esta loja ou a internet brasileira.")
     return scope
+
+def _store_label(value):
+    raw = str(value or "").strip()
+    parsed = urlparse(raw if "://" in raw else "")
+    host = (parsed.hostname or raw).lower().replace("www.", "", 1).strip()
+    candidates = host + " " + raw.lower()
+    labels = (
+        (("mercadolivre", "mercado livre"), "Mercado Livre"),
+        (("amazon",), "Amazon"),
+        (("magazineluiza", "magalu"), "Magazine Luiza"),
+        (("kabum",), "KaBuM!"),
+        (("casasbahia", "casas bahia"), "Casas Bahia"),
+        (("pontofrio", "ponto.com"), "Ponto"),
+        (("americanas",), "Americanas"),
+        (("shopee",), "Shopee"),
+        (("aliexpress",), "AliExpress"),
+        (("shein",), "Shein"),
+        (("terabyteshop",), "TerabyteShop"),
+        (("pichau",), "Pichau"),
+        (("fastshop",), "Fast Shop"),
+        (("carrefour",), "Carrefour"),
+        (("extra.com",), "Extra"),
+        (("ebay",), "eBay"),
+    )
+    for tokens, label in labels:
+        if any(token in candidates for token in tokens):
+            return label
+    return host.split("/")[0].split(":")[0].upper()[:80] or "LOJA"
+
+
+def _monitoring_location(url, scope):
+    return _store_label(url) if scope == "store" else "GOOGLE SHOPPING BRASIL"
+
+
+def _history_preview(ref, product):
+    preview = product.get("historyPreview")
+    if isinstance(preview, list) and preview:
+        return preview[-24:]
+    try:
+        from google.cloud.firestore_v1 import Query
+        docs = list(ref.collection("history").order_by("observedAt", direction=Query.DESCENDING).limit(24).stream())
+    except Exception:
+        return []
+    rows = []
+    for doc in reversed(docs):
+        event = doc.to_dict() or {}
+        amount = _price(event.get("price"))
+        if amount is not None:
+            rows.append({
+                "price": amount,
+                "observedAt": _text(event.get("observedAt"), 80),
+                "source": _text(event.get("source"), 100),
+            })
+    if rows:
+        try:
+            ref.set({"historyPreview": rows[-24:]}, merge=True)
+        except Exception:
+            pass
+    return rows[-24:]
+
 
 
 def _iter_json_nodes(value):
@@ -489,7 +551,7 @@ def _shopping(query):
         if canonical in seen:
             continue
         seen.add(canonical)
-        source = _text(row.get("source"), 100) or (urlparse(link).hostname or "Loja")
+        source = _store_label(_text(row.get("source"), 100) or link)
         terms = " ".join(filter(None, [
             _text(row.get("title"), 300), _text(row.get("delivery"), 180),
             _flatten_offer_text(row.get("extensions")), _flatten_offer_text(row.get("snippets")),
@@ -509,7 +571,22 @@ def _shopping(query):
     return sorted(results, key=lambda x:x["price"])[:20]
 
 def _history(ref, event):
-    ref.collection("history").document().set({**event, "observedAt":_iso()})
+    observed_at = _iso()
+    entry = {**event, "observedAt": observed_at}
+    ref.collection("history").document().set(entry)
+    amount = _price(event.get("price"))
+    if amount is not None:
+        try:
+            parent = ref.get().to_dict() or {}
+            preview = list(parent.get("historyPreview") or [])
+            preview.append({
+                "price": amount,
+                "observedAt": observed_at,
+                "source": _text(event.get("source"), 100),
+            })
+            ref.set({"historyPreview": preview[-24:]}, merge=True)
+        except Exception:
+            pass
 
 def _target_reached(product, target=None):
     target = product.get("targetPrice") if target is None else target
@@ -539,6 +616,7 @@ def _refresh_ref(ref, product):
         "lastRefreshError": "",
         "refreshIntervalMinutes": interval,
         "searchScope": scope,
+        "monitoringLocation": _monitoring_location(product.get("url") or "", scope),
         "updatedAt": _iso(now),
     }
 
@@ -572,14 +650,13 @@ def _refresh_ref(ref, product):
                 "url": checked_url,
             })
     else:
-        match_query = " ".join(x for x in [
-            _text(product.get("title"), 160),
-            _text(product.get("brand"), 70),
-            _text(product.get("model"), 70),
-        ] if x).strip()
-        query = " ".join(x for x in [match_query, _text(product.get("ean"), 20)] if x).strip()
-        offers = _shopping(query)
-        matched = [offer for offer in offers if _score(match_query, offer["title"]) >= 0.35]
+        match_query = _text(product.get("searchKeyword") or " ".join(x for x in [
+            _text(product.get("title"), 100),
+            _text(product.get("brand"), 40),
+            _text(product.get("model"), 40),
+        ] if x).strip(), 180)
+        offers = _shopping(match_query)
+        matched = [offer for offer in offers if _score(match_query, offer["title"]) >= 0.34]
         if not matched:
             updates["lastRefreshError"] = "A pesquisa no Google Shopping Brasil não encontrou oferta com correspondência suficiente. Os preços anteriores foram mantidos."
             ref.update(updates)
@@ -672,7 +749,11 @@ def monitor_status(authorization: str | None = Header(default=None)):
 @router.get("/products")
 def list_products(authorization: str | None = Header(default=None)):
     uid = _uid(authorization)
-    products = [_serialize(doc) for doc in _products(uid).stream()]
+    products = []
+    for doc in _products(uid).stream():
+        product = _serialize(doc)
+        product["historyPreview"] = _history_preview(doc.reference, product)
+        products.append(product)
     products.sort(key=lambda p:str(p.get("updatedAt") or p.get("createdAt") or ""), reverse=True)
     return {"products":products}
 
@@ -746,6 +827,9 @@ def remove_cart_product(product_id: str, authorization: str | None = Header(defa
 def add_product(req: ProductCreate, authorization: str | None = Header(default=None)):
     uid, url = _uid(authorization), _validate_url(req.url)
     interval, scope = _refresh_interval(req.refresh_interval_minutes), _search_scope(req.search_scope)
+    search_keyword = _text(req.search_keyword or req.title, 180)
+    if len(search_keyword) < 2:
+        raise HTTPException(422, "Informe uma palavra-chave com pelo menos 2 caracteres.")
     collection, canonical = _products(uid), _canonical(url)
     snapshots = list(collection.limit(101).stream())
     for snapshot in snapshots:
@@ -755,6 +839,7 @@ def add_product(req: ProductCreate, authorization: str | None = Header(default=N
         ref = snapshot.reference
         now = _now()
         changes = {"updatedAt":_iso(now), "refreshIntervalMinutes":interval, "searchScope":scope,
+                   "searchKeyword":search_keyword, "monitoringLocation":_monitoring_location(url, scope),
                    "nextRefreshAt":_iso(now + timedelta(minutes=interval))}
         if req.target_price is not None:
             changes["targetPrice"] = req.target_price
@@ -774,6 +859,7 @@ def add_product(req: ProductCreate, authorization: str | None = Header(default=N
     data = {"title":_text(req.title),"url":url,"canonicalUrl":canonical,"price":req.price,
         "targetPrice":req.target_price,"targetReached":False,"targetReachedAt":"",
         "refreshIntervalMinutes":interval,"searchScope":scope,
+        "searchKeyword":search_keyword,"monitoringLocation":_monitoring_location(url, scope),
         "brand":_text(req.brand,150),"model":_text(req.model,150),"ean":_text(req.ean,32),
         "image_url":_text(req.image_url,2048),"source":_text(req.source,80) or (urlparse(url).hostname or "Página do produto"),
         "active":True,"inCart":False,"addedToCartAt":"","offers":[],"bestOfferPrice":None,"bestOfferSource":"","bestOfferUrl":"",
@@ -852,12 +938,17 @@ def update_product_settings(product_id: str, req: ProductSettingsUpdate, authori
         _iso(now) if target_changed or not product.get("targetReachedAt")
         else product.get("targetReachedAt")
     ) if reached else ""
+    search_keyword = _text(req.search_keyword or product.get("searchKeyword") or product.get("title"), 180)
+    if len(search_keyword) < 2:
+        raise HTTPException(422, "Informe uma palavra-chave com pelo menos 2 caracteres.")
     ref.update({
         "targetPrice": req.target_price,
         "targetReached": reached,
         "targetReachedAt": target_reached_at,
         "refreshIntervalMinutes": interval,
         "searchScope": scope,
+        "searchKeyword": search_keyword,
+        "monitoringLocation": _monitoring_location(product.get("url") or "", scope),
         "nextRefreshAt": _iso(now + timedelta(minutes=interval)),
         "updatedAt": _iso(now),
         "active": True,
