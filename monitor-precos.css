@@ -14,6 +14,9 @@
 .mp-field label{font-size:.8rem;font-weight:700;color:var(--muted,#6b7280)}
 .mp-field input{width:100%;min-width:0;box-sizing:border-box;background:var(--input-bg,#fff);color:var(--text,#111827);border:1px solid var(--border,#d1d5db);border-radius:10px;padding:11px 12px;font:inherit;font-size:.91rem}
 .mp-field input:focus{outline:2px solid rgba(37,99,235,.2);border-color:#3b82f6}
+.mp-field select{width:100%;min-width:0;box-sizing:border-box;background:var(--input-bg,#fff);color:var(--text,#111827);border:1px solid var(--border,#d1d5db);border-radius:10px;padding:11px 12px;font:inherit;font-size:.91rem}
+.mp-field select:focus{outline:2px solid rgba(37,99,235,.2);border-color:#3b82f6}
+.mp-settings-form{max-width:760px;border:1px solid var(--border,#e5e7eb);border-radius:14px;padding:14px;background:var(--surface-secondary,#f9fafb)}
 .mp-actions{display:flex;flex-wrap:wrap;gap:9px;margin-top:14px}
 .mp-btn{border:1px solid var(--border,#d1d5db);border-radius:10px;padding:10px 13px;background:var(--surface-secondary,#f9fafb);color:var(--text,#111827);font:inherit;font-weight:750;font-size:.86rem;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;gap:7px;cursor:pointer}
 .mp-btn.primary{background:#111827;color:white;border-color:#111827}.mp-btn:disabled{opacity:.5;cursor:wait}.mp-btn.small{font-size:.78rem;padding:7px 9px}
