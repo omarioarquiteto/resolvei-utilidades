@@ -1,56 +1,65 @@
 # Resolvei — Comparador de Preços
 
-Extensão Manifest V3 para Chrome, Microsoft Edge e navegadores compatíveis com Chromium. Ela funciona no popup da extensão: não é necessário abrir o site do Resolvei para comparar produtos.
+Extensão Manifest V3 para Chrome, Microsoft Edge e navegadores compatíveis com Chromium. A extensão compara produtos no popup e acompanha metas de preço em segundo plano.
 
-## Instalação para teste
+## Instalação
 
 1. Baixe o ZIP do repositório e extraia-o.
 2. Acesse `chrome://extensions` no Chrome ou `edge://extensions` no Edge.
 3. Ative o **Modo do desenvolvedor**.
-4. Clique em **Carregar sem compactação** e escolha a pasta `extension/monitor-precos`.
-5. Abra a página de detalhes de um produto numa loja e clique no ícone do Resolvei.
-6. Entre com o mesmo e-mail e senha da conta Resolvei. Se costuma entrar com Google, clique em **Continuar com Google** e conclua a autenticação na janela oficial do Resolvei.
-7. A extensão captura o produto, consulta a base comunitária, pesquisa outras lojas e mostra as ofertas no próprio popup.
+4. Clique em **Carregar sem compactação** e escolha `extension/monitor-precos`.
+5. Abra a página de detalhes de um produto e clique no ícone do Resolvei.
+6. Entre com a mesma conta usada no site do Resolvei.
+7. Defina meta, frequência e alcance de busca e clique em **Monitorar**.
 
-## O que faz
+## Monitoramento ativo
+
+Ao monitorar um produto, escolha:
+
+- **Meta de preço:** por exemplo, R$ 3.500,00 para um PlayStation.
+- **Frequência:** 1, 5, 10, 30 ou 60 minutos.
+- **Onde procurar — Somente esta loja:** o servidor consulta a URL original e tenta extrair o preço de dados estruturados (JSON-LD/Offer), metadados ou campos de preço semântico publicados pela loja. Não depende do SerpApi, mas pode falhar quando a loja bloqueia acessos automáticos ou só renderiza o preço com JavaScript.
+- **Onde procurar — Internet brasileira:** consulta o Google Shopping Brasil e tenta confirmar o modelo antes de atualizar o menor preço. Essa busca depende de `SERPAPI_KEY` configurada no Render e da cota disponível. Não equivale a rastrear literalmente todos os sites da internet.
+
+Quando a meta é atingida, o serviço registra o evento. A extensão gera uma notificação do sistema e abre uma nova aba do Resolvei com o preço, a meta e o link direto para a oferta. Clicar na notificação também abre a oferta. O mesmo evento não gera notificações repetidas; um novo alerta acontece quando a meta for editada/atingida novamente.
+
+**Requisitos para alerta no computador:** o Chrome/Edge e a extensão precisam estar ativos, com uma sessão válida do Resolvei e permissão de notificações. O computador não pode estar desligado. Os alarmes do navegador podem atrasar e não acordam o computador quando ele está em suspensão; a verificação do servidor continua sujeita à disponibilidade do serviço hospedado e ao processamento do provedor.
+
+## Cota da busca nacional
+
+A modalidade nacional faz uma pesquisa externa por produto a cada ciclo configurado. No plano gratuito do SerpApi, a franquia publicada é de 250 pesquisas por mês. Assim, uma única busca por hora já representa cerca de 720 pesquisas em 30 dias; frequências menores consomem a franquia ainda mais rapidamente. A cota é compartilhada com outras pesquisas que usem a mesma chave. Verifique o plano e o uso em [SerpApi Pricing](https://serpapi.com/pricing).
+
+Para monitorar vários produtos com frequência alta, pode ser necessário um plano SerpApi superior. O modo **Somente esta loja** não consome essa cota.
+
+## Comparação e dados comunitários
 
 - Captura nome, preço, marca, modelo, código EAN e imagem quando publicados pela loja.
-- Tenta identificar frete grátis, condições de parcelamento (incluindo sem juros/com juros) e códigos de cupom visíveis na página.
-- Consulta ofertas externas e registros de outras lojas enviados pela comunidade Resolvei.
-- Compartilha automaticamente preço e condições reconhecidos com a base comunitária de preços e histórico.
-- Mostra a menor oferta anunciada, a loja, condições de frete e parcelamento e cupons encontrados. Os códigos de cupom podem ser copiados clicando neles.
-- Mantém uma sessão da extensão revogável no servidor por até 30 dias. O botão **Sair** encerra essa sessão.
-- Exibe gráfico de histórico comunitário com janelas de 40 dias, 6 meses e 1 ano, incluindo mínimo, máximo e última observação.
-- O histórico comunitário é atualizado pela rotina agendada do servidor; as verificações independem de alguém abrir a página do produto.
+- Tenta identificar frete, parcelamento e cupons visíveis.
+- Combina ofertas pesquisadas com registros compartilhados pela comunidade Resolvei.
+- Mostra histórico de preços, menor oferta, origem e link da loja.
+- Os dados da base comunitária não expõem a senha, o e-mail ou o nome do usuário que contribuiu.
 
-## Dados comunitários e precisão
-
-Os dados da base de comunidade são compartilhados entre usuários autenticados da extensão. O banco registra a loja, o link do produto, observações de preço e a data/hora, além de frete, parcelamento e cupons quando essas informações são identificadas. A contribuição não inclui senha, e-mail ou nome do usuário na ficha pública do produto.
-
-A captura é iniciada somente quando você clica no ícone da extensão. O reconhecimento depende do HTML e do texto publicados pela loja; algumas páginas podem esconder preço, parcelamento ou cupom. A comparação externa e as verificações agendadas dependem da configuração de `SERPAPI_KEY` no Render. A rotina gratuita pode ser executada pelo GitHub Actions (repositório público, runner padrão) sem criar um serviço Cron pago no Render. O workflow `Atualizar histórico comunitário de preços` roda diariamente e verifica um lote pequeno para respeitar a cota gratuita do provedor; o limite atual do plano gratuito do SerpApi é de 250 buscas por mês, compartilhadas com pesquisas manuais da extensão. O workflow exige o secret `PRICE_MONITOR_CRON_KEY` em GitHub Actions e a mesma variável no Render. Se a cota acabar ou o provedor não responder, o histórico existente é preservado.
-
-**Importante:** preço, disponibilidade, frete, juros e cupons podem mudar. O Resolvei não confirma validade de cupom nem custo final; confira os detalhes no carrinho/checkout antes de comprar. A extensão não faz compras nem aplica cupons automaticamente.
+Preço, disponibilidade, frete, juros e cupons podem mudar. Confira o modelo, vendedor, frete, condições e valor final no checkout. A extensão não compra produtos nem aplica cupons automaticamente.
 
 ## Privacidade
 
-- A extensão não varre abas em segundo plano.
-- Lê a aba ativa somente quando você abre o popup da extensão.
-- Não guarda a senha.
-- Para login por e-mail, o Firebase valida as credenciais; depois disso, a extensão usa uma sessão de API aleatória e revogável, que expira em até 30 dias.
-- Para login Google, a autenticação ocorre na página oficial do Resolvei; apenas um token de autenticação de curta duração é trocado por uma sessão da extensão.
+- A extensão não varre nem lê todas as abas abertas.
+- A página da loja só é lida quando você aciona a extensão.
+- A senha não é armazenada pela extensão.
+- Após o login Firebase, a extensão usa uma sessão de API aleatória e revogável, válida por até 30 dias.
+- O serviço em segundo plano consulta somente a lista de produtos da conta autenticada para verificar metas de preço.
 
 ## Limitações conhecidas
 
-- Algumas lojas usam páginas dinâmicas ou conteúdo carregado depois de vários segundos, o que pode impedir a extração automática de preço e condições.
-- Frete e parcelamento podem variar por CEP, cartão, banco, cliente ou valor do carrinho; as condições não são necessariamente iguais para todos.
-- A pesquisa externa não cobre todas as lojas da internet e pode exibir variações de modelo. Confira a descrição, capacidade, cor e versão antes de comparar.
-- Cupons identificados na página ou na comunidade podem estar expirados ou sujeitos a regras.
+- Algumas lojas escondem preços, bloqueiam acessos automatizados ou só exibem o preço após executar JavaScript.
+- A pesquisa Google Shopping Brasil pode não listar todas as lojas e pode apresentar variações de modelo. Confira capacidade, cor, versão e vendedor.
+- Frete e parcelamento podem depender do CEP, cartão, banco, cliente ou valor do carrinho.
+- Cupons podem expirar ou ter regras específicas.
 - A extensão ainda não está publicada na Chrome Web Store nem no Microsoft Edge Add-ons.
 
+## Carrinho e base administrativa
 
-## Carrinho de compras e base administrativa
-
-- Na extensão, o botão **Monitorar** salva o produto na lista pessoal monitorada e também o adiciona ao carrinho da conta Resolvei.
-- A ferramenta Monitor de Preços exibe os itens do carrinho, o total estimado e o histórico do total. O total usa o menor valor conhecido por produto (preço observado na página ou melhor oferta registrada); itens sem preço conhecido são contabilizados separadamente.
-- A base completa de produtos comunitários só é disponibilizada a administradores autorizados no backend. Para habilitar o painel privado, configure no ambiente do serviço Render a variável `PRICE_MONITOR_ADMIN_EMAILS` com o e-mail exato da conta Resolvei autorizada. Para mais de um administrador, separe os e-mails por vírgula. Sem essa variável, a base completa permanece bloqueada.
-- O controle de acesso à base administrativa é validado no servidor; ocultar o painel no navegador não é usado como mecanismo de segurança.
+- O botão **Monitorar** salva o produto na lista pessoal e também o adiciona ao carrinho do Resolvei.
+- O total do carrinho usa o menor preço conhecido por produto; itens sem preço confirmado são contabilizados separadamente.
+- A base comunitária completa permanece restrita aos administradores autorizados pela variável `PRICE_MONITOR_ADMIN_EMAILS` no Render.
+- O controle de acesso administrativo é validado no servidor, não apenas ocultado na interface.
