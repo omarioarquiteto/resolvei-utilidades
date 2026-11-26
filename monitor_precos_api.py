@@ -825,9 +825,13 @@ def set_target_price(product_id: str, req: TargetPriceUpdate, authorization: str
         raise HTTPException(404, "Produto não encontrado.")
     product = snapshot.to_dict() or {}
     reached = _target_reached(product, req.target_price) if req.target_price is not None else False
+    previous_target = _price(product.get("targetPrice"))
+    next_target = _price(req.target_price)
+    target_changed = previous_target != next_target
     now = _iso()
     ref.update({"targetPrice":req.target_price,"targetReached":reached,
-        "targetReachedAt":now if reached else "","updatedAt":now})
+        "targetReachedAt":(now if target_changed or not product.get("targetReachedAt") else product.get("targetReachedAt")) if reached else "",
+        "updatedAt":now})
     return {"product":_serialize(ref.get())}
 
 @router.post("/products/{product_id}/settings")
@@ -840,11 +844,14 @@ def update_product_settings(product_id: str, req: ProductSettingsUpdate, authori
     interval = _refresh_interval(req.refresh_interval_minutes)
     scope = _search_scope(req.search_scope)
     reached = _target_reached(product, req.target_price) if req.target_price is not None else False
+    previous_target = _price(product.get("targetPrice"))
+    next_target = _price(req.target_price)
+    target_changed = previous_target != next_target
     now = _now()
     target_reached_at = (
-        product.get("targetReachedAt") or _iso(now)
-        if reached else ""
-    )
+        _iso(now) if target_changed or not product.get("targetReachedAt")
+        else product.get("targetReachedAt")
+    ) if reached else ""
     ref.update({
         "targetPrice": req.target_price,
         "targetReached": reached,
