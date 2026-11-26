@@ -1,0 +1,25 @@
+:root{font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;color:#111827;background:#f1f5f9}
+*{box-sizing:border-box}
+body{margin:0;min-width:340px;min-height:100vh;padding:22px;background:#f1f5f9}
+.alert-shell{max-width:620px;margin:0 auto;background:#fff;border:1px solid #e2e8f0;border-radius:20px;padding:22px;box-shadow:0 18px 55px rgba(15,23,42,.11)}
+.brand-row{display:flex;align-items:center;gap:10px;border-bottom:1px solid #e2e8f0;padding-bottom:14px}
+.brand-mark{display:grid;place-items:center;width:38px;height:38px;border-radius:12px;background:#111827;color:white;font-size:20px;font-weight:900}
+.brand-row strong,.brand-row small{display:block}.brand-row strong{font-size:14px}.brand-row small{font-size:10px;color:#64748b;margin-top:2px}
+.intro{text-align:center;padding:22px 8px 16px}
+.success-icon{display:grid;place-items:center;width:48px;height:48px;border-radius:50%;margin:0 auto 10px;background:#dcfce7;color:#166534;font-size:27px;font-weight:900}
+.eyebrow{font-size:9px;letter-spacing:1.2px;font-weight:900;color:#15803d;margin:0 0 7px}
+h1{font-size:25px;letter-spacing:-.7px;margin:0 0 7px}
+.intro>p:last-child{color:#64748b;font-size:12px;line-height:1.5;margin:0}
+.alert-products{display:flex;flex-direction:column;gap:12px}
+.alert-product{border:1px solid #bbf7d0;border-radius:14px;padding:15px;background:#f0fdf4}
+.product-title{font-size:14px;font-weight:850;line-height:1.4;overflow-wrap:anywhere}
+.store{font-size:10px;color:#64748b;margin-top:4px}
+.price-row{display:flex;align-items:end;justify-content:space-between;gap:12px;margin:15px 0}
+.price-label{font-size:10px;color:#64748b}.price{display:block;font-size:24px;font-weight:950;color:#166534;letter-spacing:-.8px;margin-top:3px}
+.target{text-align:right;font-size:10px;color:#64748b}.target strong{display:block;color:#111827;font-size:13px;margin-top:3px}
+.open-offer{display:flex;align-items:center;justify-content:center;width:100%;padding:12px 14px;border-radius:10px;background:#111827;color:#fff;text-decoration:none;font-size:12px;font-weight:850}
+.loading,.error{padding:18px;text-align:center;font-size:12px;color:#64748b}.error{color:#991b1b}
+footer{text-align:center;border-top:1px solid #e2e8f0;margin-top:18px;padding-top:15px}
+footer a{font-size:11px;font-weight:800;color:#1d4ed8;text-decoration:none}
+footer a:hover{text-decoration:underline}
+@media(max-width:480px){body{padding:10px}.alert-shell{padding:16px}h1{font-size:22px}}

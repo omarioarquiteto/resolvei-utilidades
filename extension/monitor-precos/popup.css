@@ -74,3 +74,10 @@ footer{font-size:9px;color:#94a3b8;line-height:1.5;border-top:1px solid #e2e8f0;
 
 
 .monitor-button{margin-top:12px}.monitor-button.added{background:#166534;border-color:#166534;color:#fff}
+.monitor-settings{margin-top:11px;padding:10px;border:1px solid #e2e8f0;border-radius:10px;background:#f8fafc}
+.setting-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.setting-grid>div{min-width:0}.setting-grid .setting-wide{grid-column:1/-1}
+.setting-grid label{margin:0 0 4px}.setting-grid input,.setting-grid select{padding:8px;font-size:10px}
+.setting-grid select{width:100%;border:1px solid #cbd5e1;border-radius:8px;background:#fff;color:#111827;font:inherit;font-size:10px;padding:8px}
+.monitor-settings .hint{margin:7px 0 0}
+

@@ -17,6 +17,9 @@ jobs:
           node --check monitor-precos.js
           node --check extension/monitor-precos/popup.js
           node --check extension/monitor-precos/login.js
+          node --check extension/monitor-precos/background.js
+          node --check extension/monitor-precos/alert.js
       - name: Validate extension manifest
         run: |
           python -c "import json; json.load(open('extension/monitor-precos/manifest.json', encoding='utf-8'))"
+          python -m py_compile monitor_precos_api.py

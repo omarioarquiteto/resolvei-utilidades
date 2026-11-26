@@ -1,20 +1,28 @@
 {
   "manifest_version": 3,
   "name": "Resolvei — Comparador de Preços",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "Compare preços, frete, parcelamento e cupons. Contribua com a base comunitária de ofertas do Resolvei.",
   "minimum_chrome_version": "109",
   "permissions": [
     "activeTab",
     "scripting",
     "storage",
-    "clipboardWrite"
+    "clipboardWrite",
+    "alarms",
+    "notifications"
   ],
   "host_permissions": [
     "https://resolvei-utilidades.onrender.com/*",
     "https://identitytoolkit.googleapis.com/*",
     "https://securetoken.googleapis.com/*"
   ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "icons": {
+    "128": "icon128.png"
+  },
   "action": {
     "default_title": "Resolvei — Comparador de Preços",
     "default_popup": "popup.html"

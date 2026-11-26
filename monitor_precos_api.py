@@ -2,18 +2,21 @@
 from __future__ import annotations
 import asyncio, hashlib, ipaddress, os, re, secrets, threading, uuid
 from datetime import datetime, timedelta, timezone
-from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
+from urllib.parse import parse_qsl, urlencode, urljoin, urlparse, urlunparse
 from typing import Any
 import requests
 from fastapi import APIRouter, Header, HTTPException, Query
 from pydantic import BaseModel, Field
+from bs4 import BeautifulSoup
 
 router = APIRouter(prefix="/api/price-monitor", tags=["monitor-precos"])
 _refresh_task = None
 _refresh_lock = threading.Lock()
 REFRESH_HOURS = 24
-SCHEDULE_SECONDS = 6 * 60 * 60
+SCHEDULE_SECONDS = 15
 SCHEDULE_BATCH = 5
+REFRESH_INTERVALS = (1, 5, 10, 30, 60)
+SEARCH_SCOPES = {"store", "brazil"}
 
 class ProductCreate(BaseModel):
     title: str = Field(min_length=1, max_length=300)
@@ -25,6 +28,8 @@ class ProductCreate(BaseModel):
     ean: str = Field(default="", max_length=32)
     image_url: str = Field(default="", max_length=2048)
     source: str = Field(default="Resolvei", max_length=80)
+    refresh_interval_minutes: int = Field(default=60, ge=1, le=60)
+    search_scope: str = Field(default="store", max_length=16)
 
 class PriceObservation(BaseModel):
     price: float = Field(gt=0, le=100000000)
@@ -32,6 +37,11 @@ class PriceObservation(BaseModel):
 
 class TargetPriceUpdate(BaseModel):
     target_price: float | None = Field(default=None, gt=0, le=100000000)
+
+class ProductSettingsUpdate(BaseModel):
+    target_price: float | None
+    refresh_interval_minutes: int = Field(ge=1, le=60)
+    search_scope: str = Field(max_length=16)
 
 def _now():
     return datetime.now(timezone.utc)
@@ -175,6 +185,125 @@ def _price(value):
         return round(n, 2) if 0 < n < 100000000 else None
     except ValueError:
         return None
+
+def _refresh_interval(value, default=60):
+    try:
+        minutes = int(default if value is None else value)
+    except (TypeError, ValueError):
+        raise HTTPException(422, "Escolha um intervalo válido de monitoramento.")
+    if minutes not in REFRESH_INTERVALS:
+        raise HTTPException(422, "Os intervalos permitidos são 1, 5, 10, 30 ou 60 minutos.")
+    return minutes
+
+
+def _search_scope(value, default="store"):
+    scope = str(value or default).strip().lower()
+    if scope not in SEARCH_SCOPES:
+        raise HTTPException(422, "Escolha entre monitorar somente esta loja ou a internet brasileira.")
+    return scope
+
+
+def _iter_json_nodes(value):
+    if isinstance(value, dict):
+        yield value
+        for child in value.values():
+            yield from _iter_json_nodes(child)
+    elif isinstance(value, list):
+        for child in value:
+            yield from _iter_json_nodes(child)
+
+
+def _extract_store_price(html):
+    soup = BeautifulSoup(html or "", "html.parser")
+    candidates = []
+
+    # Dados estruturados Product/Offer: tendem a refletir o preço publicado pela loja.
+    for script in soup.select('script[type="application/ld+json"]'):
+        raw = script.string or script.get_text(" ", strip=True)
+        if not raw:
+            continue
+        try:
+            payload = __import__("json").loads(raw)
+        except (ValueError, TypeError):
+            continue
+        for node in _iter_json_nodes(payload):
+            kind = node.get("@type", "")
+            kinds = [str(item).lower() for item in kind] if isinstance(kind, list) else [str(kind).lower()]
+            if not any("offer" in item for item in kinds):
+                continue
+            price = node.get("price") or node.get("lowPrice")
+            if not price and isinstance(node.get("priceSpecification"), dict):
+                price = node["priceSpecification"].get("price")
+            parsed = _price(price)
+            if parsed is not None:
+                candidates.append(parsed)
+
+    # Metadados comuns usados por lojas brasileiras e plataformas de e-commerce.
+    selectors = [
+        'meta[property="product:price:amount"]',
+        'meta[property="og:price:amount"]',
+        'meta[itemprop="price"]',
+        '[itemprop="price"][content]',
+        '[itemprop="price"][data-price]',
+        '[data-testid*="price"][data-price]',
+    ]
+    for selector in selectors:
+        for element in soup.select(selector):
+            value = element.get("content") or element.get("data-price") or element.get("value") or element.get_text(" ", strip=True)
+            parsed = _price(value)
+            if parsed is not None:
+                candidates.append(parsed)
+
+    # Não usar preço riscado/list price: os candidatos são apenas os campos semânticos acima.
+    return min(candidates) if candidates else None
+
+
+def _read_store_page_price(url):
+    safe_url = _validate_url(url)
+    original_host = (urlparse(safe_url).hostname or "").lower().removeprefix("www.")
+    current_url = safe_url
+    response = None
+    for _ in range(6):
+        try:
+            response = requests.get(
+                current_url,
+                timeout=(5, 18),
+                allow_redirects=False,
+                headers={
+                    "User-Agent": "Mozilla/5.0 (compatible; ResolveiPriceMonitor/3.0; +https://resolvei-utilidades.onrender.com)",
+                    "Accept": "text/html,application/xhtml+xml",
+                    "Accept-Language": "pt-BR,pt;q=0.9,en;q=0.7",
+                },
+            )
+        except requests.RequestException as exc:
+            raise HTTPException(502, "Não foi possível acessar a página desta loja nesta verificação.") from exc
+
+        if response.status_code in {301, 302, 303, 307, 308}:
+            location = str(response.headers.get("Location") or "").strip()
+            if not location:
+                raise HTTPException(502, "A loja enviou um redirecionamento sem endereço.")
+            next_url = _validate_url(urljoin(current_url, location))
+            next_host = (urlparse(next_url).hostname or "").lower().removeprefix("www.")
+            if next_host != original_host and not next_host.endswith("." + original_host):
+                raise HTTPException(422, "A página redirecionou para outro domínio; a verificação foi interrompida.")
+            current_url = next_url
+            continue
+        break
+    else:
+        raise HTTPException(502, "A loja redirecionou muitas vezes; a verificação foi interrompida.")
+
+    if response is None:
+        raise HTTPException(502, "A loja não respondeu à verificação.")
+    if response.status_code == 429:
+        raise HTTPException(429, "A loja limitou temporariamente as consultas automáticas.")
+    if response.status_code >= 400:
+        raise HTTPException(502, "A loja respondeu com HTTP " + str(response.status_code) + ".")
+    final_url = _validate_url(current_url)
+    price = _extract_store_price(response.text)
+    if price is None:
+        raise HTTPException(422, "A loja não disponibilizou um preço identificável no HTML. A página pode bloquear consultas automáticas ou carregar o preço por JavaScript.")
+    return price, final_url
+
 
 def _cart_current_price(product: dict[str, Any]):
     """Menor valor atual conhecido: preço da página ou melhor oferta encontrada."""
@@ -401,39 +530,105 @@ def _serialize(snapshot):
     return data
 
 def _refresh_ref(ref, product):
-    match_query = " ".join(x for x in [_text(product.get("title"),160),_text(product.get("brand"),70),
-        _text(product.get("model"),70)] if x).strip()
-    q = " ".join(x for x in [match_query, _text(product.get("ean"),20)] if x).strip()
-    offers = _shopping(q)
-    matched = [offer for offer in offers if _score(match_query, offer["title"]) >= 0.35]
     now = _now()
-    updates = {"lastCheckedAt":_iso(now),"nextRefreshAt":_iso(now+timedelta(hours=REFRESH_HOURS)),
-        "lastRefreshError":"","updatedAt":_iso(now)}
-    if not matched:
-        updates["lastRefreshError"] = "Não encontrei oferta que corresponda com confiança ao modelo. Revise os dados do produto."
-        ref.update(updates)
-        return {"ok":True,"matched":False,"message":updates["lastRefreshError"],"offers":[]}
-    best = min(matched, key=lambda offer:offer["price"])
-    previous = product.get("bestOfferPrice")
-    updates.update({"offers":matched[:12],"bestOfferPrice":best["price"],
-        "bestOfferSource":best["source"],"bestOfferUrl":best["url"],"bestOfferTitle":best["title"]})
-    reached = _target_reached({**product, "bestOfferPrice":best["price"]})
+    interval = _refresh_interval(product.get("refreshIntervalMinutes"), default=60)
+    scope = _search_scope(product.get("searchScope"), default="brazil")
+    updates = {
+        "lastCheckedAt": _iso(now),
+        "nextRefreshAt": _iso(now + timedelta(minutes=interval)),
+        "lastRefreshError": "",
+        "refreshIntervalMinutes": interval,
+        "searchScope": scope,
+        "updatedAt": _iso(now),
+    }
+
+    if scope == "store":
+        price, checked_url = _read_store_page_price(product.get("url") or "")
+        source = (urlparse(checked_url).hostname or "Loja").removeprefix("www.")
+        best = {
+            "title": _text(product.get("title"), 300),
+            "price": price,
+            "source": source,
+            "url": checked_url,
+            "image_url": _text(product.get("image_url"), 2048),
+        }
+        matched = [best]
+        previous_page = _price(product.get("price"))
+        updates.update({
+            "price": price,
+            "source": source,
+            "bestOfferPrice": price,
+            "bestOfferSource": source,
+            "bestOfferUrl": checked_url,
+            "bestOfferTitle": best["title"],
+            "offers": [best],
+        })
+        if previous_page is None or abs(previous_page - price) >= 0.01:
+            _history(ref, {
+                "price": price,
+                "kind": "page-observation",
+                "source": source,
+                "title": best["title"],
+                "url": checked_url,
+            })
+    else:
+        match_query = " ".join(x for x in [
+            _text(product.get("title"), 160),
+            _text(product.get("brand"), 70),
+            _text(product.get("model"), 70),
+        ] if x).strip()
+        query = " ".join(x for x in [match_query, _text(product.get("ean"), 20)] if x).strip()
+        offers = _shopping(query)
+        matched = [offer for offer in offers if _score(match_query, offer["title"]) >= 0.35]
+        if not matched:
+            updates["lastRefreshError"] = "A pesquisa no Google Shopping Brasil não encontrou oferta com correspondência suficiente. Os preços anteriores foram mantidos."
+            ref.update(updates)
+            return {"ok": True, "matched": False, "message": updates["lastRefreshError"], "offers": []}
+        best = min(matched, key=lambda offer: offer["price"])
+        previous = _price(product.get("bestOfferPrice"))
+        updates.update({
+            "offers": matched[:12],
+            "bestOfferPrice": best["price"],
+            "bestOfferSource": best["source"],
+            "bestOfferUrl": best["url"],
+            "bestOfferTitle": best["title"],
+        })
+        if previous is None or abs(previous - float(best["price"])) >= 0.01:
+            _history(ref, {
+                "price": best["price"],
+                "kind": "best-offer",
+                "source": best["source"],
+                "title": best["title"],
+                "url": best["url"],
+            })
+
+    if scope == "store":
+        reached = _target_reached({**product, "price": best["price"], "bestOfferPrice": best["price"]})
+    else:
+        # No modo nacional, a meta é avaliada pelo menor preço da pesquisa atual,
+        # sem reaproveitar um preço antigo da página original.
+        reached = _target_reached({"price": None, "bestOfferPrice": best["price"]})
+    was_reached = bool(product.get("targetReached"))
     updates["targetReached"] = reached
-    if reached and not product.get("targetReached"):
+    if reached and not was_reached:
         updates["targetReachedAt"] = _iso(now)
     elif not reached:
         updates["targetReachedAt"] = ""
-    if previous is None or abs(float(previous)-float(best["price"])) >= 0.01:
-        _history(ref, {"price":best["price"],"kind":"best-offer","source":best["source"],
-            "title":best["title"],"url":best["url"]})
+
     ref.update(updates)
     if product.get("inCart") and ref.parent.id == "priceMonitorProducts":
         try:
             _record_cart_snapshot(ref.parent.parent.id, "price-check")
         except Exception:
             pass
-    return {"ok":True,"matched":True,"bestOffer":best,"offers":matched[:12],"checkedAt":updates["lastCheckedAt"]}
-
+    return {
+        "ok": True,
+        "matched": True,
+        "bestOffer": best,
+        "offers": matched[:12],
+        "checkedAt": updates["lastCheckedAt"],
+        "nextRefreshAt": updates["nextRefreshAt"],
+    }
 
 @router.post("/extension/session")
 def create_extension_session(authorization: str | None = Header(default=None)):
@@ -470,8 +665,9 @@ def revoke_extension_session(authorization: str | None = Header(default=None)):
 def monitor_status(authorization: str | None = Header(default=None)):
     _uid(authorization)
     enabled = bool(os.getenv("SERPAPI_KEY", "").strip())
-    return {"ok":True,"comparisonConfigured":enabled,"automaticRefresh":enabled,"refreshIntervalHours":REFRESH_HOURS,
-        "coverageNote":"A cobertura depende das ofertas fornecidas pelo provedor e não inclui necessariamente todas as lojas da internet."}
+    return {"ok":True,"comparisonConfigured":enabled,"automaticRefresh":True,"refreshIntervalsMinutes":list(REFRESH_INTERVALS),
+        "searchScopes":[{"value":"store","label":"Somente esta loja","requiresSerpApi":False},{"value":"brazil","label":"Google Shopping Brasil","requiresSerpApi":True}],
+        "coverageNote":"O modo loja consulta a página salva. O modo nacional usa Google Shopping Brasil e depende da cota SERPAPI_KEY."}
 
 @router.get("/products")
 def list_products(authorization: str | None = Header(default=None)):
@@ -549,6 +745,7 @@ def remove_cart_product(product_id: str, authorization: str | None = Header(defa
 @router.post("/products")
 def add_product(req: ProductCreate, authorization: str | None = Header(default=None)):
     uid, url = _uid(authorization), _validate_url(req.url)
+    interval, scope = _refresh_interval(req.refresh_interval_minutes), _search_scope(req.search_scope)
     collection, canonical = _products(uid), _canonical(url)
     snapshots = list(collection.limit(101).stream())
     for snapshot in snapshots:
@@ -556,7 +753,9 @@ def add_product(req: ProductCreate, authorization: str | None = Header(default=N
         if _canonical(str(existing.get("url") or "")) != canonical:
             continue
         ref = snapshot.reference
-        changes = {"updatedAt":_iso()}
+        now = _now()
+        changes = {"updatedAt":_iso(now), "refreshIntervalMinutes":interval, "searchScope":scope,
+                   "nextRefreshAt":_iso(now + timedelta(minutes=interval))}
         if req.target_price is not None:
             changes["targetPrice"] = req.target_price
             changes["targetReached"] = _target_reached(existing, req.target_price)
@@ -574,11 +773,12 @@ def add_product(req: ProductCreate, authorization: str | None = Header(default=N
     now, product_id = _iso(), uuid.uuid4().hex
     data = {"title":_text(req.title),"url":url,"canonicalUrl":canonical,"price":req.price,
         "targetPrice":req.target_price,"targetReached":False,"targetReachedAt":"",
+        "refreshIntervalMinutes":interval,"searchScope":scope,
         "brand":_text(req.brand,150),"model":_text(req.model,150),"ean":_text(req.ean,32),
         "image_url":_text(req.image_url,2048),"source":_text(req.source,80) or (urlparse(url).hostname or "Página do produto"),
         "active":True,"inCart":False,"addedToCartAt":"","offers":[],"bestOfferPrice":None,"bestOfferSource":"","bestOfferUrl":"",
         "createdAt":now,"updatedAt":now,"lastCheckedAt":"",
-        "nextRefreshAt":_iso(_now()+timedelta(hours=REFRESH_HOURS)),"lastRefreshError":""}
+        "nextRefreshAt":_iso(_now()+timedelta(minutes=interval)),"lastRefreshError":""}
     ref = collection.document(product_id)
     ref.set(data)
     if req.price is not None:
@@ -625,10 +825,45 @@ def set_target_price(product_id: str, req: TargetPriceUpdate, authorization: str
         raise HTTPException(404, "Produto não encontrado.")
     product = snapshot.to_dict() or {}
     reached = _target_reached(product, req.target_price) if req.target_price is not None else False
+    previous_target = _price(product.get("targetPrice"))
+    next_target = _price(req.target_price)
+    target_changed = previous_target != next_target
     now = _iso()
     ref.update({"targetPrice":req.target_price,"targetReached":reached,
-        "targetReachedAt":now if reached else "","updatedAt":now})
+        "targetReachedAt":(now if target_changed or not product.get("targetReachedAt") else product.get("targetReachedAt")) if reached else "",
+        "updatedAt":now})
     return {"product":_serialize(ref.get())}
+
+@router.post("/products/{product_id}/settings")
+def update_product_settings(product_id: str, req: ProductSettingsUpdate, authorization: str | None = Header(default=None)):
+    ref = _ref(_uid(authorization), product_id)
+    snapshot = ref.get()
+    if not snapshot.exists:
+        raise HTTPException(404, "Produto não encontrado.")
+    product = snapshot.to_dict() or {}
+    interval = _refresh_interval(req.refresh_interval_minutes)
+    scope = _search_scope(req.search_scope)
+    reached = _target_reached(product, req.target_price) if req.target_price is not None else False
+    previous_target = _price(product.get("targetPrice"))
+    next_target = _price(req.target_price)
+    target_changed = previous_target != next_target
+    now = _now()
+    target_reached_at = (
+        _iso(now) if target_changed or not product.get("targetReachedAt")
+        else product.get("targetReachedAt")
+    ) if reached else ""
+    ref.update({
+        "targetPrice": req.target_price,
+        "targetReached": reached,
+        "targetReachedAt": target_reached_at,
+        "refreshIntervalMinutes": interval,
+        "searchScope": scope,
+        "nextRefreshAt": _iso(now + timedelta(minutes=interval)),
+        "updatedAt": _iso(now),
+        "active": True,
+    })
+    return {"product": _serialize(ref.get())}
+
 
 @router.post("/products/{product_id}/refresh")
 def refresh_product(product_id: str, authorization: str | None = Header(default=None)):
@@ -1272,32 +1507,45 @@ def admin_get_community_product(
 async def _scheduler_loop():
     while True:
         try:
-            if os.getenv("SERPAPI_KEY", "").strip():
-                now, due = _now(), []
-                for snapshot in _db().collection_group("priceMonitorProducts").stream():
-                    product = snapshot.to_dict() or {}
-                    if product.get("active") is False:
-                        continue
-                    try:
-                        target = datetime.fromisoformat(str(product.get("nextRefreshAt") or "").replace("Z","+00:00"))
-                    except ValueError:
-                        target = now
-                    if target.tzinfo is None:
-                        target = target.replace(tzinfo=timezone.utc)
-                    if target <= now:
-                        due.append((str(product.get("nextRefreshAt") or ""),snapshot.reference,product))
-                due.sort(key=lambda entry:entry[0])
-                for _, ref, product in due[:SCHEDULE_BATCH]:
-                    try:
-                        await asyncio.to_thread(_refresh_ref,ref,product)
-                        await asyncio.sleep(.5)
-                    except Exception:
-                        continue
+            now = _now()
+            batch_size = max(1, min(int(os.getenv("PRICE_MONITOR_USER_REFRESH_BATCH", str(SCHEDULE_BATCH))), 50))
+            # Consulta apenas produtos cujo próximo horário já venceu. O índice do
+            # campo nextRefreshAt evita varrer toda a base a cada ciclo.
+            query = (
+                _db().collection_group("priceMonitorProducts")
+                .where("nextRefreshAt", "<=", _iso(now))
+                .order_by("nextRefreshAt")
+                .limit(batch_size)
+            )
+            due = list(query.stream())
+            for snapshot in due:
+                product = snapshot.to_dict() or {}
+                if product.get("active") is False:
+                    continue
+                try:
+                    await asyncio.to_thread(_refresh_ref, snapshot.reference, product)
+                    await asyncio.sleep(0.2)
+                except HTTPException as exc:
+                    # Evita repetir em loop quando uma loja limita a coleta ou
+                    # quando a cota do provedor nacional termina.
+                    delay_minutes = 15 if exc.status_code == 429 else 5
+                    snapshot.reference.set({
+                        "lastCheckedAt": _iso(),
+                        "nextRefreshAt": _iso(_now() + timedelta(minutes=delay_minutes)),
+                        "lastRefreshError": _text(exc.detail, 240),
+                    }, merge=True)
+                except Exception as exc:
+                    snapshot.reference.set({
+                        "lastCheckedAt": _iso(),
+                        "nextRefreshAt": _iso(_now() + timedelta(minutes=10)),
+                        "lastRefreshError": "Falha na atualização automática: " + _text(type(exc).__name__, 60),
+                    }, merge=True)
         except asyncio.CancelledError:
             raise
         except Exception:
             pass
         await asyncio.sleep(SCHEDULE_SECONDS)
+
 
 def start_price_monitor_scheduler():
     global _refresh_task
