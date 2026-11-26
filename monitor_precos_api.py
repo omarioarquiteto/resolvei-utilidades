@@ -2,7 +2,7 @@
 from __future__ import annotations
 import asyncio, hashlib, ipaddress, os, re, secrets, threading, uuid
 from datetime import datetime, timedelta, timezone
-from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
+from urllib.parse import parse_qsl, urlencode, urljoin, urlparse, urlunparse
 from typing import Any
 import requests
 from fastapi import APIRouter, Header, HTTPException, Query
@@ -261,27 +261,44 @@ def _extract_store_price(html):
 def _read_store_page_price(url):
     safe_url = _validate_url(url)
     original_host = (urlparse(safe_url).hostname or "").lower().removeprefix("www.")
-    try:
-        response = requests.get(
-            safe_url,
-            timeout=(5, 18),
-            allow_redirects=True,
-            headers={
-                "User-Agent": "Mozilla/5.0 (compatible; ResolveiPriceMonitor/3.0; +https://resolvei-utilidades.onrender.com)",
-                "Accept": "text/html,application/xhtml+xml",
-                "Accept-Language": "pt-BR,pt;q=0.9,en;q=0.7",
-            },
-        )
-    except requests.RequestException as exc:
-        raise HTTPException(502, "Não foi possível acessar a página desta loja nesta verificação.") from exc
+    current_url = safe_url
+    response = None
+    for _ in range(6):
+        try:
+            response = requests.get(
+                current_url,
+                timeout=(5, 18),
+                allow_redirects=False,
+                headers={
+                    "User-Agent": "Mozilla/5.0 (compatible; ResolveiPriceMonitor/3.0; +https://resolvei-utilidades.onrender.com)",
+                    "Accept": "text/html,application/xhtml+xml",
+                    "Accept-Language": "pt-BR,pt;q=0.9,en;q=0.7",
+                },
+            )
+        except requests.RequestException as exc:
+            raise HTTPException(502, "Não foi possível acessar a página desta loja nesta verificação.") from exc
+
+        if response.status_code in {301, 302, 303, 307, 308}:
+            location = str(response.headers.get("Location") or "").strip()
+            if not location:
+                raise HTTPException(502, "A loja enviou um redirecionamento sem endereço.")
+            next_url = _validate_url(urljoin(current_url, location))
+            next_host = (urlparse(next_url).hostname or "").lower().removeprefix("www.")
+            if next_host != original_host and not next_host.endswith("." + original_host):
+                raise HTTPException(422, "A página redirecionou para outro domínio; a verificação foi interrompida.")
+            current_url = next_url
+            continue
+        break
+    else:
+        raise HTTPException(502, "A loja redirecionou muitas vezes; a verificação foi interrompida.")
+
+    if response is None:
+        raise HTTPException(502, "A loja não respondeu à verificação.")
     if response.status_code == 429:
         raise HTTPException(429, "A loja limitou temporariamente as consultas automáticas.")
     if response.status_code >= 400:
         raise HTTPException(502, "A loja respondeu com HTTP " + str(response.status_code) + ".")
-    final_url = _validate_url(response.url or safe_url)
-    final_host = (urlparse(final_url).hostname or "").lower().removeprefix("www.")
-    if final_host != original_host and not final_host.endswith("." + original_host) and not original_host.endswith("." + final_host):
-        raise HTTPException(422, "A página redirecionou para outro domínio; a verificação foi interrompida.")
+    final_url = _validate_url(current_url)
     price = _extract_store_price(response.text)
     if price is None:
         raise HTTPException(422, "A loja não disponibilizou um preço identificável no HTML. A página pode bloquear consultas automáticas ou carregar o preço por JavaScript.")
