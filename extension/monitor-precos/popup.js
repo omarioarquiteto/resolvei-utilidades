@@ -482,6 +482,13 @@ async function monitorCurrentProduct() {
         model: currentProduct.model || "",
         ean: currentProduct.ean || "",
         image_url: currentProduct.image_url || "",
+        target_price: parsePrice(document.getElementById("target-price").value),
+        refresh_interval_minutes: Number(document.getElementById("refresh-interval").value || 60),
+        search_scope: document.getElementById("search-scope").value || "store",
+        brand: currentProduct.brand || "",
+        model: currentProduct.model || "",
+        ean: currentProduct.ean || "",
+        image_url: currentProduct.image_url || "",
         source: currentProduct.source || "Extensão Resolvei"
       })
     });
