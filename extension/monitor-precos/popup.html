@@ -48,6 +48,14 @@
           <strong id="product-price">Não identificado</strong>
         </div>
         <div id="current-conditions" class="condition-chips"></div>
+        <div class="monitor-settings">
+          <div class="setting-grid">
+            <div><label for="target-price">Meta de preço (R$)</label><input id="target-price" type="number" min="0.01" step="0.01" placeholder="Ex.: 3500,00"></div>
+            <div><label for="refresh-interval">Verificar a cada</label><select id="refresh-interval"><option value="1">1 minuto</option><option value="5">5 minutos</option><option value="10">10 minutos</option><option value="30">30 minutos</option><option value="60" selected>60 minutos</option></select></div>
+            <div class="setting-wide"><label for="search-scope">Onde procurar</label><select id="search-scope"><option value="store" selected>Somente esta loja</option><option value="brazil">Internet brasileira (Google Shopping)</option></select></div>
+          </div>
+          <p class="hint">Com uma meta configurada, a extensão pode abrir um alerta no computador quando o preço for atingido. Mantenha Chrome/Edge aberto.</p>
+        </div>
         <button id="monitor-product" class="button primary monitor-button" type="button" disabled>＋ Monitorar</button>
       </section>
 
