@@ -20,6 +20,9 @@
   "background": {
     "service_worker": "background.js"
   },
+  "icons": {
+    "128": "icon128.png"
+  },
   "action": {
     "default_title": "Resolvei — Comparador de Preços",
     "default_popup": "popup.html"
