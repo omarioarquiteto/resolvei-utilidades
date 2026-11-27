@@ -169,124 +169,305 @@ def _direct_get(url: str, *, params: dict | None = None, referer: str = "") -> r
     return response
 
 
+def _ml_product_from_json(node: dict, source_url: str) -> dict | None:
+    """Convert a Mercado Livre Product JSON-LD record into a validated offer."""
+    kind = node.get("@type", "")
+    kinds = [str(x).lower() for x in kind] if isinstance(kind, list) else [str(kind).lower()]
+    if "product" not in kinds:
+        return None
+
+    title = _plain(node.get("name") or node.get("alternateName"), 300)
+    offers = node.get("offers") or {}
+    if isinstance(offers, list):
+        offers = next((x for x in offers if isinstance(x, dict)), {})
+    if not isinstance(offers, dict):
+        offers = {}
+    price = _brl(offers.get("price") or offers.get("lowPrice") or node.get("price"))
+    url = urljoin(source_url, _plain(node.get("url") or offers.get("url"), 2048))
+    if not title or price is None or not _valid_offer_url("mercado_livre", url):
+        return None
+
+    original = _brl(offers.get("highPrice") or offers.get("listPrice"))
+    image = node.get("image") or ""
+    if isinstance(image, list):
+        image = image[0] if image else ""
+    rating = node.get("aggregateRating") or {}
+    return {
+        "title": title,
+        "price": price,
+        "original_price": original,
+        "coupon_price": None,
+        "coupon_code": "",
+        "coupon_info": "",
+        "discount_percent": round((original - price) / original * 100, 2) if original and original > price else None,
+        "source": "Mercado Livre",
+        "url": url,
+        "image_url": _plain(image, 2048),
+        "delivery": "",
+        "free_shipping": None,
+        "shipping_text": "",
+        "installment_text": "",
+        "rating": _brl(rating.get("ratingValue")) if isinstance(rating, dict) else None,
+        "reviews": rating.get("reviewCount") if isinstance(rating, dict) else None,
+        "seller": "",
+        "second_hand_condition": "",
+        "source_search_url": source_url,
+    }
+
+
+def _ml_json_offers(soup: BeautifulSoup, source_url: str) -> list[dict]:
+    """Extract Product records from JSON-LD embedded in Mercado Livre pages."""
+    offers = []
+    seen = set()
+    for script in soup.select('script[type="application/ld+json"]'):
+        raw = script.string or script.get_text(" ", strip=True)
+        if not raw:
+            continue
+        try:
+            payload = json.loads(raw)
+        except (ValueError, TypeError):
+            continue
+        for node in _walk_json(payload):
+            offer = _ml_product_from_json(node, source_url)
+            if not offer:
+                continue
+            key = offer["url"].split("#", 1)[0].split("?", 1)[0].rstrip("/")
+            if key not in seen:
+                seen.add(key)
+                offers.append(offer)
+    return offers
+
+
+def _ml_card_container(link):
+    """Find the nearest bounded ancestor that actually contains a product price."""
+    preferred_tokens = (
+        "poly-card", "ui-search-result", "andes-card", "poly-component",
+        "ui-search-item", "promotion-item",
+    )
+    candidates = []
+    for parent in link.parents:
+        text = _plain(parent.get_text(" ", strip=True), 2600)
+        if not text:
+            continue
+        classes = " ".join(str(x) for x in (parent.get("class") or []))
+        has_price = bool(re.search(r"R\$\s*[\d.]+(?:,\d{2})?", text))
+        if has_price and len(text) >= 12:
+            score = 2 if any(token in classes for token in preferred_tokens) else 1
+            candidates.append((score, len(text), parent))
+        if len(text) > 2600:
+            break
+    if not candidates:
+        return link
+    # Prefer a semantic product-card class; otherwise use the smallest priced ancestor.
+    preferred = [row for row in candidates if row[0] == 2]
+    return min(preferred or candidates, key=lambda row: row[1])[2]
+
+
+def _ml_card_offer(link, source_url: str) -> dict | None:
+    href = urljoin(source_url, str(link.get("href") or link.get("data-href") or "").strip())
+    if not _valid_offer_url("mercado_livre", href):
+        return None
+    title_node = link.select_one("h2, h3, [class*='title'], [data-testid*='title']")
+    title = _plain(
+        link.get("title")
+        or link.get("aria-label")
+        or (title_node.get_text(" ", strip=True) if title_node else "")
+        or link.get_text(" ", strip=True),
+        300,
+    )
+    if len(title) < 3:
+        return None
+
+    card = _ml_card_container(link)
+    card_text = _plain(card.get_text(" ", strip=True), 2600)
+    if re.search(r"\b(usado|usada|seminovo|seminova|recondicionado|recondicionada|refurbished|renewed)\b", title + " " + card_text, re.I):
+        return None
+
+    current_node = card.select_one(
+        ".poly-price__current .andes-money-amount, "
+        ".ui-search-price__second-line .andes-money-amount, "
+        "[class*='price'] .andes-money-amount:not(.andes-money-amount--previous)"
+    )
+    if not current_node:
+        price_nodes = card.select(".andes-money-amount")
+        current_node = next(
+            (node for node in price_nodes if "previous" not in " ".join(node.get("class") or [])),
+            None,
+        )
+    price = _amount_node(current_node)
+    if price is None:
+        # Use the first displayed full currency amount, not a financing/installment line.
+        price_match = re.search(r"R\$\s*[\d.]+(?:,\d{2})?", card_text)
+        price = _brl(price_match.group(0)) if price_match else None
+    if price is None:
+        return None
+
+    old_node = card.select_one(
+        ".poly-price__previous .andes-money-amount, "
+        ".andes-money-amount--previous, [class*='previous'] .andes-money-amount"
+    )
+    original_price = _amount_node(old_node)
+    if original_price is None:
+        old_match = re.search(r"(?:De|Antes)\s+R\$\s*[\d.]+(?:,\d{2})?", card_text, re.I)
+        original_price = _brl(old_match.group(0)) if old_match else None
+
+    coupon_code, coupon_info, coupon_price = _coupon_details(card_text)
+    discount = _discount_text(card_text)
+    if discount is None and original_price and original_price > price:
+        discount = round((original_price - price) / original_price * 100, 2)
+
+    image_node = card.select_one("img")
+    image = ""
+    if image_node:
+        image = _plain(
+            image_node.get("src")
+            or image_node.get("data-src")
+            or image_node.get("data-lazy")
+            or image_node.get("data-original"),
+            2048,
+        )
+    seller_node = card.select_one(
+        ".poly-component__seller, .ui-search-official-store-label, "
+        ".poly-component__seller-name, [class*='seller']"
+    )
+    seller = _plain(seller_node.get_text(" ", strip=True), 100) if seller_node else ""
+    rating_match = re.search(r"\b([0-5][,.]\d)\b", card_text)
+    rating = None
+    if rating_match:
+        try:
+            rating = float(rating_match.group(1).replace(",", "."))
+        except ValueError:
+            rating = None
+
+    return {
+        "title": title,
+        "price": price,
+        "original_price": original_price,
+        "coupon_price": coupon_price,
+        "coupon_code": coupon_code,
+        "coupon_info": coupon_info,
+        "discount_percent": discount,
+        "source": "Mercado Livre",
+        "url": href,
+        "image_url": image,
+        "delivery": "",
+        "free_shipping": _free_shipping(card_text),
+        "shipping_text": "Frete grátis" if _free_shipping(card_text) else "",
+        "installment_text": _installment_text(card_text),
+        "rating": rating,
+        "reviews": None,
+        "seller": seller,
+        "second_hand_condition": "",
+        "source_search_url": source_url,
+    }
+
+
+def _ml_search_diagnostic(response: requests.Response, soup: BeautifulSoup) -> str:
+    title_node = soup.select_one("title")
+    page_title = _plain(title_node.get_text(" ", strip=True) if title_node else "", 140)
+    page_text = _plain(soup.get_text(" ", strip=True), 1200)
+    lower = (response.text + " " + page_text).lower()
+
+    challenge_markers = (
+        "captcha", "robot", "robô", "verifique se você é humano",
+        "verify you are human", "acesso negado", "access denied",
+        "unusual traffic", "security check", "validar sua identidade",
+    )
+    if any(marker in lower for marker in challenge_markers):
+        state = "A página retornada parece ser uma verificação de segurança/antirobô."
+    elif len(response.text) < 1200:
+        state = "A resposta HTML é muito curta para conter uma listagem de produtos."
+    else:
+        state = "A página não expôs cartões nem dados Product em JSON-LD reconhecíveis."
+    anchor_count = len(soup.select("a[href]"))
+    product_path_count = len(soup.select('a[href*="/p/MLB"], a[href*="MLB-"], a[href*="/up/"]'))
+    return (
+        f"{state} Diagnóstico: HTTP {response.status_code}; URL final {response.url}; "
+        f"título “{page_title or 'sem título'}”; {len(response.text)} caracteres; "
+        f"{anchor_count} links e {product_path_count} links com formato de produto."
+    )
+
+
 def _mercado_livre_search(keyword: str) -> list[dict]:
-    """Read product cards from Mercado Livre's own search-result pages."""
+    """Read live offer cards and structured product data from Mercado Livre pages."""
     slug = _slug(keyword)
     if not slug:
         return []
+
     results: list[dict] = []
     seen: set[str] = set()
+    last_diagnostic = ""
 
-    # A list page contains up to roughly 48 cards. Continue once to improve coverage.
-    for offset in (0, 49):
-        path = slug if offset == 0 else f"{slug}_Desde_{offset}_NoIndex_True"
-        search_url = "https://lista.mercadolivre.com.br/" + path
-        response = _direct_get(search_url, referer="https://www.mercadolivre.com.br/")
-        soup = BeautifulSoup(response.text, "html.parser")
-        links = soup.select("a.poly-component__title")
-        if not links and offset == 0:
-            # Older/alternate listing markup. Keep the same strict host validation.
-            links = soup.select("a.ui-search-link[href], a.ui-search-item__group__element[href]")
-        if not links:
-            body_text = _plain(soup.get_text(" ", strip=True), 1200).lower()
-            if any(term in body_text for term in ("não encontramos", "nao encontramos", "nenhum resultado")):
+    # The legacy list.mercadolivre URL remains the first route. If its markup
+    # changes, retry the current www search route before reporting a parser error.
+    search_routes = (
+        ("https://lista.mercadolivre.com.br/" + slug, "https://www.mercadolivre.com.br/"),
+        ("https://www.mercadolivre.com.br/jm/search", "https://www.mercadolivre.com.br/"),
+    )
+
+    for search_url, referer in search_routes:
+        pages = []
+        if search_url.endswith("/jm/search"):
+            pages.append((search_url, {"as_word": keyword}))
+        else:
+            pages.append((search_url, None))
+            pages.append((search_url + "_Desde_49_NoIndex_True", None))
+
+        route_had_listing = False
+        for page_url, params in pages:
+            response = _direct_get(page_url, params=params, referer=referer)
+            soup = BeautifulSoup(response.text, "html.parser")
+
+            page_offers = _ml_json_offers(soup, response.url)
+            for offer in page_offers:
+                key = offer["url"].split("#", 1)[0].split("?", 1)[0].rstrip("/")
+                if key not in seen:
+                    seen.add(key)
+                    results.append(offer)
+
+            links = soup.select(
+                "a.poly-component__title, a.ui-search-link[href], "
+                "a.ui-search-item__group__element[href], "
+                "a[href*='/p/MLB'], a[href*='MLB-'], a[href*='/up/']"
+            )
+            if not links:
+                # Last-resort discovery: product links are not always decorated
+                # with stable CSS classes, so inspect all anchors by URL pattern.
+                links = [
+                    link for link in soup.select("a[href]")
+                    if re.search(r"(?:/p/MLB\d{5,}|MLB-\d{5,}|/up/MLB[A-Z0-9]+)", str(link.get("href") or ""), re.I)
+                ]
+
+            for link in links:
+                offer = _ml_card_offer(link, response.url)
+                if not offer:
+                    continue
+                key = offer["url"].split("#", 1)[0].split("?", 1)[0].rstrip("/")
+                if key in seen:
+                    continue
+                seen.add(key)
+                results.append(offer)
+                route_had_listing = True
+
+            if not links and not page_offers:
+                last_diagnostic = _ml_search_diagnostic(response, soup)
+                continue
+            route_had_listing = True
+            if search_url.endswith("/jm/search") or len(results) >= PAGE_LIMIT:
                 break
-            if offset == 0:
-                raise RuntimeError(
-                    "A página do Mercado Livre abriu, mas o Radar não reconheceu os cards de produtos. "
-                    "A estrutura da busca pode ter mudado."
-                )
-            break
 
-        for title_link in links:
-            href = urljoin(response.url, str(title_link.get("href") or "").strip())
-            if not _valid_offer_url("mercado_livre", href):
-                continue
-            title = _plain(title_link.get("title") or title_link.get_text(" ", strip=True), 300)
-            if len(title) < 3:
-                continue
+        if results:
+            return results[:PAGE_LIMIT]
+        if route_had_listing:
+            # The page has product records but could not provide a safe price/url pair.
+            continue
 
-            card = title_link
-            for parent in title_link.parents:
-                classes = parent.get("class") or []
-                if any("poly-card" in str(cls) or "ui-search-result" in str(cls) for cls in classes):
-                    card = parent
-                    break
-            card_text = _plain(card.get_text(" ", strip=True), 1800)
-            if re.search(r"\b(usado|usada|seminovo|seminova|recondicionado|recondicionada|refurbished|renewed)\b", title + " " + card_text, re.I):
-                continue
-
-            current_node = card.select_one(".poly-price__current .andes-money-amount")
-            if not current_node:
-                price_nodes = card.select("span.andes-money-amount")
-                current_node = next(
-                    (node for node in price_nodes if "previous" not in " ".join(node.get("class") or [])),
-                    None,
-                )
-            price = _amount_node(current_node)
-            if price is None:
-                # Use the product-card price text, never the installment amount.
-                price_match = re.search(r"R\$\s*[\d.]+(?:,\d{2})?", card_text)
-                price = _brl(price_match.group(0)) if price_match else None
-            if price is None:
-                continue
-
-            old_node = card.select_one(".poly-price__previous .andes-money-amount, .andes-money-amount--previous")
-            original_price = _amount_node(old_node)
-            if original_price is None:
-                old_match = re.search(r"(?:De|Antes)\s+R\$\s*[\d.]+(?:,\d{2})?", card_text, re.I)
-                original_price = _brl(old_match.group(0)) if old_match else None
-
-            coupon_code, coupon_info, coupon_price = _coupon_details(card_text)
-            discount = _discount_text(card_text)
-            if discount is None and original_price and original_price > price:
-                discount = round((original_price - price) / original_price * 100, 2)
-
-            image_node = card.select_one("img.poly-component__picture, img.ui-search-result-image__element, img")
-            image = ""
-            if image_node:
-                image = _plain(
-                    image_node.get("src") or image_node.get("data-src") or image_node.get("data-original"),
-                    2048,
-                )
-            seller_node = card.select_one(".poly-component__seller, .ui-search-official-store-label, .poly-component__seller-name")
-            seller = _plain(seller_node.get_text(" ", strip=True), 100) if seller_node else ""
-            rating_match = re.search(r"\b([0-5][,.]\d)\b", card_text)
-            rating = None
-            if rating_match:
-                try:
-                    rating = float(rating_match.group(1).replace(",", "."))
-                except ValueError:
-                    rating = None
-
-            key = href.split("#", 1)[0].split("?", 1)[0].rstrip("/")
-            if key in seen:
-                continue
-            seen.add(key)
-            results.append({
-                "title": title,
-                "price": price,
-                "original_price": original_price,
-                "coupon_price": coupon_price,
-                "coupon_code": coupon_code,
-                "coupon_info": coupon_info,
-                "discount_percent": discount,
-                "source": "Mercado Livre",
-                "url": href,
-                "image_url": image,
-                "delivery": "",
-                "free_shipping": _free_shipping(card_text),
-                "shipping_text": "Frete grátis" if _free_shipping(card_text) else "",
-                "installment_text": _installment_text(card_text),
-                "rating": rating,
-                "reviews": None,
-                "seller": seller,
-                "second_hand_condition": "",
-                "source_search_url": response.url,
-            })
-        if offset and len(results) >= PAGE_LIMIT * 2:
-            break
-    return results
+    if last_diagnostic:
+        raise RuntimeError(
+            "O Mercado Livre respondeu, mas o Radar não conseguiu extrair ofertas com preço e link. "
+            + last_diagnostic
+        )
+    return results[:PAGE_LIMIT]
 
 
 def _amazon_search(keyword: str) -> list[dict]:
