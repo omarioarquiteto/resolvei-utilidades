@@ -14,7 +14,7 @@ from fastapi import APIRouter, Header, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from deal_radar_sources import search_store_offers
-from monitor_precos_api import _db, _iso, _now, _price, _text, _uid
+from monitor_precos_api import _db, _iso, _now, _price, _score, _text, _uid
 
 router = APIRouter(prefix="/api/deal-radar", tags=["radar-ofertas"])
 
