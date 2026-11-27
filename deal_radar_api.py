@@ -187,8 +187,16 @@ def _qualifies(offer: dict, monitor: dict, previous: dict | None = None) -> tupl
     discount = None
     if original is not None and price is not None and original > price:
         discount = round((original - price) / original * 100, 2)
-    elif prior is not None and price is not None and prior > price:
-        discount = round((prior - price) / prior * 100, 2)
+    else:
+        reported_discount = offer.get("discount_percent")
+        try:
+            reported_discount = float(str(reported_discount).replace("%", "").replace(",", "."))
+        except (TypeError, ValueError):
+            reported_discount = None
+        if reported_discount is not None and 0 < reported_discount <= 99:
+            discount = round(reported_discount, 2)
+        elif prior is not None and price is not None and prior > price:
+            discount = round((prior - price) / prior * 100, 2)
     max_price = _price(monitor.get("maxPrice"))
     if price is None or (max_price is not None and price > max_price):
         return discount, False
@@ -208,7 +216,6 @@ def _telegram_post(uid: str, offer: dict, monitor: dict) -> dict:
     title = html.escape(_text(offer.get("title"), 220) or "Oferta encontrada")
     source = html.escape(_text(offer.get("source"), 80) or monitor.get("storeLabel") or "Loja")
     price = _price(offer.get("listedPrice")) or _price(offer.get("currentPrice"))
-    effective_price = _price(offer.get("effectivePrice") or offer.get("currentPrice"))
     old_price = _price(offer.get("originalPrice"))
     discount = offer.get("discountPercent")
     lines = ["<b>" + title + "</b>"]
