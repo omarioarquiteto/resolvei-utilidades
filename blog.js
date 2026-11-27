@@ -138,10 +138,17 @@
       const description = $("meta[name='description']");
       if (description) description.setAttribute("content", post.seoDescription || post.excerpt || post.title);
       const image = safeImage(post.coverImage);
-      const imageBlock = image ? '<img class="blog-article-cover" src="' + esc(image) + '" alt="' + esc(post.title) + '">' : "";
+      const imageBlock = image
+        ? '<figure class="blog-article-cover-frame"><img class="blog-article-cover" src="' + esc(image) + '" alt="' + esc(post.title) + '"></figure>'
+        : "";
       const productUrl = safeImage(post.productLink);
-      const productCta = productUrl
-        ? '<aside class="blog-product-cta"><div><span>PRODUTO DO REVIEW</span><strong>Consulte preço e disponibilidade</strong></div><a href="' + esc(productUrl) + '" target="_blank" rel="sponsored nofollow noopener">Ver oferta →</a></aside>'
+      const productReference = productUrl
+        ? '<aside class="blog-product-reference">' +
+            '<span class="blog-product-reference-label">REFERÊNCIA DO PRODUTO</span>' +
+            '<p>Página do modelo mencionado neste review, para consulta de características e informações complementares.</p>' +
+            '<a href="' + esc(productUrl) + '" target="_blank" rel="sponsored nofollow noopener">Consultar página do produto <span aria-hidden="true">↗</span></a>' +
+            '<small>Link externo que pode gerar comissão ao Resolvei, sem custo adicional. Isso não altera o conteúdo da análise.</small>' +
+          '</aside>'
         : "";
       root.innerHTML =
         '<article class="blog-article">' +
@@ -150,8 +157,8 @@
             '<h1>' + esc(post.title) + '</h1><p class="blog-article-excerpt">' + esc(post.excerpt || "") + '</p>' +
             '<div class="blog-article-byline"><span>Por Equipe Resolvei</span><time>' + esc(dateLabel(post.publishedAt || post.createdAt)) + '</time></div></header>' +
           imageBlock +
-          productCta +
           '<div class="blog-article-body">' + (post.bodyHtml || "") + '</div>' +
+          productReference +
           '<div class="blog-article-bottom"><a href="/">← Voltar aos reviews</a><span>RESOLVEI · REVIEWS</span></div>' +
         '</article>';
     } catch (error) {
@@ -174,7 +181,7 @@
             '<label class="blog-field"><span>Categoria</span><select id="blogCategory"><option>Celulares</option><option>Informática</option><option>Eletrodomésticos</option><option>Casa inteligente</option><option>Áudio e vídeo</option><option>Games</option><option>Guias de compra</option><option>Outros produtos</option></select></label>' +
             '<label class="blog-field blog-field-full"><span>Resumo / linha fina</span><textarea id="blogExcerpt" maxlength="320" rows="3" placeholder="Apresente em poucas linhas o que o leitor vai encontrar neste review."></textarea></label>' +
             '<div class="blog-field blog-field-full"><span>Imagem de capa</span><div class="blog-cover-upload"><input id="blogCoverImage" type="url" placeholder="URL da imagem de capa"><input id="blogCoverFile" type="file" accept="image/jpeg,image/png,image/webp,image/gif" hidden><button class="btn" type="button" id="blogCoverUpload">Enviar imagem</button></div><small>Use uma imagem horizontal, de preferência com boa resolução.</small></div>' +
-            '<label class="blog-field blog-field-full"><span>Link para consultar ou comprar o produto (opcional)</span><input id="blogProductLink" type="url" placeholder="Cole seu link de afiliado do Mercado Livre ou de outra loja"><small>Quando preenchido, será exibido um botão no artigo para o leitor consultar a oferta. O Resolvei não gera links de afiliado automaticamente.</small></label>' +
+            '<label class="blog-field blog-field-full"><span>Página de referência do produto (opcional)</span><input id="blogProductLink" type="url" placeholder="Cole a página do modelo analisado"><small>Use o endereço da página do produto para consulta de características e informações complementares. Ele aparecerá discretamente ao final do artigo, sem chamada de compra.</small></label>' +
             '<div class="blog-field blog-field-full"><span>Conteúdo do artigo</span>' +
               '<div class="blog-editor-toolbar" role="toolbar" aria-label="Formatação do artigo">' +
                 '<button type="button" data-blog-command="bold" title="Negrito"><b>B</b></button><button type="button" data-blog-command="italic" title="Itálico"><i>I</i></button><button type="button" data-blog-command="underline" title="Sublinhado"><u>U</u></button>' +
