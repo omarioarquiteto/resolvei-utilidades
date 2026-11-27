@@ -95,12 +95,15 @@ app.include_router(altos_lucros_router)
 
 from monitor_precos_api import router as monitor_precos_router, start_price_monitor_scheduler
 app.include_router(monitor_precos_router)
+from deal_radar_api import router as deal_radar_router, start_deal_radar_scheduler
+app.include_router(deal_radar_router)
 from tabela_fipe_api import router as tabela_fipe_router
 app.include_router(tabela_fipe_router)
 
 @app.on_event("startup")
 async def _start_monitor_precos_scheduler():
     start_price_monitor_scheduler()
+    start_deal_radar_scheduler()
 
 
 # O frontend atualmente é servido pelo próprio FastAPI, portanto as requisições

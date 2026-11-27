@@ -15,6 +15,7 @@ jobs:
       - name: Check JavaScript syntax
         run: |
           node --check monitor-precos.js
+          node --check radar-ofertas.js
           node --check extension/monitor-precos/popup.js
           node --check extension/monitor-precos/login.js
           node --check extension/monitor-precos/background.js
@@ -22,4 +23,4 @@ jobs:
       - name: Validate extension manifest
         run: |
           python -c "import json; json.load(open('extension/monitor-precos/manifest.json', encoding='utf-8'))"
-          python -m py_compile monitor_precos_api.py
+          python -m py_compile monitor_precos_api.py deal_radar_api.py

@@ -518,7 +518,7 @@ def _extract_conditions(text):
     }
 
 
-def _shopping(query):
+def _shopping(query, fresh=False):
     key = os.getenv("SERPAPI_KEY", "").strip()
     if not key:
         raise HTTPException(503, "A comparação entre lojas requer SERPAPI_KEY nas variáveis de ambiente do Render. A extensão continuará mostrando a base comunitária.")
@@ -527,7 +527,7 @@ def _shopping(query):
         raise HTTPException(422, "Informe o nome, marca ou modelo do produto.")
     try:
         response = requests.get("https://serpapi.com/search.json",
-            params={"engine":"google_shopping","q":query,"gl":"br","hl":"pt-br","api_key":key},
+            params={"engine":"google_shopping","q":query,"gl":"br","hl":"pt-br","api_key":key, **({"no_cache":"true"} if fresh else {})},
             timeout=(5, 20), headers={"User-Agent":"ResolveiMonitorPrecos/2.0"})
     except requests.RequestException as exc:
         raise HTTPException(502, "Não foi possível consultar ofertas agora. Tente novamente mais tarde.") from exc
@@ -558,14 +558,19 @@ def _shopping(query):
             _flatten_offer_text(row.get("offers")), _flatten_offer_text(row.get("tags")),
         ]))
         conditions = _extract_conditions(terms)
+        raw_original = row.get("extracted_old_price") or row.get("old_price") or row.get("original_price")
+        if isinstance(raw_original, dict):
+            raw_original = raw_original.get("extracted_price") or raw_original.get("value") or raw_original.get("price")
+        original_price = _price(raw_original)
         delivery = _text(row.get("delivery"), 180)
         if delivery and re.search(r"gr[aá]tis|gratis|gratuit", delivery, re.I):
             conditions["free_shipping"] = True
             conditions["shipping_text"] = delivery
         results.append({
-            "title":_text(row.get("title"), 300), "price":amount, "source":source,
+            "title":_text(row.get("title"), 300), "price":amount, "original_price":original_price, "source":source,
             "url":link[:2048], "image_url":_text(row.get("thumbnail"), 2048),
             "delivery":delivery, "rating":row.get("rating"), "reviews":row.get("reviews"),
+            "second_hand_condition":_text(row.get("second_hand_condition"), 80),
             **conditions,
         })
     return sorted(results, key=lambda x:x["price"])[:20]
