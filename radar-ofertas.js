@@ -53,8 +53,8 @@ function shell() {
           '<div id="dor-telegram-state" class="dor-telegram-state">Telegram ainda não conectado.</div>' +
           '<form id="dor-telegram-form">' +
             '<div class="dor-field"><label for="dor-bot-token">Token do bot (BotFather)</label><input id="dor-bot-token" type="password" autocomplete="new-password" placeholder="Cole o token do bot" required></div>' +
-            '<div class="dor-field"><label for="dor-channel">Canal público do Telegram</label><input id="dor-channel" maxlength="80" placeholder="@meucanaldeofertas" required></div>' +
-            '<div class="dor-telegram-note">Adicione o bot ao canal como administrador e permita publicar mensagens. O token é criptografado no servidor e não é exibido novamente.</div>' +
+            '<div class="dor-field"><label for="dor-channel">Canal público do Telegram</label><input id="dor-channel" maxlength="80" placeholder="@ResolveiOfertas ou -1001234567890" required></div>' +
+            '<div class="dor-telegram-note">Use o @username do canal sem espaços (ex.: @ResolveiOfertas) ou cole um link t.me/username. Para canal privado, informe o ID numérico iniciado por -100. O bot precisa ser administrador com permissão para publicar mensagens. O token é criptografado no servidor e não é exibido novamente.</div>' +
             '<div class="dor-actions"><button type="submit" class="dor-btn primary" id="dor-connect">Conectar canal</button><button type="button" class="dor-btn" id="dor-test-telegram" disabled>Enviar teste</button><button type="button" class="dor-btn danger" id="dor-disconnect" hidden>Desconectar</button></div>' +
           '</form>' +
         '</section>' +
@@ -167,7 +167,7 @@ function loadTelegram() {
     var connected = !!data.connected;
     document.getElementById("dor-channel").value = data.channelUsername || "";
     document.getElementById("dor-telegram-state").innerHTML = connected
-      ? '<b class="ok">Conectado</b> · Bot @' + esc(String(data.botUsername || "").replace(/^@/, "")) + ' · Canal ' + esc(data.channelUsername || "")
+      ? '<b class="ok">Conectado</b> · Bot @' + esc(String(data.botUsername || "").replace(/^@/, "")) + ' · Canal ' + esc(data.channelTitle || data.channelUsername || "")
       : 'Telegram ainda não conectado. Crie um bot no <b>@BotFather</b> e informe o canal público.';
     document.getElementById("dor-test-telegram").disabled = !connected;
     document.getElementById("dor-disconnect").hidden = !connected;
