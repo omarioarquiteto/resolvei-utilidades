@@ -301,13 +301,14 @@ function renderOpportunities() {
     var price = o.currentPrice == null ? "—" : money(o.currentPrice);
     var image = o.image_url ? '<img src="' + esc(o.image_url) + '" alt="" loading="lazy" referrerpolicy="no-referrer">' : '<div class="dor-product-placeholder">🛍️</div>';
     var discount = o.discountPercent != null ? '<span class="dor-discount">' + Number(o.discountPercent).toLocaleString("pt-BR") + '% OFF</span>' : "";
-    var old = o.originalPrice != null && Number(o.originalPrice) > Number(o.currentPrice) ? '<del>' + money(o.originalPrice) + '</del>' : "";
+    var couponApplied = o.couponPrice && Number(o.couponPrice) < Number(o.listedPrice || o.currentPrice);
+    var oldReferencePrice = couponApplied ? Number(o.listedPrice) : Number(o.originalPrice);
+    var old = oldReferencePrice > Number(o.currentPrice) ? '<del>' + money(oldReferencePrice) + '</del>' : "";
     var hasCoupon = !!(o.couponCode || o.couponInfo || (o.couponPrice && Number(o.couponPrice) < Number(o.listedPrice || o.currentPrice)));
     var couponMarkup = hasCoupon
       ? '<div class="dor-coupon-box"><span>🏷 ' + (o.couponCode ? 'CUPOM DISPONÍVEL' : 'CONDIÇÃO PROMOCIONAL') + '</span>' +
         (o.couponCode ? '<b>' + esc(o.couponCode) + '</b>' : '') +
         '<small>' + esc(o.couponInfo || 'Confira as condições e a elegibilidade do cupom na página da loja.') + '</small>' +
-        (o.couponPrice && Number(o.couponPrice) < Number(o.listedPrice || o.currentPrice) ? '<strong>Preço com cupom: ' + money(o.couponPrice) + '</strong>' : '') +
         '</div>' : "";
     var offerConditions = [];
     if (o.freeShipping) offerConditions.push('<span>🚚 Frete grátis</span>');
