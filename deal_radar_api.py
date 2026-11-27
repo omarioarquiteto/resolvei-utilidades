@@ -257,7 +257,7 @@ def _scan_monitor(uid: str, monitor_ref, monitor: dict) -> dict:
     candidates: dict[str, dict] = {}
     for keyword in keywords:
         query = _text(keyword + " " + STORES[store], 180)
-        for offer in _shopping(query):
+        for offer in _shopping(query, fresh=True):
             if not _store_match(store, offer):
                 continue
             title = _text(offer.get("title"), 300)
