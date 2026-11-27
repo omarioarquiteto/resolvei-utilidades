@@ -60,6 +60,20 @@ def _normal(value: str) -> str:
     return unicodedata.normalize("NFKD", str(value or "")).encode("ascii", "ignore").decode().lower()
 
 
+def _is_direct_store_url(store: str, value: str) -> bool:
+    parsed = urlparse(str(value or "").strip())
+    if parsed.scheme != "https" or not parsed.hostname:
+        return False
+    host = parsed.hostname.lower().removeprefix("www.")
+    domains = {
+        "mercado_livre": ("mercadolivre.com.br", "mercadolibre.com"),
+        "amazon": ("amazon.com.br",),
+        "shopee": ("shopee.com.br",),
+        "magalu": ("magazineluiza.com.br",),
+    }.get(str(store or "").lower(), ())
+    return any(host == domain or host.endswith("." + domain) for domain in domains)
+
+
 def _clean_monitor(req: MonitorInput) -> dict:
     store = str(req.store or "").strip().lower()
     if store not in STORES:
@@ -525,13 +539,21 @@ def list_opportunities(monitor_id: str, authorization: str | None = Header(defau
     monitor_ref = _monitors(uid).document(monitor_id)
     if not monitor_ref.get().exists:
         raise HTTPException(404, "Monitor não encontrado.")
+    monitor = monitor_ref.get().to_dict() or {}
+    store = str(monitor.get("store") or "mercado_livre")
     rows = []
+    hidden_legacy = 0
     for snapshot in monitor_ref.collection("opportunities").stream():
         row = snapshot.to_dict() or {}
+        if not _is_direct_store_url(store, row.get("url") or ""):
+            # Keep historical Firestore data intact, but never present Google/search
+            # result pages as if they were direct marketplace product offers.
+            hidden_legacy += 1
+            continue
         row["id"] = snapshot.id
         rows.append(row)
     rows.sort(key=lambda item: str(item.get("updatedAt") or ""), reverse=True)
-    return {"opportunities": rows[:100]}
+    return {"opportunities": rows[:100], "legacySearchLinksHidden": hidden_legacy}
 
 
 @router.post("/monitors/{monitor_id}/opportunities/{opportunity_id}/affiliate")
