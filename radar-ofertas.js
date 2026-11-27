@@ -381,7 +381,7 @@ function toggleMonitor(id) {
   };
   api("/monitors/" + encodeURIComponent(id), { method:"PUT", body:JSON.stringify(body) }).then(function () {
     notice(body.active ? "Monitoramento ativado." : "Monitoramento pausado.", "success");
-    return loadMonitors();
+    return loadMonitors().then(loadAllOpportunities);
   }).catch(function (e) { notice(e.message, "error"); });
 }
 function deleteMonitor(id) {
@@ -390,7 +390,7 @@ function deleteMonitor(id) {
   api("/monitors/" + encodeURIComponent(id), { method:"DELETE" }).then(function () {
     if (activeMonitorFilter === id) activeMonitorFilter = "all";
     notice("Monitoramento excluído.", "success");
-    return loadMonitors();
+    return loadMonitors().then(loadAllOpportunities);
   }).catch(function (e) { notice(e.message, "error"); });
 }
 function connectTelegram(e) {
