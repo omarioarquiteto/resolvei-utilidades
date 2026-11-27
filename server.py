@@ -95,6 +95,8 @@ app.include_router(altos_lucros_router)
 
 from monitor_precos_api import router as monitor_precos_router, start_price_monitor_scheduler
 app.include_router(monitor_precos_router)
+from deal_radar_api import router as deal_radar_router
+app.include_router(deal_radar_router)
 from tabela_fipe_api import router as tabela_fipe_router
 app.include_router(tabela_fipe_router)
 
