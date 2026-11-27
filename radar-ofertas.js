@@ -54,7 +54,7 @@ function shell() {
           '<form id="dor-telegram-form">' +
             '<div class="dor-field"><label for="dor-bot-token">Token do bot (BotFather)</label><input id="dor-bot-token" type="password" autocomplete="new-password" placeholder="Cole o token do bot" required></div>' +
             '<div class="dor-field"><label for="dor-channel">Canal público do Telegram</label><input id="dor-channel" maxlength="80" placeholder="@ResolveiOfertas ou -1001234567890" required></div>' +
-            '<div class="dor-telegram-note">Use o @username do canal sem espaços (ex.: @ResolveiOfertas) ou cole um link t.me/username. Para canal privado, informe o ID numérico iniciado por -100. O bot precisa ser administrador com permissão para publicar mensagens. Ao conectar, será enviada uma mensagem de confirmação ao canal. O token é criptografado no servidor e não é exibido novamente.</div>' +
+            '<div class="dor-telegram-note">Use o @username do canal sem espaços (ex.: @ResolveiOfertas) ou cole um link t.me/username. Para canal privado, informe o ID numérico iniciado por -100. O bot precisa ser administrador com permissão para publicar mensagens. Ao conectar, será enviada uma mensagem de confirmação ao canal. Em caso de recusa, o Resolvei exibirá o @ do bot validado, o canal identificado e a resposta original do Telegram. O token é criptografado no servidor e não é exibido novamente.</div>' +
             '<div class="dor-actions"><button type="submit" class="dor-btn primary" id="dor-connect">Conectar canal</button><button type="button" class="dor-btn" id="dor-test-telegram" disabled>Enviar teste</button><button type="button" class="dor-btn danger" id="dor-disconnect" hidden>Desconectar</button></div>' +
           '</form>' +
         '</section>' +
