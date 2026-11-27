@@ -1880,7 +1880,7 @@ def blog_article_html(slug: str):
         canonical = "https://resolvei.com.br/blog/" + quote(slug, safe="")
         page = re.sub(r"<title>.*?</title>", f"<title>{title} | Reviews Resolvei</title>", page, count=1, flags=re.I | re.S)
         page = re.sub(
-            r'<meta\\s+name=["\\']description["\\'][^>]*>',
+            r"<meta\s+name=['\"]description['\"][^>]*>",
             f'<meta name="description" content="{description}">',
             page,
             count=1,
@@ -1921,7 +1921,7 @@ def blog_sitemap_xml():
                     "<url><loc>https://resolvei.com.br/blog/" + slug + "</loc>" + lastmod + "</url>"
                 )
             if entries and "</urlset>" in content:
-                content = content.replace("</urlset>", "\\n".join(entries) + "\\n</urlset>", 1)
+                content = content.replace("</urlset>", "\n".join(entries) + "\n</urlset>", 1)
         except Exception:
             pass
     return Response(content=content, media_type="application/xml")
