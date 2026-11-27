@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 import re
 import uuid
@@ -12,6 +13,7 @@ from fastapi import APIRouter, File, Header, HTTPException, UploadFile
 from pydantic import BaseModel, Field
 
 router = APIRouter(prefix="/api/blog", tags=["blog"])
+logger = logging.getLogger(__name__)
 
 BLOG_ADMIN_UID = os.getenv("BLOG_ADMIN_UID", "").strip()
 BLOG_ADMIN_EMAIL = os.getenv("BLOG_ADMIN_EMAIL", "").strip().lower()
@@ -336,4 +338,36 @@ async def blog_upload_image(
     except HTTPException:
         raise
     except Exception as exc:
-        raise HTTPException(status_code=503, detail="Falha ao enviar a imagem. Verifique o bucket e as permissões de Storage da conta de serviço do Firebase.") from exc
+        error_code = getattr(exc, "code", None)
+        response = getattr(exc, "response", None)
+        if not isinstance(error_code, int) and response is not None:
+            error_code = getattr(response, "status_code", None)
+        error_text = str(exc).lower()
+        logger.exception(
+            "Falha no upload do Blog Resolvei para o bucket %s (HTTP %s)",
+            FIREBASE_STORAGE_BUCKET or "<não configurado>",
+            error_code or "desconhecido",
+        )
+        if error_code == 402 or "billing account" in error_text or "spark pricing plan" in error_text:
+            detail = (
+                "O Firebase recusou o Storage por cobrança/plano. O Cloud Storage for Firebase "
+                "exige o plano Blaze; confira também se a conta de faturamento está ativa."
+            )
+        elif error_code == 404 or "bucket" in error_text and ("not found" in error_text or "does not exist" in error_text):
+            detail = (
+                "O bucket informado não foi encontrado. Confira em Firebase Console → Storage → Files "
+                "o nome exato do bucket e compare com FIREBASE_STORAGE_BUCKET no Render."
+            )
+        elif error_code == 403:
+            detail = (
+                "O Firebase/Google Cloud recusou a permissão (HTTP 403). Confira se o projeto está no plano "
+                "Blaze com faturamento ativo e se a conta de serviço do Render tem permissão "
+                "storage.objects.create no bucket. O log do Render contém o motivo técnico retornado pelo Google."
+            )
+        else:
+            detail = (
+                "Falha no Firebase Storage"
+                + (f" (HTTP {error_code})" if error_code else f" ({type(exc).__name__})")
+                + ". Consulte os logs do serviço Resolvei no Render para ver o motivo técnico."
+            )
+        raise HTTPException(status_code=503, detail=detail) from exc
