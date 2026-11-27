@@ -47,6 +47,7 @@ class BlogPostInput(BaseModel):
     category: str = Field(default="Outros produtos", max_length=60)
     excerpt: str = Field(default="", max_length=320)
     cover_image: str = Field(default="", alias="coverImage", max_length=2048)
+    product_link: str = Field(default="", alias="productLink", max_length=2048)
     body_html: str = Field(default="", alias="bodyHtml", max_length=200000)
     tags: list[str] = Field(default_factory=list)
     seo_title: str = Field(default="", alias="seoTitle", max_length=160)
@@ -151,6 +152,11 @@ def _validate_payload(req: BlogPostInput) -> dict[str, Any]:
         parsed = urlparse(cover)
         if parsed.scheme not in {"http", "https"} or not parsed.netloc:
             raise HTTPException(status_code=400, detail="A imagem de capa deve usar um endereço HTTP ou HTTPS.")
+    product_link = req.product_link.strip()
+    if product_link:
+        parsed = urlparse(product_link)
+        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+            raise HTTPException(status_code=400, detail="O link do produto deve usar um endereço HTTP ou HTTPS.")
     body = _clean_html(req.body_html)
     if not re.sub(r"<[^>]+>", "", body).strip():
         raise HTTPException(status_code=400, detail="Escreva o conteúdo do review antes de salvar.")
@@ -165,6 +171,7 @@ def _validate_payload(req: BlogPostInput) -> dict[str, Any]:
         "category": req.category.strip() or "Outros produtos",
         "excerpt": req.excerpt.strip(),
         "coverImage": cover,
+        "productLink": product_link,
         "bodyHtml": body,
         "tags": tags,
         "seoTitle": req.seo_title.strip(),
