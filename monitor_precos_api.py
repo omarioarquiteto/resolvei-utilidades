@@ -558,12 +558,16 @@ def _shopping(query):
             _flatten_offer_text(row.get("offers")), _flatten_offer_text(row.get("tags")),
         ]))
         conditions = _extract_conditions(terms)
+        raw_original = row.get("extracted_old_price") or row.get("old_price") or row.get("original_price")
+        if isinstance(raw_original, dict):
+            raw_original = raw_original.get("extracted_price") or raw_original.get("value") or raw_original.get("price")
+        original_price = _price(raw_original)
         delivery = _text(row.get("delivery"), 180)
         if delivery and re.search(r"gr[aá]tis|gratis|gratuit", delivery, re.I):
             conditions["free_shipping"] = True
             conditions["shipping_text"] = delivery
         results.append({
-            "title":_text(row.get("title"), 300), "price":amount, "source":source,
+            "title":_text(row.get("title"), 300), "price":amount, "original_price":original_price, "source":source,
             "url":link[:2048], "image_url":_text(row.get("thumbnail"), 2048),
             "delivery":delivery, "rating":row.get("rating"), "reviews":row.get("reviews"),
             **conditions,
