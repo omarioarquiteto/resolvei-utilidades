@@ -575,15 +575,24 @@ def connect_telegram(req: TelegramConnectInput, authorization: str | None = Head
     chat = _telegram_call(token, "getChat", {"chat_id": channel})
     if chat.get("type") != "channel":
         raise HTTPException(422, "O endereço informado existe, mas não corresponde a um canal do Telegram.")
-    member = _telegram_call(token, "getChatMember", {"chat_id": chat.get("id"), "user_id": me.get("id")})
-    status = member.get("status")
-    can_publish = status == "creator" or (status == "administrator" and member.get("can_post_messages") is True)
-    if not can_publish:
-        raise HTTPException(
-            422,
-            "O bot foi encontrado, mas não tem permissão para publicar. "
-            "Adicione-o ao canal como administrador e habilite 'Publicar mensagens'.",
-        )
+    # Não usamos getChatMember aqui: a API do Telegram pode recusar a consulta
+    # com "member list is inaccessible", mesmo quando o bot já é administrador.
+    # A prova confiável da permissão necessária é tentar publicar uma mensagem.
+    try:
+        validation_message = _telegram_call(token, "sendMessage", {
+            "chat_id": chat.get("id"),
+            "text": "✅ Radar de Ofertas Resolvei conectado com sucesso. Esta é a mensagem de confirmação da conexão.",
+        })
+    except HTTPException as exc:
+        detail = str(exc.detail or "")
+        lowered = detail.lower()
+        if "not enough rights" in lowered or "chat not found" in lowered or "bot is not a member" in lowered:
+            raise HTTPException(
+                422,
+                "O Telegram localizou o canal, mas o bot não conseguiu publicar. "
+                "Confirme que ele continua como administrador e que a permissão 'Publicar mensagens' está ativa.",
+            ) from exc
+        raise
     _telegram_ref(uid).set({
         "connected": True,
         "tokenEncrypted": _encrypt_secret(token),
@@ -591,6 +600,7 @@ def connect_telegram(req: TelegramConnectInput, authorization: str | None = Head
         "channelChatId": chat.get("id"),
         "channelTitle": _text(chat.get("title"), 120),
         "botUsername": _text(me.get("username"), 80),
+        "connectionMessageId": validation_message.get("message_id"),
         "connectedAt": _iso(),
         "updatedAt": _iso(),
     }, merge=True)
