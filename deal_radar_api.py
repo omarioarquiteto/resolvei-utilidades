@@ -141,6 +141,7 @@ def _public_telegram_settings(uid: str) -> dict:
     return {
         "connected": bool(data.get("connected")),
         "channelUsername": _text(data.get("channelUsername"), 80),
+        "channelTitle": _text(data.get("channelTitle"), 120),
         "botUsername": _text(data.get("botUsername"), 80),
         "connectedAt": _text(data.get("connectedAt"), 80),
     }
@@ -219,7 +220,7 @@ def _telegram_post(uid: str, offer: dict, monitor: dict) -> dict:
     lines.append("ℹ️ Link de afiliado: podemos receber comissão pela compra, sem custo adicional para você.")
     caption = "\n".join(lines)
     payload = {
-        "chat_id": settings["channelUsername"],
+        "chat_id": settings.get("channelChatId") or settings["channelUsername"],
         "parse_mode": "HTML",
         "reply_markup": {
             "inline_keyboard": [[{"text": "🛒 VER OFERTA", "url": affiliate}]]
@@ -521,6 +522,45 @@ def ignore_opportunity(monitor_id: str, opportunity_id: str,
     return {"ok": True}
 
 
+def _normalize_telegram_channel(value: str) -> str:
+    """Aceita @username público, link t.me/username ou ID numérico de canal privado."""
+    raw = str(value or "").strip()
+    if re.fullmatch(r"-100[0-9]{5,}", raw):
+        return raw
+
+    candidate = raw
+    if candidate.lower().startswith(("t.me/", "telegram.me/")):
+        candidate = "https://" + candidate
+    parsed = urlparse(candidate)
+    if parsed.scheme in {"http", "https"} and (parsed.hostname or "").lower() in {
+        "t.me", "www.t.me", "telegram.me", "www.telegram.me"
+    }:
+        path = (parsed.path or "").strip("/")
+        if not path or path.startswith(("+", "joinchat", "c/")):
+            raise HTTPException(
+                422,
+                "Esse link é de convite ou canal privado. Adicione o bot como administrador e informe o ID numérico do canal (-100...).",
+            )
+        candidate = path.split("/")[0]
+
+    candidate = candidate.strip().lstrip("@")
+    if re.fullmatch(r"[A-Za-z][A-Za-z0-9_]{4,31}", candidate):
+        return "@" + candidate
+
+    if re.search(r"\\s", raw):
+        raise HTTPException(
+            422,
+            "O nome informado contém espaços e parece ser o título do canal, não o @username. "
+            "Use o @username sem espaços (ex.: @ResolveiOfertas), um link t.me/username "
+            "ou o ID numérico -100... de um canal privado.",
+        )
+    raise HTTPException(
+        422,
+        "Informe um @username público válido (5 a 32 caracteres, sem espaços), "
+        "um link t.me/username ou o ID numérico -100... de um canal privado.",
+    )
+
+
 @router.get("/telegram")
 def telegram_status(authorization: str | None = Header(default=None)):
     return _public_telegram_settings(_uid(authorization))
@@ -530,20 +570,26 @@ def telegram_status(authorization: str | None = Header(default=None)):
 def connect_telegram(req: TelegramConnectInput, authorization: str | None = Header(default=None)):
     uid = _uid(authorization)
     token = req.bot_token.strip()
-    channel = req.channel_username.strip()
-    if not re.fullmatch(r"@[A-Za-z0-9_]{5,32}", channel):
-        raise HTTPException(422, "Informe o @username de um canal público do Telegram.")
+    channel = _normalize_telegram_channel(req.channel_username)
     me = _telegram_call(token, "getMe")
     chat = _telegram_call(token, "getChat", {"chat_id": channel})
     if chat.get("type") != "channel":
-        raise HTTPException(422, "O endereço informado não corresponde a um canal público do Telegram.")
-    member = _telegram_call(token, "getChatMember", {"chat_id": channel, "user_id": me.get("id")})
-    if member.get("status") not in {"administrator", "creator"} or member.get("can_post_messages") is False:
-        raise HTTPException(422, "Adicione o bot ao canal como administrador e permita publicar mensagens.")
+        raise HTTPException(422, "O endereço informado existe, mas não corresponde a um canal do Telegram.")
+    member = _telegram_call(token, "getChatMember", {"chat_id": chat.get("id"), "user_id": me.get("id")})
+    status = member.get("status")
+    can_publish = status == "creator" or (status == "administrator" and member.get("can_post_messages") is True)
+    if not can_publish:
+        raise HTTPException(
+            422,
+            "O bot foi encontrado, mas não tem permissão para publicar. "
+            "Adicione-o ao canal como administrador e habilite 'Publicar mensagens'.",
+        )
     _telegram_ref(uid).set({
         "connected": True,
         "tokenEncrypted": _encrypt_secret(token),
         "channelUsername": channel,
+        "channelChatId": chat.get("id"),
+        "channelTitle": _text(chat.get("title"), 120),
         "botUsername": _text(me.get("username"), 80),
         "connectedAt": _iso(),
         "updatedAt": _iso(),
@@ -559,7 +605,7 @@ def test_telegram(authorization: str | None = Header(default=None)):
         raise HTTPException(409, "Conecte primeiro seu bot e canal.")
     token = _decrypt_secret(settings["tokenEncrypted"])
     result = _telegram_call(token, "sendMessage", {
-        "chat_id": settings["channelUsername"],
+        "chat_id": settings.get("channelChatId") or settings["channelUsername"],
         "text": "✅ Conexão do Radar de Ofertas Resolvei confirmada. As publicações de teste estão funcionando.",
     })
     return {"ok": True, "messageId": result.get("message_id")}
