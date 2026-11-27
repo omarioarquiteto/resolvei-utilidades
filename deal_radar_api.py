@@ -207,8 +207,9 @@ def _telegram_post(uid: str, offer: dict, monitor: dict) -> dict:
     token = _decrypt_secret(settings["tokenEncrypted"])
     title = html.escape(_text(offer.get("title"), 220) or "Oferta encontrada")
     source = html.escape(_text(offer.get("source"), 80) or monitor.get("storeLabel") or "Loja")
-    price = _price(offer.get("effectivePrice") or offer.get("currentPrice"))
-    old_price = _price(offer.get("originalPrice")) or _price(offer.get("listedPrice"))
+    price = _price(offer.get("listedPrice")) or _price(offer.get("currentPrice"))
+    effective_price = _price(offer.get("effectivePrice") or offer.get("currentPrice"))
+    old_price = _price(offer.get("originalPrice"))
     discount = offer.get("discountPercent")
     lines = ["<b>" + title + "</b>"]
     if old_price is not None and price is not None and old_price > price:
@@ -226,7 +227,7 @@ def _telegram_post(uid: str, offer: dict, monitor: dict) -> dict:
     elif coupon_info:
         lines.append("🏷 " + coupon_info)
     if coupon_price is not None and listed_price is not None and coupon_price < listed_price:
-        lines.append("💳 <b>Preço com cupom: " + ("R$ {:,.2f}".format(coupon_price).replace(",", "X").replace(".", ",").replace("X", ".")) + "</b>")
+        lines.append("💳 <b>Preço final com cupom: " + ("R$ {:,.2f}".format(coupon_price).replace(",", "X").replace(".", ",").replace("X", ".")) + "</b>")
     installment = html.escape(_text(offer.get("installmentText"), 100))
     if installment:
         lines.append("💳 " + installment)
