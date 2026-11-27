@@ -29,7 +29,7 @@ INTERVALS = (15, 30, 60, 180, 360)
 class MonitorInput(BaseModel):
     title: str = Field(min_length=2, max_length=100)
     store: str = Field(default="mercado_livre", max_length=30)
-    keywords: list[str] = Field(default_factory=list)
+    keywords: list[str] = Field(default_factory=list, max_length=5)
     min_discount_percent: float = Field(default=10, ge=0, le=90)
     max_price: float | None = Field(default=None, gt=0, le=100000000)
     interval_minutes: int = Field(default=30, ge=15, le=360)
@@ -68,7 +68,7 @@ def _clean_monitor(req: MonitorInput) -> dict:
     if req.interval_minutes not in INTERVALS:
         raise HTTPException(422, "Os intervalos permitidos são 15, 30, 60, 180 ou 360 minutos.")
     keywords = []
-    for raw in req.keywords[:5]:
+    for raw in req.keywords:
         word = _text(raw, 100)
         if len(word) >= 2 and word.casefold() not in {x.casefold() for x in keywords}:
             keywords.append(word)
@@ -190,7 +190,7 @@ def _qualifies(offer: dict, monitor: dict, previous: dict | None = None) -> tupl
         return discount, False
     min_discount = float(monitor.get("minDiscountPercent") or 0)
     eligible = discount is not None and discount >= min_discount
-    if discount is None and min_discount == 0 and max_price is not None:
+    if discount is None and min_discount == 0:
         eligible = True
     return discount, eligible
 
