@@ -36,13 +36,13 @@ function shell() {
           '<form id="dor-monitor-form">' +
             '<div class="dor-field"><label for="dor-title">Nome do monitoramento</label><input id="dor-title" maxlength="100" required placeholder="Ex.: Consoles e acessórios"></div>' +
             '<div class="dor-field"><label for="dor-store">Loja específica</label><select id="dor-store"><option value="mercado_livre">Mercado Livre</option><option value="amazon">Amazon</option><option value="shopee">Shopee</option><option value="magalu">Magazine Luiza</option></select><small>O Radar consulta a fonte de ofertas disponível e mantém apenas resultados identificados nessa loja.</small></div>' +
-            '<div class="dor-field"><label for="dor-keywords">Palavras-chave (até 5)</label><textarea id="dor-keywords" rows="3" required placeholder="console playstation 5&#10;controle dualsense&#10;playstation 5 slim"></textarea><small>Uma por linha ou separadas por vírgula. A pesquisa é ampliada, não exige título idêntico.</small></div>' +
+            '<div class="dor-field"><label for="dor-keywords">Palavras-chave (até 5)</label><textarea id="dor-keywords" rows="3" required placeholder="console playstation 5&#10;controle dualsense&#10;playstation 5 slim"></textarea><small>Uma por linha ou separadas por vírgula. A pesquisa é ampliada, não exige título idêntico. Cada palavra-chave gera uma consulta ao vivo e consome cota da SerpApi.</small></div>' +
             '<div class="dor-two">' +
               '<div class="dor-field"><label for="dor-discount">Desconto mínimo (%)</label><input id="dor-discount" type="number" min="0" max="90" step="0.5" value="10"></div>' +
               '<div class="dor-field"><label for="dor-max-price">Preço máximo (R$)</label><input id="dor-max-price" type="number" min="0.01" step="0.01" placeholder="Opcional"></div>' +
             '</div>' +
             '<div class="dor-two">' +
-              '<div class="dor-field"><label for="dor-interval">Pesquisar a cada</label><select id="dor-interval"><option value="15">15 minutos</option><option value="30" selected>30 minutos</option><option value="60">1 hora</option><option value="180">3 horas</option><option value="360">6 horas</option></select></div>' +
+              '<div class="dor-field"><label for="dor-interval">Pesquisar a cada</label><select id="dor-interval"><option value="15">15 minutos</option><option value="30">30 minutos</option><option value="60" selected>1 hora</option><option value="180">3 horas</option><option value="360">6 horas</option></select></div>' +
               '<div class="dor-field"><label for="dor-mode">Modo de publicação</label><select id="dor-mode"><option value="approval">Com aprovação</option><option value="automatic">Automático</option></select></div>' +
             '</div>' +
             '<div class="dor-mode-help" id="dor-mode-help">As ofertas aparecem numa fila para você revisar antes de publicar.</div>' +
@@ -81,7 +81,7 @@ function resetMonitorForm() {
   editingId = "";
   document.getElementById("dor-monitor-form").reset();
   document.getElementById("dor-discount").value = "10";
-  document.getElementById("dor-interval").value = "30";
+  document.getElementById("dor-interval").value = "60";
   document.getElementById("dor-mode").value = "approval";
   document.getElementById("dor-form-title").textContent = "Criar monitoramento";
   document.getElementById("dor-save-monitor").textContent = "＋ Criar monitoramento";
