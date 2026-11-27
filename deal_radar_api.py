@@ -216,6 +216,7 @@ def _telegram_post(uid: str, offer: dict, monitor: dict) -> dict:
     lines.append("🏬 " + source)
     lines.append("")
     lines.append("⚠️ Confira preço, frete e disponibilidade na loja.")
+    lines.append("ℹ️ Link de afiliado: podemos receber comissão pela compra, sem custo adicional para você.")
     caption = "\n".join(lines)
     payload = {
         "chat_id": settings["channelUsername"],
@@ -263,7 +264,8 @@ def _scan_monitor(uid: str, monitor_ref, monitor: dict) -> dict:
             if not title or _score(keyword, title) < 0.30:
                 continue
             # Exclui anúncios usados/recondicionados do Radar inicial.
-            if re.search(r"\b(usado|usada|seminovo|seminova|recondicionado|recondicionada|open box)\b", _normal(title)):
+            condition = _normal(str(offer.get("second_hand_condition") or ""))
+            if re.search(r"\b(usado|usada|seminovo|seminova|recondicionado|recondicionada|open box|refurbished|renewed)\b", _normal(title + " " + condition)):
                 continue
             url = str(offer.get("url") or "").strip()
             if not url.startswith("https://"):
@@ -412,6 +414,8 @@ def delete_monitor(monitor_id: str, authorization: str | None = Header(default=N
     ref = _monitors(uid).document(monitor_id)
     if not ref.get().exists:
         raise HTTPException(404, "Monitor não encontrado.")
+    for opportunity in ref.collection("opportunities").stream():
+        opportunity.reference.delete()
     ref.delete()
     return {"ok": True}
 
