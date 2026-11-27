@@ -60,7 +60,7 @@ function shell() {
         '</section>' +
       '</div>' +
       '<section class="dor-section"><div class="dor-section-head"><div><h2>Meus monitoramentos</h2><p>Configure o modo automático ou a aprovação individualmente em cada monitor.</p></div><button type="button" class="dor-btn" id="dor-refresh">↻ Atualizar</button></div><div class="dor-monitor-list" id="dor-monitors"><div class="dor-empty">Carregando monitoramentos...</div></div></section>' +
-      '<section class="dor-section dor-opportunities-section" id="dor-opportunities-section" hidden><div class="dor-section-head"><div><h2 id="dor-opportunities-title">Oportunidades encontradas</h2><p>Cadastre o link de afiliado do produto para habilitar a publicação.</p></div><button type="button" class="dor-btn" id="dor-reload-opportunities">Atualizar oportunidades</button></div><div class="dor-affiliate-explainer">No Mercado Livre, gere o link pelo Portal ou pela Barra de Afiliados e cole aqui. O Resolvei não inventa nem transforma links comuns em links de afiliado.</div><div id="dor-opportunities" class="dor-opportunities"><div class="dor-empty">Selecione um monitoramento para ver as oportunidades.</div></div></section>' +
+      '<section class="dor-section dor-opportunities-section" id="dor-opportunities-section" hidden><div class="dor-section-head"><div><h2 id="dor-opportunities-title">Oportunidades encontradas</h2><p>Cadastre o link de afiliado do produto para habilitar a publicação.</p></div><button type="button" class="dor-btn" id="dor-reload-opportunities">Atualizar oportunidades</button></div><div class="dor-affiliate-explainer">Gere o link no programa de afiliados da loja monitorada e cole aqui. Para o Mercado Livre, use o Portal ou a Barra de Afiliados. O Resolvei não inventa nem transforma links comuns em links de afiliado.</div><div id="dor-opportunities" class="dor-opportunities"><div class="dor-empty">Selecione um monitoramento para ver as oportunidades.</div></div></section>' +
       '<footer class="dor-footnote">Os descontos são calculados a partir do preço anterior observado pelo Radar ou do preço de referência informado pela fonte, quando disponível. Preço, frete, vendedor, cupom e disponibilidade devem ser conferidos na página da loja antes de compartilhar.</footer>' +
     '</div>';
 }
@@ -281,6 +281,7 @@ function bind() {
   document.getElementById("dor-monitor-form").addEventListener("submit", function (e) {
     e.preventDefault();
     var data = monitorPayload();
+    var wasEditing = !!editingId;
     if (!data.title || !data.keywords.length) return notice("Informe um nome e pelo menos uma palavra-chave.", "error");
     var path = editingId ? "/monitors/" + encodeURIComponent(editingId) : "/monitors";
     var method = editingId ? "PUT" : "POST";
@@ -289,7 +290,7 @@ function bind() {
     api(path, { method:method, body:JSON.stringify(data) }).then(function (result) {
       var id = (result.monitor || {}).id || editingId;
       resetMonitorForm();
-      notice(editingId ? "Monitoramento atualizado." : "Monitoramento criado.", "success");
+      notice(wasEditing ? "Monitoramento atualizado." : "Monitoramento criado.", "success");
       return loadMonitors().then(function () { if (id) return loadOpportunities(id); });
     }).catch(function (err) { notice(err.message, "error"); }).finally(function () { button.disabled = false; });
   });
