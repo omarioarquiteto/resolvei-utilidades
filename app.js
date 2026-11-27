@@ -1446,8 +1446,9 @@ function home(){
   }
   const featured=tools.find(t=>t.id==='altos-lucros');
   const investmentSpotlight=featured?'<section class="al-discovery"><div class="al-discovery-copy"><span class="chip">NOVA FERRAMENTA</span><h2>ALTOS LUCROS</h2><p>Explore strikes digitais da IQ Option com payout a partir de 200%, vencimentos de 5 ou 15 minutos e validação estatística.</p><a class="btn primary" href="#/ferramenta/altos-lucros">Abrir ALTOS LUCROS →</a></div><div class="al-discovery-card">'+card(featured)+'</div></section>':'';
+  const dealRadarSpotlight='<section class="card panel" style="margin:0 0 22px;display:flex;align-items:center;justify-content:space-between;gap:18px;flex-wrap:wrap"><div style="min-width:0;flex:1"><span class="eyebrow">NOVA FERRAMENTA · COMPRAS & ECONOMIA</span><h2 style="margin:6px 0;font-size:1.35rem">📡 Radar de Ofertas</h2><p style="margin:0;color:var(--muted)">Encontre oportunidades em lojas online e publique ofertas no seu canal do Telegram.</p></div><a class="btn primary" href="#/ferramenta/radar-ofertas">Abrir Radar de Ofertas →</a></section>';
   const categories='<div class="section-head"><div><h2>Categorias</h2><p>Encontre ferramentas por assunto.</p></div></div><div class="category-grid">'+Object.entries(CATS).map(categoryCard).join('')+'</div>';
-  return hero+favoritesSection+investmentSpotlight+categories;
+  return hero+favoritesSection+investmentSpotlight+dealRadarSpotlight+categories;
 }
 function toolsPage(list=tools,title='Todas as ferramentas',sub='Escolha uma ferramenta ou pesquise pelo que você precisa.'){
   return `<div class="section-head"><div><h1 style="margin:0;letter-spacing:-.04em">${esc(title)}</h1><p>${esc(sub)}</p></div></div><div class="search-box" style="max-width:none;margin-bottom:20px"><input id="listSearch" autocomplete="off" placeholder="Buscar entre as ferramentas..."><button id="listSearchSubmit" class="search-submit" type="button" aria-label="Pesquisar ferramenta" title="Pesquisar"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-4-4"></path></svg></button></div><div id="toolGrid" class="grid">${list.map(card).join('')}</div>`;
