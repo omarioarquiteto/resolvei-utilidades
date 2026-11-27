@@ -64,14 +64,21 @@ function shell() {
       '<footer class="dor-footnote">Os descontos são calculados a partir do preço anterior observado pelo Radar ou do preço de referência informado pela fonte, quando disponível. Preço, frete, vendedor, cupom e disponibilidade devem ser conferidos na página da loja antes de compartilhar.</footer>' +
     '</div>';
 }
+function numericField(id, fallback) {
+  var raw = String(document.getElementById(id).value || "").trim().replace(/\s/g, "");
+  if (!raw) return fallback;
+  if (raw.indexOf(",") >= 0) raw = raw.replace(/\./g, "").replace(",", ".");
+  var value = Number(raw);
+  return Number.isFinite(value) ? value : NaN;
+}
 function monitorPayload() {
   var keywords = document.getElementById("dor-keywords").value.split(/[\n,;]+/).map(function (x) { return x.trim(); }).filter(Boolean);
   return {
     title: document.getElementById("dor-title").value.trim(),
     store: document.getElementById("dor-store").value,
     keywords: keywords,
-    min_discount_percent: Number(document.getElementById("dor-discount").value || 0),
-    max_price: document.getElementById("dor-max-price").value.trim() ? Number(document.getElementById("dor-max-price").value) : null,
+    min_discount_percent: numericField("dor-discount", 0),
+    max_price: numericField("dor-max-price", null),
     interval_minutes: Number(document.getElementById("dor-interval").value || 30),
     publish_mode: document.getElementById("dor-mode").value,
     active: true
@@ -283,6 +290,9 @@ function bind() {
     var data = monitorPayload();
     var wasEditing = !!editingId;
     if (!data.title || !data.keywords.length) return notice("Informe um nome e pelo menos uma palavra-chave.", "error");
+    if (data.keywords.length > 5) return notice("Use no máximo cinco palavras-chave por monitoramento.", "error");
+    if (!Number.isFinite(data.min_discount_percent) || data.min_discount_percent < 0 || data.min_discount_percent > 90) return notice("O desconto mínimo deve ficar entre 0% e 90%.", "error");
+    if (data.max_price !== null && (!Number.isFinite(data.max_price) || data.max_price <= 0)) return notice("Informe um preço máximo válido.", "error");
     var path = editingId ? "/monitors/" + encodeURIComponent(editingId) : "/monitors";
     var method = editingId ? "PUT" : "POST";
     var button = document.getElementById("dor-save-monitor");
