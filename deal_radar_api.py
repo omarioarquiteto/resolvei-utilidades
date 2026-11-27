@@ -547,7 +547,7 @@ def _normalize_telegram_channel(value: str) -> str:
     if re.fullmatch(r"[A-Za-z][A-Za-z0-9_]{4,31}", candidate):
         return "@" + candidate
 
-    if re.search(r"\\s", raw):
+    if re.search(r"\s", raw):
         raise HTTPException(
             422,
             "O nome informado contém espaços e parece ser o título do canal, não o @username. "
