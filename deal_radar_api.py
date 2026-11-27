@@ -575,6 +575,9 @@ def connect_telegram(req: TelegramConnectInput, authorization: str | None = Head
     chat = _telegram_call(token, "getChat", {"chat_id": channel})
     if chat.get("type") != "channel":
         raise HTTPException(422, "O endereço informado existe, mas não corresponde a um canal do Telegram.")
+    # Valida a configuração de criptografia antes de enviar qualquer mensagem.
+    encrypted_token = _encrypt_secret(token)
+
     # Não usamos getChatMember aqui: a API do Telegram pode recusar a consulta
     # com "member list is inaccessible", mesmo quando o bot já é administrador.
     # A prova confiável da permissão necessária é tentar publicar uma mensagem.
@@ -595,7 +598,7 @@ def connect_telegram(req: TelegramConnectInput, authorization: str | None = Head
         raise
     _telegram_ref(uid).set({
         "connected": True,
-        "tokenEncrypted": _encrypt_secret(token),
+        "tokenEncrypted": encrypted_token,
         "channelUsername": channel,
         "channelChatId": chat.get("id"),
         "channelTitle": _text(chat.get("title"), 120),
