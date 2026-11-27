@@ -353,7 +353,7 @@ function renderOpportunities() {
     return '<article class="dor-offer-card">' +
       '<div class="dor-offer-card-top"><span class="dor-offer-status ' + statusClass + '">' + esc(statusLabel) + '</span><span class="dor-offer-monitor">' + esc(o.monitorTitle) + ' · ' + esc(o.storeLabel) + '</span></div>' +
       '<div class="dor-offer-main">' + image + '<div class="dor-offer-info"><h3>' + esc(o.title || "Produto sem título") + '</h3><p><a href="' + esc(o.url || "#") + '" target="_blank" rel="noopener noreferrer">Ver anúncio original ↗</a> · Atualizado ' + esc(dt(o.updatedAt)) + '</p></div></div>' +
-      '<div class="dor-offer-prices"><div><span>' + (o.couponPrice && Number(o.couponPrice) < Number(o.listedPrice || o.currentPrice) ? 'Preço efetivo' : 'Preço atual') + '</span><strong>' + price + '</strong></div><div>' + old + discount + '</div></div>' +
+      '<div class="dor-offer-prices"><div><span>' + (o.couponPrice && Number(o.couponPrice) < Number(o.listedPrice || o.currentPrice) ? 'Preço com cupom' : 'Preço atual') + '</span><strong>' + price + '</strong></div><div>' + old + discount + '</div></div>' +
       couponMarkup + conditionsMarkup +
       '<p class="dor-offer-note">' + note + (o.lastSentAt ? " · Publicada em " + dt(o.lastSentAt) : "") + '</p>' +
       affiliateRow + error +
