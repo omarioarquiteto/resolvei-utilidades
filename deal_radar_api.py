@@ -264,13 +264,16 @@ def _scan_monitor(uid: str, monitor_ref, monitor: dict) -> dict:
             if not url.startswith("https://"):
                 continue
             key = hashlib.sha256((store + "|" + url.split("?")[0].rstrip("/")).encode("utf-8")).hexdigest()[:40]
-            candidates[key] = offer
+            candidates[key] = {"offer": offer, "keyword": keyword}
     now = _now()
     scanned = 0
     eligible_count = 0
     published_count = 0
     pending_count = 0
-    for key, offer in list(candidates.items())[:max(1, min(int(monitor.get("maxResults") or 12), 20))]:
+    for key, candidate in list(candidates.items())[:max(1, min(int(monitor.get("maxResults") or 12), 20))]:
+        offer = candidate["offer"]
+        keyword = candidate["keyword"]
+        url = str(offer.get("url") or "").strip()
         opportunity_ref = opportunities_ref.document(key)
         old_snapshot = opportunity_ref.get()
         previous = old_snapshot.to_dict() or {}
@@ -283,6 +286,8 @@ def _scan_monitor(uid: str, monitor_ref, monitor: dict) -> dict:
         if original is None and old_current is not None and old_current > price:
             original = old_current
         status = str(previous.get("status") or "watching")
+        if status == "ignored":
+            continue
         affiliate = _text(previous.get("affiliateUrl"), 2048)
         last_sent = _price(previous.get("lastSentPrice"))
         lower_than_sent = last_sent is None or price < last_sent - 0.01
@@ -300,7 +305,7 @@ def _scan_monitor(uid: str, monitor_ref, monitor: dict) -> dict:
             "lastSeenAt": _iso(now),
             "updatedAt": _iso(now),
             "eligible": eligible,
-            "lastScanKeyword": keyword if len(keywords) == 1 else _text(monitor.get("title"), 100),
+            "lastScanKeyword": keyword,
         }
         if not old_snapshot.exists:
             data["createdAt"] = _iso(now)
