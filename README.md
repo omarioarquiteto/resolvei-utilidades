@@ -139,3 +139,24 @@ A etapa visual de módulos agora é integrada ao dimensionamento. O usuário pod
 A calculadora usa PVGIS quando a consulta externa está disponível; o PVGIS é um serviço do Joint Research Centre da Comissão Europeia para estimar radiação solar e produção fotovoltaica por localização. Como referência brasileira, o CRESESB/SunData fornece dados de irradiação e sugestões de inclinação e orientação. Para custos e payback, os preços padrão são apenas parâmetros editáveis e não representam cotação garantida.
 
 A parte regulatória da geração distribuída deve ser conferida na ANEEL e na legislação aplicável à unidade consumidora. O Resolvei não substitui projeto de profissional habilitado, memorial de cálculo, análise estrutural, ART/RRT ou procedimento de conexão da distribuidora.
+
+
+## Blog de reviews e painel editorial
+
+A página inicial apresenta os reviews publicados no Blog Resolvei. As ferramentas continuam disponíveis pelo menu **Ferramentas** e pela página **Categorias**.
+
+O painel privado é acessado em \`#/blogger\` e permite criar e editar posts, salvar rascunhos, publicar/despublicar, adicionar imagem de capa, inserir imagens no corpo do artigo e configurar título/descrição para buscadores. As publicações são armazenadas na coleção \`blogPosts\` do Firestore e as imagens são enviadas ao Firebase Storage.
+
+### Habilitar o administrador no Render
+
+No serviço do Resolvei, configure **uma** destas variáveis:
+
+- \`BLOG_ADMIN_UID\`: UID da conta Firebase que será a administradora (recomendado).
+- \`BLOG_ADMIN_EMAIL\`: e-mail verificado da conta que será administradora.
+
+O backend valida o token do Firebase em cada operação de criação, edição, exclusão e upload. Esconder o link do editor na interface não é usado como mecanismo de segurança.
+
+Também configure \`FIREBASE_STORAGE_BUCKET=resolvei-c95d1.firebasestorage.app\` e confirme que a conta de serviço do Firebase usada pelo Render tem permissão para criar objetos nesse bucket. As variáveis \`FIREBASE_PROJECT_ID\`, \`FIREBASE_CLIENT_EMAIL\` e \`FIREBASE_PRIVATE_KEY\` precisam estar configuradas para o Firebase Admin acessar o Firestore e o Storage.
+
+As imagens aceitas são JPG, PNG, WEBP e GIF, limitadas a 8 MB por arquivo. O conteúdo dos artigos é sanitizado no servidor antes de ser publicado.
+
