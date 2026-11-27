@@ -69,9 +69,7 @@
     const categories = [...new Set(posts.map(post => String(post.category || "").trim()).filter(Boolean))];
     const featured = posts[0];
     const sidePosts = posts.slice(1, 5);
-    const adminAction = isAdmin
-      ? '<a class="blog-editor-shortcut" href="#/blogger">✍️ Escrever review <span>→</span></a>'
-      : "";
+    const adminAction = '<a class="blog-editor-shortcut" href="#/blogger"' + (isAdmin ? "" : " hidden") + '>✍️ Escrever review <span>→</span></a>';
     const featureMarkup = featured
       ? '<section class="blog-lead-layout"><article class="blog-lead-card">' +
         '<a class="blog-lead-image" href="' + articleUrl(featured.slug) + '">' + imageMarkup(featured, "blog-lead-img") + '</a>' +
@@ -400,11 +398,28 @@
     renderAdminPostList();
   }
 
+  function waitForAuthUser() {
+    const auth = window.firebase?.auth?.();
+    if (!auth) return Promise.resolve(null);
+    if (auth.currentUser) return Promise.resolve(auth.currentUser);
+    return new Promise(resolve => {
+      let unsubscribe = () => {};
+      let settled = false;
+      const finish = user => {
+        if (settled) return;
+        settled = true;
+        unsubscribe();
+        resolve(user || null);
+      };
+      unsubscribe = auth.onAuthStateChanged(finish, () => finish(null));
+    });
+  }
+
   async function initAdmin() {
     const root = $("#blogAdminPage");
     if (!root || root.dataset.loaded === "1") return;
     root.dataset.loaded = "1";
-    const user = currentUser();
+    const user = await waitForAuthUser();
     if (!user) {
       adminMessage("Faça login na sua conta do Resolvei para acessar o painel editorial.", "warning");
       return;
@@ -442,7 +457,7 @@
 
   function updateAdminLinks(value) {
     isAdmin = !!value;
-    document.querySelectorAll("[data-blog-admin-link]").forEach(link => { link.hidden = !isAdmin; });
+    document.querySelectorAll("[data-blog-admin-link], .blog-editor-shortcut").forEach(link => { link.hidden = !isAdmin; });
   }
 
   window.resolveiBlogHomePage = () => '<div class="blog-home-host" id="resolveiBlogHome"><div class="blog-loading">Carregando os reviews...</div></div>';
