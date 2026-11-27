@@ -1427,29 +1427,7 @@ function bindHomeFavoriteDrag(){
   grid.addEventListener('dragend',clearDragState);
 }
 function categoryCard([id,c]){const count=tools.filter(t=>t.cat===id).length;return `<a class="card category-card" href="#/categoria/${id}"><div class="tool-icon">${c.icon}</div><h3>${c.name}</h3><p>${c.desc}</p><span class="chip">${count} ferramentas</span></a>`}
-function home(){
-  const quickTags=['porcentagem','tinta','combustível','piso','idade','churrasco']
-    .map(x=>'<button class="tag" data-search="'+esc(x)+'">'+esc(x)+'</button>').join('');
-  const hero='<section class="hero"><div class="brand" style="justify-content:center;margin-bottom:22px"><span class="brand-mark">✓</span><span>Resolvei</span></div><h1>Seu canivete suíço online</h1><p>Pesquise e acesse rapidamente as ferramentas que facilitam seu dia a dia.</p><div class="search-box"><input id="globalSearch" autocomplete="off" placeholder="Ex.: quanto vou gastar de gasolina numa viagem de 800 km?"><button id="globalSearchSubmit" class="search-submit" type="button" aria-label="Pesquisar ferramenta" title="Pesquisar"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-4-4"></path></svg></button></div><div class="quick-tags">'+quickTags+'</div></section>';
-  let favoritesSection='';
-  if(resolveiUser){
-    if(resolveiDb&&(resolveiPrefsLoading||resolveiPrefsUid!==resolveiUser.uid)){
-      favoritesSection='<section class="home-favorites-section"><div class="section-head"><div><h2>Minhas ferramentas</h2><p>Carregando seus favoritos...</p></div></div><div class="card empty">Carregando suas ferramentas favoritas...</div></section>';
-    }else{
-      const favorites=homeFavoriteTools();
-      const notice=resolveiHomePrefsError?'<div class="notice home-prefs-notice">'+esc(resolveiHomePrefsError)+'</div>':'';
-      const content=favorites.length
-        ?'<div id="homeFavoritesGrid" class="grid">'+favorites.map(homeFavoriteCard).join('')+'</div>'
-        :'<div class="card empty home-favorites-empty"><strong>Você ainda não adicionou ferramentas favoritas.</strong><p>Abra o catálogo e toque na estrela das ferramentas que deseja manter na página inicial.</p><a class="btn" href="#/ferramentas">Explorar todas as ferramentas</a></div>';
-      favoritesSection='<section class="home-favorites-section"><div class="section-head"><div><h2>Minhas ferramentas</h2><p>Arraste os cards para organizar na ordem que preferir.</p></div><a class="btn" href="#/ferramentas">Adicionar ferramentas</a></div>'+notice+content+'</section>';
-    }
-  }
-  const featured=tools.find(t=>t.id==='altos-lucros');
-  const investmentSpotlight=featured?'<section class="al-discovery"><div class="al-discovery-copy"><span class="chip">NOVA FERRAMENTA</span><h2>ALTOS LUCROS</h2><p>Explore strikes digitais da IQ Option com payout a partir de 200%, vencimentos de 5 ou 15 minutos e validação estatística.</p><a class="btn primary" href="#/ferramenta/altos-lucros">Abrir ALTOS LUCROS →</a></div><div class="al-discovery-card">'+card(featured)+'</div></section>':'';
-  const dealRadarSpotlight='<section class="card panel" style="margin:0 0 22px;display:flex;align-items:center;justify-content:space-between;gap:18px;flex-wrap:wrap"><div style="min-width:0;flex:1"><span class="eyebrow">NOVA FERRAMENTA · COMPRAS & ECONOMIA</span><h2 style="margin:6px 0;font-size:1.35rem">📡 Radar de Ofertas</h2><p style="margin:0;color:var(--muted)">Encontre oportunidades em lojas online e publique ofertas no seu canal do Telegram.</p></div><a class="btn primary" href="#/ferramenta/radar-ofertas">Abrir Radar de Ofertas →</a></section>';
-  const categories='<div class="section-head"><div><h2>Categorias</h2><p>Encontre ferramentas por assunto.</p></div></div><div class="category-grid">'+Object.entries(CATS).map(categoryCard).join('')+'</div>';
-  return hero+favoritesSection+investmentSpotlight+dealRadarSpotlight+categories;
-}
+function home(){return window.resolveiBlogHomePage?window.resolveiBlogHomePage():'<div class="blog-home-host">Carregando o blog...</div>';}
 function toolsPage(list=tools,title='Todas as ferramentas',sub='Escolha uma ferramenta ou pesquise pelo que você precisa.'){
   return `<div class="section-head"><div><h1 style="margin:0;letter-spacing:-.04em">${esc(title)}</h1><p>${esc(sub)}</p></div></div><div class="search-box" style="max-width:none;margin-bottom:20px"><input id="listSearch" autocomplete="off" placeholder="Buscar entre as ferramentas..."><button id="listSearchSubmit" class="search-submit" type="button" aria-label="Pesquisar ferramenta" title="Pesquisar"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-4-4"></path></svg></button></div><div id="toolGrid" class="grid">${list.map(card).join('')}</div>`;
 }
@@ -1503,6 +1481,8 @@ function render(){
   const parts=(routePath||'').split('/').filter(Boolean);
   let html='';
   if(!parts[0]) html=home();
+  else if(parts[0]==='blogger') html=window.resolveiBlogAdminPage?window.resolveiBlogAdminPage():'<div class="empty">Editor do blog indisponível.</div>';
+  else if(parts[0]==='blog'&&parts[1]) html=window.resolveiBlogArticlePage?window.resolveiBlogArticlePage(parts[1]):'<div class="empty">Artigo indisponível.</div>';
   else if(parts[0]==='ferramentas') html=toolsPage();
   else if(parts[0]==='categorias') html=categoriesPage();
   else if(parts[0]==='categoria') {const id=parts[1];const c=CATS[id];const list=tools.filter(t=>t.cat===id).sort((a,b)=>(a.id==='altos-lucros'?-1:b.id==='altos-lucros'?1:0));html=c?toolsPage(list,`${c.icon} ${c.name}`,c.desc):`<div class="empty">Categoria não encontrada.</div>`;}
@@ -1513,7 +1493,7 @@ function render(){
   else if(parts[0]==='sobre') html=aboutPage();
   else if(parts[0]==='privacidade') html=privacyPage();
   else html=home();
-  document.getElementById('app').innerHTML=html; updateFavCount(); bind(); resolveiApplyLayoutMode();
+  document.getElementById('app').innerHTML=html; updateFavCount(); bind(); resolveiApplyLayoutMode(); window.resolveiBlogInitRoute?.();
   const t=parts[0]==='ferramenta'?tools.find(x=>x.id===parts[1]):null;
   document.title=t?`${t.title} | Resolvei`:parts[0]==='categoria'&&CATS[parts[1]]?`${CATS[parts[1]].name} | Resolvei`:'Resolvei — Ferramentas úteis para o dia a dia';
   window.scrollTo({top:0,behavior:'auto'});
@@ -1567,15 +1547,6 @@ function bind(){
   const submitGlobalSearch=()=>{const q=gs?.value?.trim()||'';location.hash=q?'#/ferramentas?q='+encodeURIComponent(q):'#/ferramentas';};
   if(gs)gs.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();submitGlobalSearch();}});
   document.getElementById('globalSearchSubmit')?.addEventListener('click',submitGlobalSearch);
-  const modernForm=document.getElementById('modernSearchForm');
-  if(modernForm&&modernForm.dataset.bound!=="1"){
-    modernForm.dataset.bound="1";
-    modernForm.addEventListener("submit",e=>{
-      e.preventDefault();
-      const q=document.getElementById("modernGlobalSearch")?.value?.trim()||"";
-      location.hash=q?"#/ferramentas?q="+encodeURIComponent(q):"#/ferramentas";
-    });
-  }
   const modernThemeButton=document.getElementById("modernThemeToggle");
   if(modernThemeButton&&modernThemeButton.dataset.bound!=="1"){
     modernThemeButton.dataset.bound="1";
@@ -1756,7 +1727,7 @@ function resolveiApplyLayoutMode(){
   const layoutSelect=document.getElementById("preferenceLayout");
   if(layoutSelect)layoutSelect.value=mode;
   const route=resolveiCurrentAppRoute();
-  const active=route==="ferramentas"?"ferramentas":route==="categorias"||route.startsWith("categoria/")?"categorias":route==="favoritos"?"favoritos":route==="conta"?"conta":route.startsWith("ferramenta/")?"ferramentas":route==="games"?"games":"inicio";
+  const active=route==="ferramentas"?"ferramentas":route==="categorias"||route.startsWith("categoria/")?"categorias":route==="favoritos"?"favoritos":route==="conta"?"conta":route==="blogger"?"blogger":route.startsWith("ferramenta/")?"ferramentas":route==="games"?"games":"inicio";
   document.querySelectorAll("[data-modern-route]").forEach(link=>{
     const selected=link.dataset.modernRoute===active;
     link.classList.toggle("active",selected);
@@ -1841,11 +1812,12 @@ function resolveiFirebaseInit(){
     resolveiAuth=firebase.auth();try{resolveiDb=firebase.firestore();}catch(e){console.warn("Firestore indisponível; autenticação continuará funcionando:",e);resolveiDb=null;}resolveiFirebaseError="";
     resolveiAuth.onAuthStateChanged(user=>{
       resolveiUser=user||null;
+      window.resolveiBlogOnAuthStateChanged?.(resolveiUser);
       resolveiPrefsLoading=!!(resolveiUser&&resolveiDb);
       resolveiPrefsPromise=resolveiLoadHomeToolPreferences(resolveiUser);
       updateFavCount();
       const preferenceRoute=resolveiCurrentAppRoute();
-      if(!preferenceRoute||preferenceRoute==='favoritos')render();
+      if(!preferenceRoute||preferenceRoute==='favoritos'||preferenceRoute==='blogger')render();
       // Ponte de autenticação opcional e restrita à origem da extensão Resolvei.
       // Ela só é ativada quando a janela foi aberta com resolveiExtensionOrigin.
       const extensionOrigin = new URLSearchParams(location.search).get("resolveiExtensionOrigin") || "";

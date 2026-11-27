@@ -3,14 +3,15 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Resolvei — Ferramentas úteis, cálculos e estudos do dia a dia</title>
-  <meta name="description" content="Calculadoras, conversores e simuladores gratuitos para resolver dúvidas do dia a dia, incluindo energia solar e estudos de posição solar.">
+  <title>Resolvei — Reviews de produtos, tecnologia e guias de compra</title>
+  <meta name="description" content="Reviews de celulares, eletrodomésticos, tecnologia e produtos do dia a dia. Análises e guias para ajudar você a escolher melhor.">
   <meta name="theme-color" content="#111827">
   <link rel="canonical" href="https://resolvei.com.br/">
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <link rel="manifest" href="manifest.webmanifest">
   <script>try{document.documentElement.dataset.layout=localStorage.getItem("resolvei_layout")==="modern"?"modern":"classic";}catch(e){}</script>
-  <link rel="stylesheet" href="styles.css?v=20261105-risk-reference-2">
+  <link rel="stylesheet" href="styles.css?v=20261127-blog-layout-1">
+  <link rel="stylesheet" href="blog.css?v=20261127-blog-1">
   <link rel="stylesheet" href="documents-tools.css?v=20261012-1">
   <link rel="stylesheet" href="analista-bin.css?v=20261002-1">
   <link rel="stylesheet" href="opcoes-digitais.css?v=20261106-1">
@@ -24,7 +25,7 @@
 <body>
   <header class="site-header"><div class="container nav-wrap">
     <a href="#/" class="brand" aria-label="Resolvei, início"><span class="brand-mark">✓</span><span>Resolvei</span></a>
-    <nav class="nav-links" aria-label="Principal"><a href="#/">Início</a><a href="#/ferramentas">Ferramentas</a><a href="#/categorias">Categorias</a><a href="/games.html" aria-label="Abrir Resolvei Games">🎮 Games</a><a href="#/favoritos">Favoritos <span id="favCount" class="nav-badge">0</span></a><a href="#/conta" id="accountNav">👤 Entrar</a><a href="#" class="donation-nav-link" data-donation-open>💚 Valeu!</a></nav>
+    <nav class="nav-links" aria-label="Principal"><a href="#/">Início</a><a href="#/ferramentas">Ferramentas</a><a href="#/categorias">Categorias</a><a href="/games.html" aria-label="Abrir Resolvei Games">🎮 Games</a><a href="#/favoritos">Favoritos <span id="favCount" class="nav-badge">0</span></a><a href="#/blogger" data-blog-admin-link hidden>✍️ Blog</a><a href="#/conta" id="accountNav">👤 Entrar</a><a href="#" class="donation-nav-link" data-donation-open>💚 Valeu!</a></nav>
     <button id="themeToggle" class="icon-btn" type="button" aria-label="Alternar tema">☼</button>
   </div></header>
 
@@ -37,6 +38,7 @@
       <a href="/games.html" data-modern-route="games"><span>🎮</span><small>Games</small></a>
       <a href="#/favoritos" data-modern-route="favoritos"><span>♡</span><small>Favoritos</small><b id="modernFavCount">0</b></a>
       <a href="#/conta" data-modern-route="conta"><span>♙</span><small id="modernAccountText">Minha conta</small></a>
+      <a href="#/blogger" data-modern-route="blogger" data-blog-admin-link hidden><span>✍</span><small>Blog</small></a>
     </nav>
     <div class="modern-sidebar-promo">
       <span class="modern-promo-icon">✦</span>
@@ -47,13 +49,9 @@
     <div class="modern-sidebar-foot">Feito para resolver. <span>♥</span></div>
   </aside>
   <div class="modern-topbar" id="modernTopbar">
-    <form class="modern-search" id="modernSearchForm" role="search">
-      <span aria-hidden="true">⌕</span>
-      <input id="modernGlobalSearch" type="search" placeholder="Buscar ferramentas..." autocomplete="off" aria-label="Buscar ferramentas">
-      <button type="submit" aria-label="Buscar">↵</button>
-    </form>
     <div class="modern-topbar-actions">
       <button type="button" class="modern-icon-button" id="modernThemeToggle" aria-label="Alternar tema" title="Alternar tema">☼</button>
+      <a class="modern-editor-button" href="#/blogger" data-blog-admin-link hidden>✍ Editor</a>
       <a class="modern-user-button" id="modernAccountLink" href="#/conta" aria-label="Minha conta"><span>♙</span><small>Minha conta</small><b>⌄</b></a>
     </div>
   </div>
@@ -65,7 +63,7 @@
     <a href="#/favoritos" aria-label="Favoritos"><span aria-hidden="true">☆</span><small>Favoritos</small></a>
   </nav>
   <main id="app" class="container app-shell"></main>
-  <footer class="site-footer"><div class="container footer-grid"><div><div class="brand footer-brand"><span class="brand-mark">✓</span><span>Resolvei</span></div><p>Pequenas ferramentas para resolver grandes dúvidas do dia a dia.</p><div class="donation-footer-box"><strong>💚 O Resolvei é grátis e sempre continuará sendo.</strong><span>Se puder, deixe o seu <b>VALEU!</b> doando algum valor para ajudar o projeto a evoluir ainda mais.</span><button class="btn btn-primary donation-btn" type="button" data-donation-open>Quero deixar meu VALEU!</button></div></div><div><strong>Explorar</strong><a href="#/ferramentas">Todas as ferramentas</a><a href="#/categorias">Categorias</a></div><div><strong>Projeto</strong><a href="#/sobre">Sobre o Resolvei</a><a href="#/privacidade">Privacidade</a></div></div><div class="container footer-bottom">© <span id="year"></span> Resolvei. Resultados são estimativas e não substituem orientação profissional.</div></footer>
+  <footer class="site-footer"><div class="container footer-grid"><div><div class="brand footer-brand"><span class="brand-mark">✓</span><span>Resolvei</span></div><p>Reviews e guias práticos para ajudar você a escolher melhor.</p><div class="donation-footer-box"><strong>💚 O Resolvei é grátis e sempre continuará sendo.</strong><span>Se puder, deixe o seu <b>VALEU!</b> doando algum valor para ajudar o projeto a evoluir ainda mais.</span><button class="btn btn-primary donation-btn" type="button" data-donation-open>Quero deixar meu VALEU!</button></div></div><div><strong>Explorar</strong><a href="#/ferramentas">Todas as ferramentas</a><a href="#/categorias">Categorias</a></div><div><strong>Projeto</strong><a href="#/sobre">Sobre o Resolvei</a><a href="#/privacidade">Privacidade</a></div></div><div class="container footer-bottom">© <span id="year"></span> Resolvei. Resultados são estimativas e não substituem orientação profissional.</div></footer>
   <div id="donationModal" class="donation-modal" aria-hidden="true">
     <div class="donation-dialog" role="dialog" aria-modal="true" aria-labelledby="donationTitle">
       <button class="donation-close" type="button" aria-label="Fechar" data-donation-close>×</button>
@@ -89,7 +87,8 @@
   <script src="monitor-precos.js?v=20261014-1" defer></script>
   <script src="radar-ofertas.js?v=20261127-direct-store-1" defer></script>
   <script src="tabela-fipe.js?v=20261022-1" defer></script>
-  <script src="app.js?v=20261127-radar-ofertas-2" defer></script>
+  <script src="blog.js?v=20261127-blog-1" defer></script>
+  <script src="app.js?v=20261127-blog-home-1" defer></script>
   <script src="documents-tools.js?v=20261012-1" defer></script>
   <script src="analista-bin.js?v=20261002-1" defer></script>
   <script src="opcoes-digitais.js?v=20261106-1" defer></script>
