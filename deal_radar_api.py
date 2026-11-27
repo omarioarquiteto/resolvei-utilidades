@@ -606,3 +606,58 @@ def scan_due_monitors(
         "checkedAt": _iso(),
         "results": results,
     }
+
+
+# Agendamento independente: cada monitor dispara conforme sua própria frequência.
+import asyncio
+import threading
+
+_radar_task = None
+_radar_lock = threading.Lock()
+
+
+async def _radar_scheduler_loop():
+    while True:
+        try:
+            now_text = _iso(_now())
+            query = (
+                _db().collection_group("dealRadarMonitors")
+                .where("nextScanAt", "<=", now_text)
+                .order_by("nextScanAt")
+                .limit(max(1, min(int(os.getenv("DEAL_RADAR_SCAN_BATCH", "5")), 20)))
+            )
+            due = list(query.stream())
+            for snapshot in due:
+                monitor = snapshot.to_dict() or {}
+                if monitor.get("active") is False:
+                    continue
+                uid = snapshot.reference.parent.parent.id
+                try:
+                    await asyncio.to_thread(_scan_monitor, uid, snapshot.reference, monitor)
+                except Exception as exc:
+                    message = _text(getattr(exc, "detail", "") or type(exc).__name__, 220)
+                    snapshot.reference.set({
+                        "lastScanAt": _iso(),
+                        "nextScanAt": _iso(_now() + timedelta(minutes=30)),
+                        "lastScanError": message,
+                        "updatedAt": _iso(),
+                    }, merge=True)
+                await asyncio.sleep(0.15)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            # Falhas temporárias do Firestore ou de índices não interrompem o serviço.
+            pass
+        await asyncio.sleep(max(15, int(os.getenv("DEAL_RADAR_SCHEDULER_SECONDS", "60"))))
+
+
+def start_deal_radar_scheduler():
+    global _radar_task
+    with _radar_lock:
+        if _radar_task is not None and not _radar_task.done():
+            return
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return
+        _radar_task = loop.create_task(_radar_scheduler_loop())
