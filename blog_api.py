@@ -81,14 +81,16 @@ def _verify_user(authorization: str | None) -> dict[str, Any]:
 
 
 def _is_admin(user: dict[str, Any]) -> bool:
-    uid_match = bool(BLOG_ADMIN_UID and user.get("uid") == BLOG_ADMIN_UID)
+    # Configure one identity only. When a UID is present it takes priority,
+    # so an accidentally populated email variable cannot grant a second account.
+    if BLOG_ADMIN_UID:
+        return user.get("uid") == BLOG_ADMIN_UID
     email = str(user.get("email") or "").strip().lower()
-    email_match = bool(
+    return bool(
         BLOG_ADMIN_EMAIL
         and email == BLOG_ADMIN_EMAIL
         and user.get("email_verified") is True
     )
-    return uid_match or email_match
 
 
 def _require_admin(authorization: str | None) -> dict[str, Any]:
