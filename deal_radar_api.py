@@ -589,11 +589,38 @@ def connect_telegram(req: TelegramConnectInput, authorization: str | None = Head
     except HTTPException as exc:
         detail = str(exc.detail or "")
         lowered = detail.lower()
+        telegram_reason = detail
+        marker = "O Telegram recusou a operação:"
+        if marker.lower() in lowered:
+            telegram_reason = detail[lowered.index(marker.lower()) + len(marker):].strip()
+        bot_username = _text(me.get("username"), 80)
+        channel_title = _text(chat.get("title"), 120)
+        channel_username = _text(chat.get("username"), 80) or channel
+        channel_id = str(chat.get("id") or "")
         if "not enough rights" in lowered or "chat not found" in lowered or "bot is not a member" in lowered:
+            if "not enough rights" in lowered:
+                hint = (
+                    "O Telegram informa que este bot não tem direito de enviar mensagens para este canal. "
+                    "Confira se o administrador exibido abaixo é exatamente o bot do token informado, "
+                    "e não outro bot com nome parecido."
+                )
+            elif "bot is not a member" in lowered:
+                hint = (
+                    "O Telegram informa que o bot do token não é membro deste canal. "
+                    "É possível que outro bot esteja adicionado como administrador."
+                )
+            else:
+                hint = (
+                    "O Telegram não reconheceu o canal para este bot. "
+                    "Confira se o @username/ID corresponde ao canal em que o bot foi adicionado."
+                )
             raise HTTPException(
                 422,
-                "O Telegram localizou o canal, mas o bot não conseguiu publicar. "
-                "Confirme que ele continua como administrador e que a permissão 'Publicar mensagens' está ativa.",
+                hint
+                + " Bot validado: @" + (bot_username or "não identificado")
+                + " | Canal localizado: " + (channel_title or channel_username)
+                + " (" + channel_username + ", ID " + channel_id + ")."
+                + " Resposta original do Telegram: " + telegram_reason,
             ) from exc
         raise
     _telegram_ref(uid).set({
