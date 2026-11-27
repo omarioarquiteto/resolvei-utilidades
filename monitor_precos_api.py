@@ -570,6 +570,7 @@ def _shopping(query):
             "title":_text(row.get("title"), 300), "price":amount, "original_price":original_price, "source":source,
             "url":link[:2048], "image_url":_text(row.get("thumbnail"), 2048),
             "delivery":delivery, "rating":row.get("rating"), "reviews":row.get("reviews"),
+            "second_hand_condition":_text(row.get("second_hand_condition"), 80),
             **conditions,
         })
     return sorted(results, key=lambda x:x["price"])[:20]
