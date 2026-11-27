@@ -200,7 +200,7 @@ def _telegram_post(uid: str, offer: dict, monitor: dict) -> dict:
     settings = _telegram_settings(uid)
     if not settings.get("connected") or not settings.get("tokenEncrypted") or not settings.get("channelUsername"):
         raise HTTPException(409, "Conecte o bot do Telegram e informe um canal público antes de publicar.")
-    affiliate = _affiliate_url(str(offer.get("affiliateUrl") or ""))
+    affiliate = _affiliate_url(str(offer.get("affiliateUrl") or ""), str(monitor.get("store") or offer.get("store") or "mercado_livre"))
     token = _decrypt_secret(settings["tokenEncrypted"])
     title = html.escape(_text(offer.get("title"), 220) or "Oferta encontrada")
     source = html.escape(_text(offer.get("source"), 80) or monitor.get("storeLabel") or "Loja")
@@ -520,6 +520,44 @@ def ignore_opportunity(monitor_id: str, opportunity_id: str,
         raise HTTPException(404, "Oportunidade não encontrada.")
     ref.set({"status": "ignored", "eligible": False, "updatedAt": _iso()}, merge=True)
     return {"ok": True}
+
+
+@router.post("/monitors/{monitor_id}/opportunities/{opportunity_id}/restore")
+def restore_opportunity(monitor_id: str, opportunity_id: str,
+                        authorization: str | None = Header(default=None)):
+    uid = _uid(authorization)
+    monitor_ref = _monitors(uid).document(monitor_id)
+    monitor_snapshot = monitor_ref.get()
+    if not monitor_snapshot.exists:
+        raise HTTPException(404, "Monitoramento não encontrado.")
+    monitor = monitor_snapshot.to_dict() or {}
+    opportunity_ref = monitor_ref.collection("opportunities").document(opportunity_id)
+    snapshot = opportunity_ref.get()
+    if not snapshot.exists:
+        raise HTTPException(404, "Oportunidade não encontrada.")
+    opportunity = snapshot.to_dict() or {}
+    if opportunity.get("status") != "ignored":
+        raise HTTPException(409, "Esta oportunidade não está na lista de ignoradas.")
+    discount, eligible = _qualifies(
+        {"price": opportunity.get("currentPrice"), "original_price": opportunity.get("originalPrice")},
+        monitor,
+        {"currentPrice": opportunity.get("previousPrice")},
+    )
+    affiliate = _text(opportunity.get("affiliateUrl"), 2048)
+    if not eligible:
+        status = "watching"
+    elif monitor.get("publishMode") == "automatic":
+        status = "ready_to_publish" if affiliate else "awaiting_affiliate_link"
+    else:
+        status = "pending_approval"
+    opportunity_ref.set({
+        "status": status,
+        "eligible": eligible,
+        "discountPercent": discount,
+        "updatedAt": _iso(),
+        "lastPublishError": "",
+    }, merge=True)
+    return {"ok": True, "eligible": eligible, "status": status}
 
 
 def _normalize_telegram_channel(value: str) -> str:
