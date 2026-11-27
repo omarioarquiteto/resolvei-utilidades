@@ -302,6 +302,18 @@ function renderOpportunities() {
     var image = o.image_url ? '<img src="' + esc(o.image_url) + '" alt="" loading="lazy" referrerpolicy="no-referrer">' : '<div class="dor-product-placeholder">🛍️</div>';
     var discount = o.discountPercent != null ? '<span class="dor-discount">' + Number(o.discountPercent).toLocaleString("pt-BR") + '% OFF</span>' : "";
     var old = o.originalPrice != null && Number(o.originalPrice) > Number(o.currentPrice) ? '<del>' + money(o.originalPrice) + '</del>' : "";
+    var hasCoupon = !!(o.couponCode || o.couponInfo || (o.couponPrice && Number(o.couponPrice) < Number(o.listedPrice || o.currentPrice)));
+    var couponMarkup = hasCoupon
+      ? '<div class="dor-coupon-box"><span>🏷 ' + (o.couponCode ? 'CUPOM DISPONÍVEL' : 'CONDIÇÃO PROMOCIONAL') + '</span>' +
+        (o.couponCode ? '<b>' + esc(o.couponCode) + '</b>' : '') +
+        '<small>' + esc(o.couponInfo || 'Confira as condições e a elegibilidade do cupom na página da loja.') + '</small>' +
+        (o.couponPrice && Number(o.couponPrice) < Number(o.listedPrice || o.currentPrice) ? '<strong>Preço com cupom: ' + money(o.couponPrice) + '</strong>' : '') +
+        '</div>' : "";
+    var offerConditions = [];
+    if (o.freeShipping) offerConditions.push('<span>🚚 Frete grátis</span>');
+    if (o.installmentText) offerConditions.push('<span>💳 ' + esc(o.installmentText) + '</span>');
+    if (o.seller) offerConditions.push('<span>Vendedor: ' + esc(o.seller) + '</span>');
+    var conditionsMarkup = offerConditions.length ? '<div class="dor-offer-details">' + offerConditions.join('') + '</div>' : "";
     var affiliate = o.affiliateUrl || "";
     var ignored = o.status === "ignored";
     var published = o.status === "published";
@@ -340,7 +352,8 @@ function renderOpportunities() {
     return '<article class="dor-offer-card">' +
       '<div class="dor-offer-card-top"><span class="dor-offer-status ' + statusClass + '">' + esc(statusLabel) + '</span><span class="dor-offer-monitor">' + esc(o.monitorTitle) + ' · ' + esc(o.storeLabel) + '</span></div>' +
       '<div class="dor-offer-main">' + image + '<div class="dor-offer-info"><h3>' + esc(o.title || "Produto sem título") + '</h3><p><a href="' + esc(o.url || "#") + '" target="_blank" rel="noopener noreferrer">Ver anúncio original ↗</a> · Atualizado ' + esc(dt(o.updatedAt)) + '</p></div></div>' +
-      '<div class="dor-offer-prices"><div><span>Preço atual</span><strong>' + price + '</strong></div><div>' + old + discount + '</div></div>' +
+      '<div class="dor-offer-prices"><div><span>' + (o.couponPrice && Number(o.couponPrice) < Number(o.listedPrice || o.currentPrice) ? 'Preço efetivo' : 'Preço atual') + '</span><strong>' + price + '</strong></div><div>' + old + discount + '</div></div>' +
+      couponMarkup + conditionsMarkup +
       '<p class="dor-offer-note">' + note + (o.lastSentAt ? " · Publicada em " + dt(o.lastSentAt) : "") + '</p>' +
       affiliateRow + error +
       '<div class="dor-offer-actions">' + primaryAction + ignoreAction + (o.lastSentPrice != null ? '<span class="dor-last-published">Última publicação: ' + money(o.lastSentPrice) + '</span>' : "") + '</div>' +
@@ -364,7 +377,7 @@ function scanMonitor(id) {
   var button = document.querySelector('[data-dor-scan="' + id + '"]');
   if (button) { button.disabled = true; button.textContent = "Pesquisando..."; }
   api("/monitors/" + encodeURIComponent(id) + "/scan", { method: "POST" }).then(function (result) {
-    notice("Pesquisa concluída: " + result.resultsFound + " resultado(s), " + result.eligibleOffers + " oportunidade(s) elegível(is) e " + result.published + " publicação(ões).", "success");
+    notice("Pesquisa direta em " + (result.store || m.storeLabel || m.store) + " concluída: " + result.resultsFound + " produto(s) encontrados, " + result.offersSaved + " salvos, " + result.eligibleOffers + " elegíveis e " + result.published + " publicados. Cupons identificados são exibidos no cartão da oferta.", "success");
     return loadMonitors().then(loadAllOpportunities);
   }).catch(function (e) { notice(e.message, "error"); return loadMonitors(); }).finally(function () {
     var b = document.querySelector('[data-dor-scan="' + id + '"]');
