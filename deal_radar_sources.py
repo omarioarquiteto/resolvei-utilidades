@@ -379,11 +379,12 @@ def _shopee_search(keyword: str) -> list[dict]:
         if not item_id or not shop_id or not title or price is None:
             continue
         coupon_code, coupon_info, coupon_price = _coupon_details(_plain(item, 1800))
-        discount = item.get("discount")
-        try:
-            discount = float(discount) if discount is not None else None
-        except (TypeError, ValueError):
-            discount = None
+        discount = _discount_text(str(item.get("discount") or ""))
+        if discount is None:
+            try:
+                discount = float(str(item.get("discount") or "").replace("%", "").replace(",", "."))
+            except (TypeError, ValueError):
+                discount = None
         if discount is None and original and original > price:
             discount = round((original - price) / original * 100, 2)
         image_key = _plain(item.get("image"), 200)
