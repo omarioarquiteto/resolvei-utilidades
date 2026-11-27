@@ -13,7 +13,8 @@ import requests
 from fastapi import APIRouter, Header, HTTPException, Query
 from pydantic import BaseModel, Field
 
-from monitor_precos_api import _db, _iso, _now, _price, _score, _shopping, _text, _uid
+from deal_radar_sources import search_store_offers
+from monitor_precos_api import _db, _iso, _now, _price, _score, _text, _uid
 
 router = APIRouter(prefix="/api/deal-radar", tags=["radar-ofertas"])
 
@@ -178,14 +179,24 @@ def _store_match(store: str, offer: dict) -> bool:
 
 
 def _qualifies(offer: dict, monitor: dict, previous: dict | None = None) -> tuple[float | None, bool]:
-    price = _price(offer.get("price"))
+    listed_price = _price(offer.get("price"))
+    coupon_price = _price(offer.get("coupon_price"))
+    price = coupon_price or listed_price
     original = _price(offer.get("original_price"))
-    prior = _price((previous or {}).get("currentPrice"))
+    prior = _price((previous or {}).get("effectivePrice") or (previous or {}).get("currentPrice"))
     discount = None
     if original is not None and price is not None and original > price:
         discount = round((original - price) / original * 100, 2)
-    elif prior is not None and price is not None and prior > price:
-        discount = round((prior - price) / prior * 100, 2)
+    else:
+        reported_discount = offer.get("discount_percent")
+        try:
+            reported_discount = float(str(reported_discount).replace("%", "").replace(",", "."))
+        except (TypeError, ValueError):
+            reported_discount = None
+        if reported_discount is not None and 0 < reported_discount <= 99:
+            discount = round(reported_discount, 2)
+        elif prior is not None and price is not None and prior > price:
+            discount = round((prior - price) / prior * 100, 2)
     max_price = _price(monitor.get("maxPrice"))
     if price is None or (max_price is not None and price > max_price):
         return discount, False
@@ -204,7 +215,7 @@ def _telegram_post(uid: str, offer: dict, monitor: dict) -> dict:
     token = _decrypt_secret(settings["tokenEncrypted"])
     title = html.escape(_text(offer.get("title"), 220) or "Oferta encontrada")
     source = html.escape(_text(offer.get("source"), 80) or monitor.get("storeLabel") or "Loja")
-    price = _price(offer.get("currentPrice"))
+    price = _price(offer.get("listedPrice")) or _price(offer.get("currentPrice"))
     old_price = _price(offer.get("originalPrice"))
     discount = offer.get("discountPercent")
     lines = ["<b>" + title + "</b>"]
@@ -214,6 +225,24 @@ def _telegram_post(uid: str, offer: dict, monitor: dict) -> dict:
         lines.append("<b>Por " + ("R$ {:,.2f}".format(price).replace(",", "X").replace(".", ",").replace("X", ".")) + "</b>")
     if discount is not None:
         lines.append("🔥 <b>{:.1f}% de desconto</b>".format(float(discount)).replace(".", ","))
+    coupon_code = html.escape(_text(offer.get("couponCode"), 40))
+    coupon_info = html.escape(_text(offer.get("couponInfo"), 160))
+    coupon_price = _price(offer.get("couponPrice"))
+    listed_price = _price(offer.get("listedPrice"))
+    if coupon_code:
+        lines.append("🏷 <b>Cupom: " + coupon_code + "</b>")
+    elif coupon_info:
+        lines.append("🏷 " + coupon_info)
+    if coupon_price is not None and listed_price is not None and coupon_price < listed_price:
+        lines.append("💳 <b>Preço final com cupom: " + ("R$ {:,.2f}".format(coupon_price).replace(",", "X").replace(".", ",").replace("X", ".")) + "</b>")
+    installment = html.escape(_text(offer.get("installmentText"), 100))
+    if installment:
+        lines.append("💳 " + installment)
+    if offer.get("freeShipping"):
+        lines.append("🚚 Frete grátis sinalizado pela loja")
+    seller = html.escape(_text(offer.get("seller"), 100))
+    if seller:
+        lines.append("🏪 Vendedor: " + seller)
     lines.append("🏬 " + source)
     lines.append("")
     lines.append("⚠️ Confira preço, frete e disponibilidade na loja.")
@@ -240,7 +269,7 @@ def _publish_opportunity(uid: str, monitor_ref, opportunity_ref, monitor: dict, 
     opportunity_ref.set({
         "status": "published",
         "lastSentAt": sent_at,
-        "lastSentPrice": _price(opportunity.get("currentPrice")),
+        "lastSentPrice": _price(opportunity.get("effectivePrice") or opportunity.get("currentPrice")),
         "telegramMessageId": str((result.get("message_id") or "")),
         "lastPublishError": "",
     }, merge=True)
@@ -254,58 +283,97 @@ def _scan_monitor(uid: str, monitor_ref, monitor: dict) -> dict:
     keywords = [str(x) for x in (monitor.get("keywords") or [])[:5] if _text(x, 100)]
     if not keywords:
         raise HTTPException(422, "Este monitor não tem palavras-chave cadastradas.")
+
     opportunities_ref = monitor_ref.collection("opportunities")
     candidates: dict[str, dict] = {}
+    search_counts = {}
     for keyword in keywords:
-        query = _text(keyword + " " + STORES[store], 180)
-        for offer in _shopping(query, fresh=True):
-            if not _store_match(store, offer):
-                continue
+        try:
+            offers = search_store_offers(store, keyword)
+        except Exception as exc:
+            message = _text(exc, 260)
+            raise HTTPException(
+                502,
+                f"Falha na consulta direta ao {STORES[store]} para “{keyword}”: {message}",
+            ) from exc
+
+        search_counts[keyword] = len(offers)
+        for offer in offers:
             title = _text(offer.get("title"), 300)
             if not title or _score(keyword, title) < 0.30:
                 continue
-            # Exclui anúncios usados/recondicionados do Radar inicial.
             condition = _normal(str(offer.get("second_hand_condition") or ""))
             if re.search(r"\b(usado|usada|seminovo|seminova|recondicionado|recondicionada|open box|refurbished|renewed)\b", _normal(title + " " + condition)):
                 continue
             url = str(offer.get("url") or "").strip()
-            if not url.startswith("https://"):
+            parsed = urlparse(url)
+            host = (parsed.hostname or "").lower().removeprefix("www.")
+            allowed_hosts = {
+                "mercado_livre": ("mercadolivre.com.br", "mercadolibre.com"),
+                "amazon": ("amazon.com.br",),
+                "shopee": ("shopee.com.br",),
+                "magalu": ("magazineluiza.com.br",),
+            }[store]
+            if parsed.scheme != "https" or not any(host == domain or host.endswith("." + domain) for domain in allowed_hosts):
                 continue
             key = hashlib.sha256((store + "|" + url.split("?")[0].rstrip("/")).encode("utf-8")).hexdigest()[:40]
-            candidates[key] = {"offer": offer, "keyword": keyword}
+            # Keep the richest result when the same product appears for multiple keywords.
+            existing = candidates.get(key)
+            if existing is None or (offer.get("coupon_code") and not existing["offer"].get("coupon_code")):
+                candidates[key] = {"offer": offer, "keyword": keyword}
+
     now = _now()
-    scanned = 0
-    eligible_count = 0
-    published_count = 0
-    pending_count = 0
-    for key, candidate in list(candidates.items())[:max(1, min(int(monitor.get("maxResults") or 12), 20))]:
+    scanned = eligible_count = published_count = pending_count = 0
+    skipped_ignored = 0
+    # Store connectors may return several pages. Keep up to 48 unique products per monitor,
+    # instead of truncating the older Google Shopping results at 12.
+    scan_limit = min(max(int(monitor.get("maxResults") or 48), 48), 60)
+    ordered_candidates = sorted(
+        candidates.items(),
+        key=lambda item: (
+            0 if item[1]["offer"].get("coupon_code") else 1,
+            -float(item[1]["offer"].get("discount_percent") or 0),
+            float(item[1]["offer"].get("coupon_price") or item[1]["offer"].get("price") or 1e12),
+        ),
+    )
+    for key, candidate in ordered_candidates[:scan_limit]:
         offer = candidate["offer"]
         keyword = candidate["keyword"]
         url = str(offer.get("url") or "").strip()
         opportunity_ref = opportunities_ref.document(key)
         old_snapshot = opportunity_ref.get()
         previous = old_snapshot.to_dict() or {}
-        price = _price(offer.get("price"))
-        if price is None:
+        listed_price = _price(offer.get("price"))
+        coupon_price = _price(offer.get("coupon_price"))
+        effective_price = coupon_price or listed_price
+        if effective_price is None:
             continue
         discount, eligible = _qualifies(offer, monitor, previous)
-        old_current = _price(previous.get("currentPrice"))
+        old_current = _price(previous.get("effectivePrice") or previous.get("currentPrice"))
         original = _price(offer.get("original_price"))
-        if original is None and old_current is not None and old_current > price:
+        if original is None and old_current is not None and old_current > effective_price:
             original = old_current
         status = str(previous.get("status") or "watching")
         if status == "ignored":
+            skipped_ignored += 1
             continue
         affiliate = _text(previous.get("affiliateUrl"), 2048)
         last_sent = _price(previous.get("lastSentPrice"))
-        lower_than_sent = last_sent is None or price < last_sent - 0.01
+        lower_than_sent = last_sent is None or effective_price < last_sent - 0.01
+        coupon_code = _text(offer.get("coupon_code"), 40)
+        coupon_info = _text(offer.get("coupon_info"), 180)
         data = {
             "title": _text(offer.get("title"), 300),
             "store": store,
             "source": _text(offer.get("source"), 100) or STORES[store],
             "url": url,
             "image_url": _text(offer.get("image_url"), 2048),
-            "currentPrice": price,
+            "currentPrice": effective_price,
+            "effectivePrice": effective_price,
+            "listedPrice": listed_price,
+            "couponPrice": coupon_price,
+            "couponCode": coupon_code,
+            "couponInfo": coupon_info,
             "originalPrice": original,
             "discountPercent": discount,
             "previousPrice": old_current,
@@ -314,10 +382,17 @@ def _scan_monitor(uid: str, monitor_ref, monitor: dict) -> dict:
             "updatedAt": _iso(now),
             "eligible": eligible,
             "lastScanKeyword": keyword,
+            "installmentText": _text(offer.get("installment_text"), 100),
+            "freeShipping": bool(offer.get("free_shipping")),
+            "shippingText": _text(offer.get("shipping_text"), 160),
+            "seller": _text(offer.get("seller"), 100),
+            "rating": offer.get("rating"),
+            "reviews": offer.get("reviews"),
+            "sourceSearchUrl": _text(offer.get("source_search_url"), 2048),
         }
         if not old_snapshot.exists:
             data["createdAt"] = _iso(now)
-            data["firstSeenPrice"] = price
+            data["firstSeenPrice"] = effective_price
             data["status"] = "watching"
         if eligible:
             eligible_count += 1
@@ -340,16 +415,20 @@ def _scan_monitor(uid: str, monitor_ref, monitor: dict) -> dict:
                 published_count += 1
             except HTTPException as exc:
                 opportunity_ref.set({"status": "publish_error", "lastPublishError": _text(exc.detail, 240)}, merge=True)
+
     result = {
         "ok": True,
         "monitorId": monitor_ref.id,
         "store": STORES[store],
+        "sourceMode": "direct_marketplace",
         "keywords": keywords,
         "resultsFound": len(candidates),
+        "searchCounts": search_counts,
         "offersSaved": scanned,
         "eligibleOffers": eligible_count,
         "pendingApproval": pending_count,
         "published": published_count,
+        "skippedIgnored": skipped_ignored,
         "checkedAt": _iso(now),
     }
     next_scan = _iso(now + timedelta(minutes=int(monitor.get("intervalMinutes") or 30)))
@@ -387,7 +466,7 @@ def create_monitor(req: MonitorInput, authorization: str | None = Header(default
         "nextScanAt": _iso(now),
         "lastScanError": "",
         "lastScanSummary": {},
-        "maxResults": 12,
+        "maxResults": 48,
     })
     ref = _monitors(uid).document()
     ref.set(data)
