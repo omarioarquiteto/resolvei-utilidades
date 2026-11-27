@@ -12,9 +12,10 @@ import base64
 import hashlib
 import time
 import threading
+import html
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import urlparse, quote
 import ipaddress
 import socket
 
@@ -99,6 +100,8 @@ from deal_radar_api import router as deal_radar_router, start_deal_radar_schedul
 app.include_router(deal_radar_router)
 from tabela_fipe_api import router as tabela_fipe_router
 app.include_router(tabela_fipe_router)
+from blog_api import router as blog_router
+app.include_router(blog_router)
 
 @app.on_event("startup")
 async def _start_monitor_precos_scheduler():
@@ -1850,6 +1853,78 @@ def prices_search(req: ShoppingPriceRequest) -> dict[str, Any]:
         raise HTTPException(status_code=400, detail="Informe um item.")
     options=search_price(item,req.city,req.state.upper())
     return {"item":item,"city":req.city,"state":req.state.upper(),"options":options}
+
+
+
+@app.get("/blog/{slug}", include_in_schema=False)
+def blog_article_html(slug: str):
+    """Serve a SPA com metadados próprios para cada review publicado."""
+    index_path = BASE_DIR / "index.html"
+    page = index_path.read_text(encoding="utf-8")
+    if not _firebase_admin:
+        return Response(content=page, media_type="text/html")
+    try:
+        from firebase_admin import firestore as firebase_firestore
+        snapshot = firebase_firestore.client().collection("blogPosts").document(slug).get()
+        if not snapshot.exists:
+            return Response(content=page, media_type="text/html")
+        post = snapshot.to_dict() or {}
+        if post.get("status") != "published":
+            return Response(content=page, media_type="text/html")
+
+        title = html.escape(str(post.get("seoTitle") or post.get("title") or "Review | Resolvei"))
+        description = html.escape(str(post.get("seoDescription") or post.get("excerpt") or post.get("title") or ""))
+        cover = str(post.get("coverImage") or "").strip()
+        if not cover.startswith(("https://", "http://")):
+            cover = ""
+        canonical = "https://resolvei.com.br/blog/" + quote(slug, safe="")
+        page = re.sub(r"<title>.*?</title>", f"<title>{title} | Reviews Resolvei</title>", page, count=1, flags=re.I | re.S)
+        page = re.sub(
+            r'<meta\\s+name=["\\']description["\\'][^>]*>',
+            f'<meta name="description" content="{description}">',
+            page,
+            count=1,
+            flags=re.I,
+        )
+        social = (
+            f'<link rel="canonical" href="{html.escape(canonical)}">'
+            '<meta property="og:type" content="article">'
+            f'<meta property="og:title" content="{title}">'
+            f'<meta property="og:description" content="{description}">'
+            + (f'<meta property="og:image" content="{html.escape(cover)}">' if cover else "")
+        )
+        page = page.replace("</head>", social + "</head>", 1)
+    except Exception:
+        # A falha de metadados não deve impedir que o artigo abra no navegador.
+        pass
+    return Response(content=page, media_type="text/html")
+
+
+@app.get("/sitemap.xml", include_in_schema=False)
+def blog_sitemap_xml():
+    """Acrescenta ao sitemap fixo todas as publicações públicas do blog."""
+    sitemap_path = BASE_DIR / "sitemap.xml"
+    content = sitemap_path.read_text(encoding="utf-8")
+    if _firebase_admin:
+        try:
+            from firebase_admin import firestore as firebase_firestore
+            docs = firebase_firestore.client().collection("blogPosts").where("status", "==", "published").stream()
+            entries = []
+            for doc in docs:
+                data = doc.to_dict() or {}
+                slug = quote(doc.id, safe="")
+                last_modified = data.get("updatedAt") or data.get("publishedAt")
+                lastmod = ""
+                if hasattr(last_modified, "strftime"):
+                    lastmod = f"<lastmod>{last_modified.strftime('%Y-%m-%d')}</lastmod>"
+                entries.append(
+                    "<url><loc>https://resolvei.com.br/blog/" + slug + "</loc>" + lastmod + "</url>"
+                )
+            if entries and "</urlset>" in content:
+                content = content.replace("</urlset>", "\\n".join(entries) + "\\n</urlset>", 1)
+        except Exception:
+            pass
+    return Response(content=content, media_type="application/xml")
 
 
 @app.get("/{path:path}")
