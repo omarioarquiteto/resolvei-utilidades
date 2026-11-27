@@ -518,7 +518,7 @@ def _extract_conditions(text):
     }
 
 
-def _shopping(query):
+def _shopping(query, fresh=False):
     key = os.getenv("SERPAPI_KEY", "").strip()
     if not key:
         raise HTTPException(503, "A comparação entre lojas requer SERPAPI_KEY nas variáveis de ambiente do Render. A extensão continuará mostrando a base comunitária.")
@@ -527,7 +527,7 @@ def _shopping(query):
         raise HTTPException(422, "Informe o nome, marca ou modelo do produto.")
     try:
         response = requests.get("https://serpapi.com/search.json",
-            params={"engine":"google_shopping","q":query,"gl":"br","hl":"pt-br","api_key":key},
+            params={"engine":"google_shopping","q":query,"gl":"br","hl":"pt-br","api_key":key, **({"no_cache":"true"} if fresh else {})},
             timeout=(5, 20), headers={"User-Agent":"ResolveiMonitorPrecos/2.0"})
     except requests.RequestException as exc:
         raise HTTPException(502, "Não foi possível consultar ofertas agora. Tente novamente mais tarde.") from exc
