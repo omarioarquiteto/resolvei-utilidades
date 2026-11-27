@@ -1886,8 +1886,14 @@ def blog_article_html(slug: str):
             count=1,
             flags=re.I,
         )
+        page = re.sub(
+            r"<link\s+rel=['\"]canonical['\"][^>]*>",
+            f'<link rel="canonical" href="{html.escape(canonical)}">',
+            page,
+            count=1,
+            flags=re.I,
+        )
         social = (
-            f'<link rel="canonical" href="{html.escape(canonical)}">'
             '<meta property="og:type" content="article">'
             f'<meta property="og:title" content="{title}">'
             f'<meta property="og:description" content="{description}">'
