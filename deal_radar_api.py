@@ -146,15 +146,20 @@ def _public_telegram_settings(uid: str) -> dict:
     }
 
 
-def _affiliate_url(value: str) -> str:
+def _affiliate_url(value: str, store: str) -> str:
     raw = str(value or "").strip()
     parsed = urlparse(raw)
     host = (parsed.hostname or "").lower().rstrip(".")
-    permitted = host == "meli.la" or host.endswith(".mercadolivre.com.br") or host in {
-        "mercadolivre.com.br", "mercadolivre.com", "mercadolibre.com", "meli.com"
+    permitted_hosts = {
+        "mercado_livre": {"meli.la", "mercadolivre.com.br", "mercadolivre.com", "mercadolibre.com", "meli.com"},
+        "amazon": {"amzn.to", "amazon.com.br", "amazon.com"},
+        "shopee": {"shopee.com.br", "shope.ee"},
+        "magalu": {"magazineluiza.com.br", "magazinevoce.com.br"},
     }
+    allowed = permitted_hosts.get(store, set())
+    permitted = host in allowed or any(host.endswith("." + domain) for domain in allowed if domain not in {"meli.la", "amzn.to", "shope.ee"})
     if parsed.scheme != "https" or not host or not permitted or parsed.username or parsed.password:
-        raise HTTPException(422, "Cole o link de afiliado do produto gerado no Portal ou na Barra de Afiliados do Mercado Livre.")
+        raise HTTPException(422, "Cole um link de afiliado HTTPS válido para a loja deste monitoramento.")
     return raw[:2048]
 
 
@@ -459,7 +464,7 @@ def save_affiliate_link(monitor_id: str, opportunity_id: str, req: AffiliateLink
     if not snapshot.exists:
         raise HTTPException(404, "Oportunidade não encontrada.")
     opportunity = snapshot.to_dict() or {}
-    affiliate = _affiliate_url(req.affiliate_url)
+    affiliate = _affiliate_url(req.affiliate_url, str(monitor.get("store") or "mercado_livre"))
     opportunity_ref.set({"affiliateUrl": affiliate, "updatedAt": _iso()}, merge=True)
     opportunity["affiliateUrl"] = affiliate
     if monitor.get("publishMode") == "automatic" and opportunity.get("eligible"):
